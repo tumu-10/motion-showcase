@@ -33,7 +33,7 @@ export function ReportFlow({ onSubmitted, onClose }: { onSubmitted: (r: ReportIn
   const [urgency, setUrgency] = useState<(typeof urgencies)[number]>("Normal");
   const [description, setDescription] = useState("");
   const [photo, setPhoto] = useState<string | null>(null);
-  const [errors, setErrors] = useState<{ category?: string; description?: string; photo?: string }>({});
+  const [errors, setErrors] = useState<{ category?: string | undefined; description?: string | undefined; photo?: string | undefined }>({});
   const [state, setState] = useState<"idle" | "sending" | "sent">("idle");
   const [queued, setQueued] = useState(false);
 

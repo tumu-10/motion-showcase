@@ -188,8 +188,8 @@ function HomeTab({
   onOpenRepairs,
 }: {
   paid: boolean;
-  lastPayment?: Payment;
-  request?: MaintenanceRequest;
+  lastPayment?: Payment | undefined;
+  request?: MaintenanceRequest | undefined;
   onPay: () => void;
   onReport: () => void;
   onFindHome: () => void;
@@ -231,7 +231,7 @@ function HomeTab({
             daysLeft={tenantProfile.daysUntilDue}
             cycleDays={tenantProfile.cycleDays}
             status={status}
-            size={112}
+            size={100}
             stroke={10}
             trackClassName="stroke-on-deep/15"
           >
@@ -250,7 +250,7 @@ function HomeTab({
           </RentRing>
           <div className="min-w-0 flex-1">
             <p className="text-sm text-on-deep-muted">November rent</p>
-            <p className="figure mt-0.5 text-2xl font-bold text-on-deep">{formatUGX(tenantProfile.rent)}</p>
+            <p className="figure mt-0.5 whitespace-nowrap text-xl font-bold text-on-deep">{formatUGX(tenantProfile.rent)}</p>
             <p className="mt-1 text-sm text-on-deep-muted">{paid ? `Receipt ${lastPayment?.reference}` : "Due Sat, 21 Nov"}</p>
           </div>
         </div>
@@ -476,7 +476,7 @@ function HomesTab({ onInterested }: { onInterested: () => void }) {
   const [shortlist, setShortlist] = useState<{ item: Listing; requested: boolean }[]>([]);
 
   const matches = listings.filter(
-    (l) => (area === areas[0] || l.area === area) && l.rent <= budgets[budget].max && !seen.includes(l.id),
+    (l) => (area === areas[0] || l.area === area) && l.rent <= (budgets[budget]?.max ?? Infinity) && !seen.includes(l.id),
   );
 
   return (

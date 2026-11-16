@@ -1,19 +1,23 @@
-import { motion, useReducedMotion, type HTMLMotionProps } from "motion/react";
-import { useState } from "react";
+import { motion, useInView, useReducedMotion, type HTMLMotionProps } from "motion/react";
+import { useRef } from "react";
 import { ease, entryDelay } from "@/lib/motion";
 
 type RevealProps = HTMLMotionProps<"div"> & { delay?: number; y?: number };
 
-/** Fades content up once it scrolls into view, waiting for the preloader or page transition. */
+/**
+ * Fades content up when it scrolls into view. The wait for the preloader or page wipe is
+ * measured at the moment the element becomes visible, so content further down is not delayed.
+ */
 export function Reveal({ delay = 0, y = 18, children, ...rest }: RevealProps) {
+  const ref = useRef<HTMLDivElement>(null);
+  const inView = useInView(ref, { once: true, margin: "0px 0px -8% 0px" });
   const reduce = useReducedMotion();
-  const [start] = useState(() => entryDelay());
   return (
     <motion.div
+      ref={ref}
       initial={reduce ? false : { opacity: 0, y }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "0px 0px -8% 0px" }}
-      transition={{ duration: 0.7, ease: ease.outExpo, delay: start + delay }}
+      animate={inView ? { opacity: 1, y: 0 } : undefined}
+      transition={{ duration: 0.7, ease: ease.outExpo, delay: inView ? entryDelay() + delay : 0 }}
       {...rest}
     >
       {children}
@@ -26,26 +30,28 @@ export function SplitHeading({
   text,
   className,
   delay = 0,
-  as: Tag = "h1",
+  as = "h1",
 }: {
   text: string;
   className?: string;
   delay?: number;
   as?: "h1" | "h2" | "h3";
 }) {
+  const ref = useRef<HTMLHeadingElement>(null);
+  const inView = useInView(ref, { once: true });
   const reduce = useReducedMotion();
-  const [start] = useState(() => entryDelay());
+  const Tag = as;
   const words = text.split(" ");
+  const start = inView ? entryDelay() + delay : 0;
   return (
-    <Tag className={className} aria-label={text}>
+    <Tag ref={ref} className={className} aria-label={text}>
       {words.map((w, i) => (
         <span key={i} aria-hidden className="inline-block overflow-hidden pb-[0.08em] align-bottom">
           <motion.span
             className="inline-block"
             initial={reduce ? false : { y: "110%" }}
-            whileInView={{ y: "0%" }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.85, ease: ease.outExpo, delay: start + delay + i * 0.06 }}
+            animate={inView ? { y: "0%" } : undefined}
+            transition={{ duration: 0.85, ease: ease.outExpo, delay: start + i * 0.06 }}
           >
             {w}
             {i < words.length - 1 ? "\u00a0" : ""}

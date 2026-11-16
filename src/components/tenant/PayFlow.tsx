@@ -33,7 +33,7 @@ export function PayFlow({
   const [network, setNetwork] = useState<MobileNetwork>(detectNetwork(defaultPhone) ?? "mtn");
   const [phone, setPhone] = useState(defaultPhone);
   const [simulateDecline, setSimulateDecline] = useState(false);
-  const [errors, setErrors] = useState<{ amount?: string; phone?: string }>({});
+  const [errors, setErrors] = useState<{ amount?: string | undefined; phone?: string | undefined }>({});
   const [result, setResult] = useState<PaymentResult | null>(null);
 
   const amount = amountMode === "full" ? rent : Number(otherAmount.replace(/[^\d]/g, ""));
@@ -288,7 +288,7 @@ function Approve({ phone, method, onCancel, onDone }: { phone: string; method: s
   );
 }
 
-export function FieldError({ id, message }: { id: string; message?: string }) {
+export function FieldError({ id, message }: { id: string; message?: string | undefined }) {
   return (
     <AnimatePresence initial={false}>
       {message && (

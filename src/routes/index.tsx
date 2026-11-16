@@ -228,7 +228,7 @@ const roles: {
 
 function Roles() {
   const [active, setActive] = useState(0);
-  const role = roles[active];
+  const role = roles[active] ?? roles[0]!;
   return (
     <section id="roles" className="scroll-mt-20 border-t border-border bg-card py-20 lg:py-28">
       <div className="mx-auto max-w-7xl px-5 sm:px-8">
@@ -440,7 +440,7 @@ function StatusRule() {
                 step={1}
                 value={[days]}
                 disabled={paid}
-                onValueChange={([v]) => setDays(v)}
+                onValueChange={([v]) => setDays(v ?? 0)}
                 aria-label="Days until rent is due"
               />
               <div className="figure mt-2 flex justify-between text-xs text-muted-foreground">

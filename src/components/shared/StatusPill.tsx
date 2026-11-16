@@ -37,8 +37,8 @@ export function Pill({
 }: {
   tone: Tone;
   label: string;
-  icon?: LucideIcon;
-  className?: string;
+  icon?: LucideIcon | undefined;
+  className?: string | undefined;
 }) {
   const Icon = icon ?? toneIcon[tone];
   return (
@@ -66,7 +66,7 @@ export function Pill({
   );
 }
 
-export function RentStatusPill({ status, className }: { status: RentStatus; className?: string }) {
+export function RentStatusPill({ status, className }: { status: RentStatus; className?: string | undefined }) {
   return <Pill tone={rentTone[status]} label={rentStatusLabel[status]} className={className} />;
 }
 

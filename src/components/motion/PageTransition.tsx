@@ -68,8 +68,8 @@ export function PageTransitionProvider({ children }: { children: ReactNode }) {
     <TransitionCtx.Provider value={{ go }}>
       {children}
       <div ref={scope} aria-hidden className="pointer-events-none invisible fixed inset-0 z-[90]">
-        <div className="pt-accent absolute inset-0 translate-y-full bg-accent" />
-        <div className="pt-deep deep-panel absolute inset-0 flex translate-y-full items-center justify-center">
+        <div className="pt-accent absolute inset-0 bg-accent" style={{ transform: "translateY(100%)" }} />
+        <div className="pt-deep deep-panel absolute inset-0 flex items-center justify-center" style={{ transform: "translateY(100%)" }}>
           <div className="pt-content flex flex-col items-center gap-4 opacity-0">
             <LogoMark className="size-12 text-on-deep" />
             <span className="text-eyebrow text-on-deep-muted">{label}</span>
