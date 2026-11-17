@@ -20,14 +20,23 @@ import { UnitsView } from "@/components/landlord/UnitsView";
 import { DashShell, type NavItem } from "@/components/shared/DashShell";
 import { CalendarView, type CalendarEvent } from "@/components/shared/CalendarView";
 import { formatUGX, getRentStatus } from "@/lib/rent";
+import {
+  addRentPeriodMonths,
+  currentRentPeriod,
+  formatRentPeriodRange,
+  getNextUncoveredRentPeriod,
+  getUnitPeriodCredit,
+  getUnitRentChargeForMonths,
+  localDateIso,
+} from "@/lib/rent-accounting";
+import { useRentDemoData } from "@/lib/useRentDemoData";
 import { saveTenantNotice, setTenantActive, type EvictionNotice } from "@/lib/tenant-demo";
 import {
-  ledger as initialLedger,
   complaints,
   stageOrder,
-  units as initialUnits,
   type LedgerEntry,
   type Complaint,
+  type TenantNotification,
   type Unit,
 } from "@/lib/sample-data";
 
@@ -57,9 +66,18 @@ type View = "overview" | "units" | "complaints" | "payments" | "calendar" | "rep
 
 function LandlordPage() {
   const [view, setView] = useState<View>("overview");
-  const [units, setUnits] = useState<Unit[]>(initialUnits);
+  const { data: rentData, setData: setRentData } = useRentDemoData();
+  const period = currentRentPeriod();
+  const units = useMemo(
+    () =>
+      rentData.units.map((unit) => ({
+        ...unit,
+        paid: !!unit.tenant && getUnitPeriodCredit(unit, rentData.ledger, period) >= unit.rent,
+      })),
+    [period, rentData.ledger, rentData.units],
+  );
+  const ledger = rentData.ledger;
   const [requests, setRequests] = useState<Complaint[]>(complaints);
-  const [ledger, setLedger] = useState<LedgerEntry[]>(initialLedger);
   const [reminded, setReminded] = useState<string[]>([]);
   const [openUnitId, setOpenUnitId] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
@@ -85,29 +103,132 @@ function LandlordPage() {
   const remind = (id: string) => {
     const u = units.find((x) => x.id === id);
     setReminded((r) => [...r, id]);
-    toast.success("Reminder sent", {
-      description: `${u?.tenant} will get an SMS about ${formatUGX(u?.rent ?? 0)}.`,
+    if (u) {
+      const now = new Date();
+      const notification: TenantNotification = {
+        id: `reminder-${Date.now()}`,
+        unit: u.unit,
+        kind: "rent",
+        title: "Rent reminder from your landlord",
+        message: `Your rent of ${formatUGX(u.rent)} is due. Please contact your landlord if you need help.`,
+        createdAt: now.toISOString(),
+        read: false,
+      };
+      setRentData((current) => ({
+        ...current,
+        notifications: [
+          notification,
+          ...current.notifications.filter((item) => item.id !== notification.id),
+        ],
+      }));
+    }
+    toast.success("Tenant reminder added", {
+      description: `${u?.tenant} will see a rent reminder for ${formatUGX(u?.rent ?? 0)}.`,
     });
   };
 
-  const recordCash = (id: string) => {
+  const recordRentPayment = (id: string, monthsCovered: number) => {
     const u = units.find((x) => x.id === id);
-    if (!u) return;
-    setUnits((list) => list.map((x) => (x.id === id ? { ...x, paid: true } : x)));
-    setLedger((l) => [
-      {
-        id: `l-${Date.now()}`,
-        date: "16 Nov",
-        tenant: u.tenant ?? "",
-        unit: u.unit,
-        amount: u.rent,
-        method: "Cash",
-        reference: `CASH-0${113 + l.length}`,
-        status: "Confirmed",
-      },
-      ...l,
-    ]);
-    toast.success("Payment recorded", { description: `Unit ${u.unit} is now marked as paid.` });
+    if (!u?.tenant || !Number.isInteger(monthsCovered) || monthsCovered < 1 || monthsCovered > 12)
+      return;
+    const now = new Date();
+    const receivedAt = localDateIso(now);
+    const rentPeriod = getNextUncoveredRentPeriod(u, ledger, period);
+    const coverageAmounts = Array.from({ length: monthsCovered }, (_, index) => {
+      const month = addRentPeriodMonths(rentPeriod, index);
+      return Math.max(0, u.rent - getUnitPeriodCredit(u, ledger, month));
+    });
+    const entry: LedgerEntry = {
+      id: `l-${Date.now()}`,
+      date: new Intl.DateTimeFormat("en-UG", { day: "numeric", month: "short" }).format(now),
+      receivedAt,
+      tenant: u.tenant,
+      unitId: u.id,
+      unit: u.unit,
+      amount: coverageAmounts.reduce((sum, amount) => sum + amount, 0),
+      method: "Cash",
+      reference: `CASH-${Date.now().toString().slice(-6)}`,
+      status: "Confirmed",
+      rentPeriod,
+      monthsCovered,
+      coverageAmounts,
+    };
+    const notification: TenantNotification = {
+      id: `payment-${entry.id}`,
+      unit: u.unit,
+      kind: monthsCovered > 1 ? "advance" : "payment",
+      title: monthsCovered > 1 ? "Advance rent recorded" : "Rent payment recorded",
+      message: `${formatUGX(entry.amount)} was recorded for ${formatRentPeriodRange(
+        entry.rentPeriod,
+        monthsCovered,
+      )}.`,
+      createdAt: now.toISOString(),
+      read: false,
+    };
+    setRentData((current) => {
+      const nextLedger = [entry, ...current.ledger];
+      return {
+        ...current,
+        ledger: nextLedger,
+        units: current.units.map((unit) =>
+          unit.id === u.id
+            ? {
+                ...unit,
+                paid: getUnitPeriodCredit(unit, nextLedger, period) >= unit.rent,
+              }
+            : unit,
+        ),
+        notifications: [
+          notification,
+          ...current.notifications.filter((item) => item.id !== notification.id),
+        ],
+      };
+    });
+    toast.success("Payment recorded", {
+      description: `${formatUGX(entry.amount)} for ${u.tenant} · ${u.unit}.`,
+    });
+  };
+
+  const confirmPayment = (id: string) => {
+    const pending = ledger.find((entry) => entry.id === id);
+    if (!pending || pending.status !== "Pending") {
+      toast.error("This payment is no longer waiting for confirmation.");
+      return;
+    }
+    const now = new Date();
+    const notification: TenantNotification = {
+      id: `payment-${pending.id}`,
+      unit: pending.unit,
+      kind: "payment",
+      title: "Rent payment confirmed",
+      message: `${formatUGX(pending.amount)} was confirmed for ${pending.unit}.`,
+      createdAt: now.toISOString(),
+      read: false,
+    };
+    setRentData((current) => {
+      const nextLedger = current.ledger.map((entry) =>
+        entry.id === id ? { ...entry, status: "Confirmed" as const } : entry,
+      );
+      return {
+        ...current,
+        ledger: nextLedger,
+        units: current.units.map((unit) =>
+          unit.id === pending.unitId && unit.tenant === pending.tenant
+            ? {
+                ...unit,
+                paid: getUnitPeriodCredit(unit, nextLedger, period) >= unit.rent,
+              }
+            : unit,
+        ),
+        notifications: [
+          notification,
+          ...current.notifications.filter((item) => item.id !== notification.id),
+        ],
+      };
+    });
+    toast.success("Payment confirmed", {
+      description: `${formatUGX(pending.amount)} for ${pending.tenant} · ${pending.unit}.`,
+    });
   };
 
   const advance = (id: string) => {
@@ -155,7 +276,7 @@ function LandlordPage() {
         />
       )}
       {view === "complaints" && <ComplaintsView requests={requests} onAdvance={advance} />}
-      {view === "payments" && <PaymentsView ledger={ledger} />}
+      {view === "payments" && <PaymentsView ledger={ledger} onConfirm={confirmPayment} />}
       {view === "calendar" && (
         <CalendarView events={landlordCalendarEvents(units, requests)} audience="landlord" />
       )}
@@ -166,11 +287,17 @@ function LandlordPage() {
         onClose={() => setOpenUnitId(null)}
         reminded={!!openUnit && reminded.includes(openUnit.id)}
         onRemind={() => openUnit && remind(openUnit.id)}
-        onRecordCash={() => openUnit && recordCash(openUnit.id)}
+        onRecordPayment={(monthsCovered) =>
+          openUnit && recordRentPayment(openUnit.id, monthsCovered)
+        }
+        amountForMonths={(monthsCovered) =>
+          openUnit ? getUnitRentChargeForMonths(openUnit, ledger, period, monthsCovered) : 0
+        }
         onMoveOut={() => {
           if (!openUnit) return;
-          setUnits((list) =>
-            list.map((unit) =>
+          setRentData((current) => ({
+            ...current,
+            units: current.units.map((unit) =>
               unit.id === openUnit.id
                 ? {
                     ...unit,
@@ -186,7 +313,7 @@ function LandlordPage() {
                   }
                 : unit,
             ),
-          );
+          }));
           setTenantActive(false, openUnit.unit);
           setOpenUnitId(null);
           toast.success("Tenancy ended", {
@@ -209,8 +336,9 @@ function LandlordPage() {
         vacantUnits={vacant}
         presetUnitId={presetUnit}
         onCreate={(t) => {
-          setUnits((list) =>
-            list.map((u) =>
+          setRentData((current) => ({
+            ...current,
+            units: current.units.map((u) =>
               u.id === t.unitId
                 ? {
                     ...u,
@@ -227,7 +355,7 @@ function LandlordPage() {
                   }
                 : u,
             ),
-          );
+          }));
           if (t.unitId === "u3") setTenantActive(true, "B4");
         }}
       />
@@ -236,6 +364,20 @@ function LandlordPage() {
         onClose={() => setNoticeUnit(null)}
         onSendToApp={(notice: EvictionNotice) => {
           saveTenantNotice(notice);
+          const now = new Date();
+          const notification: TenantNotification = {
+            id: `landlord-update-${Date.now()}`,
+            unit: notice.unit,
+            kind: "update",
+            title: "Important update from your landlord",
+            message: `${notice.reason} · Requested move-out by ${notice.vacateBy}.`,
+            createdAt: now.toISOString(),
+            read: false,
+          };
+          setRentData((current) => ({
+            ...current,
+            notifications: [notification, ...current.notifications],
+          }));
           setNoticeUnit(null);
         }}
       />

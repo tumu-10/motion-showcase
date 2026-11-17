@@ -19,6 +19,13 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { formatUGX } from "@/lib/rent";
 import type { Unit } from "@/lib/sample-data";
 import { unitStatus } from "@/components/landlord/UnitsView";
@@ -28,7 +35,8 @@ export function UnitSheet({
   onClose,
   reminded,
   onRemind,
-  onRecordCash,
+  onRecordPayment,
+  amountForMonths,
   onAddTenant,
   onMoveOut,
   onEvictionNotice,
@@ -37,12 +45,14 @@ export function UnitSheet({
   onClose: () => void;
   reminded: boolean;
   onRemind: () => void;
-  onRecordCash: () => void;
+  onRecordPayment: (monthsCovered: number) => void;
+  amountForMonths: (monthsCovered: number) => number;
   onAddTenant: () => void;
   onMoveOut: () => void;
   onEvictionNotice: () => void;
 }) {
   const [saving, setSaving] = useState(false);
+  const [monthsCovered, setMonthsCovered] = useState("1");
   const [confirmMoveOut, setConfirmMoveOut] = useState(false);
   const st = unit ? unitStatus(unit) : "vacant";
   return (
@@ -95,22 +105,39 @@ export function UnitSheet({
               </dl>
               {unit.tenant ? (
                 <div className="space-y-2">
+                  <Select value={monthsCovered} onValueChange={setMonthsCovered}>
+                    <SelectTrigger aria-label="Rent months to record" className="h-12 bg-card">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 12 }, (_, index) => String(index + 1)).map((months) => (
+                        <SelectItem key={months} value={months}>
+                          {months} {months === "1" ? "month" : "months"} of rent
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Starts with the next unpaid rent month.
+                  </p>
+                  <Button
+                    className="w-full"
+                    disabled={saving}
+                    onClick={() => {
+                      setSaving(true);
+                      window.setTimeout(() => {
+                        setSaving(false);
+                        onRecordPayment(Number(monthsCovered));
+                      }, 700);
+                    }}
+                  >
+                    {saving ? <Loader2 className="animate-spin" /> : <Banknote />}
+                    {saving
+                      ? "Recording"
+                      : `Record ${formatUGX(amountForMonths(Number(monthsCovered)))} cash`}
+                  </Button>
                   {!unit.paid && (
                     <>
-                      <Button
-                        className="w-full"
-                        disabled={saving}
-                        onClick={() => {
-                          setSaving(true);
-                          window.setTimeout(() => {
-                            setSaving(false);
-                            onRecordCash();
-                          }, 700);
-                        }}
-                      >
-                        {saving ? <Loader2 className="animate-spin" /> : <Banknote />}
-                        {saving ? "Recording" : `Record cash payment of ${formatUGX(unit.rent)}`}
-                      </Button>
                       <Button
                         variant="outline"
                         className="w-full"
@@ -118,7 +145,7 @@ export function UnitSheet({
                         onClick={onRemind}
                       >
                         {reminded ? <Check /> : <Bell />}
-                        {reminded ? "Reminder sent" : "Send SMS reminder"}
+                        {reminded ? "Reminder added" : "Send rent reminder"}
                       </Button>
                     </>
                   )}

@@ -11,17 +11,28 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { formatUGX, getRentStatus } from "@/lib/rent";
+import { formatUGX } from "@/lib/rent";
 import { downloadCsv } from "@/lib/documents";
+import {
+  currentRentPeriod,
+  addRentPeriodMonths,
+  formatRentPeriod,
+  formatRentPeriodRange,
+  getUnitAdvanceMonths,
+  getUnitPeriodCredit,
+  getUnitRentStatus,
+  summarizeRentPeriod,
+} from "@/lib/rent-accounting";
 import type { LedgerEntry, Unit } from "@/lib/sample-data";
 
-type ReportType = "all" | "overdue" | "vacant" | "collection";
+type ReportType = "all" | "overdue" | "vacant" | "collection" | "advance";
 
 export function ReportsView({ units, ledger }: { units: Unit[]; ledger: LedgerEntry[] }) {
   const [report, setReport] = useState<ReportType>("all");
   const [property, setProperty] = useState("all");
   const [query, setQuery] = useState("");
   const properties = [...new Set(units.map((unit) => unit.property))];
+  const period = currentRentPeriod();
 
   const scopedUnits = useMemo(
     () =>
@@ -35,37 +46,52 @@ export function ReportsView({ units, ledger }: { units: Unit[]; ledger: LedgerEn
           (report === "vacant" && !unit.tenant) ||
           (report === "overdue" &&
             !!unit.tenant &&
-            getRentStatus(unit.daysUntilDue, unit.paid) === "overdue") ||
+            getUnitRentStatus(unit, ledger, period) === "Overdue") ||
+          (report === "advance" && getUnitRentStatus(unit, ledger, period) === "Advance") ||
           report === "collection";
         return matchesProperty && matchesQuery && matchesReport;
       }),
-    [property, query, report, units],
+    [ledger, period, property, query, report, units],
   );
   const selectedLedger = ledger.filter((entry) => {
-    const unit = units.find((item) => item.unit === entry.unit && item.tenant === entry.tenant);
+    const unit = units.find((item) => item.id === entry.unitId && item.tenant === entry.tenant);
     const matchesProperty = property === "all" || unit?.property === property;
     const matchesQuery = [entry.unit, entry.tenant].some((value) =>
       value.toLowerCase().includes(query.trim().toLowerCase()),
     );
     return matchesProperty && matchesQuery;
   });
-  const expected = scopedUnits.reduce((total, unit) => total + unit.rent, 0);
+  const summaryLedger = selectedLedger.filter((entry) =>
+    scopedUnits.some((unit) => unit.id === entry.unitId && unit.tenant === entry.tenant),
+  );
+  const summary = summarizeRentPeriod(scopedUnits, summaryLedger, period);
   const rows = report === "collection" ? selectedLedger.length : scopedUnits.length;
 
   function exportReport() {
     if (report === "collection") {
       downloadCsv("propatiz-rent-collection.csv", [
-        ["Date", "Tenant", "Property", "Unit", "Amount (UGX)", "Method", "Reference", "Status"],
+        [
+          "Date",
+          "Tenant",
+          "Property",
+          "Unit",
+          "Amount (UGX)",
+          "Rent period",
+          "Months covered",
+          "Method",
+          "Reference",
+          "Status",
+        ],
         ...selectedLedger.map((entry) => {
-          const unit = units.find(
-            (item) => item.unit === entry.unit && item.tenant === entry.tenant,
-          );
+          const unit = units.find((item) => item.id === entry.unitId);
           return [
             entry.date,
             entry.tenant,
             unit?.property ?? "",
             entry.unit,
             entry.amount,
+            entry.rentPeriod,
+            entry.monthsCovered,
             entry.method,
             entry.reference,
             entry.status,
@@ -80,6 +106,7 @@ export function ReportsView({ units, ledger }: { units: Unit[]; ledger: LedgerEn
           "Tenant",
           "Status",
           "Monthly rent (UGX)",
+          "Rent paid through",
           "Rent due",
           "Occupants",
           "Occupation",
@@ -88,17 +115,14 @@ export function ReportsView({ units, ledger }: { units: Unit[]; ledger: LedgerEn
           unit.property,
           unit.unit,
           unit.tenant ?? "",
-          unit.tenant
-            ? unit.paid
-              ? "Paid"
-              : getRentStatus(unit.daysUntilDue, unit.paid)
-            : "Vacant",
+          unit.tenant ? getUnitRentStatus(unit, ledger, period) : "Vacant",
           unit.rent,
-          unit.tenant
-            ? unit.daysUntilDue < 0
-              ? `${Math.abs(unit.daysUntilDue)} days overdue`
-              : `${unit.daysUntilDue} days`
+          unit.tenant && getUnitPeriodCredit(unit, ledger, period) >= unit.rent
+            ? formatRentPeriod(
+                addRentPeriodMonths(period, getUnitAdvanceMonths(unit, ledger, period)),
+              )
             : "",
+          rentDueLabel(unit, ledger, period),
           unit.occupants ?? "",
           unit.occupation ?? "",
         ]),
@@ -139,6 +163,7 @@ export function ReportsView({ units, ledger }: { units: Unit[]; ledger: LedgerEn
               <SelectItem value="overdue">Tenants overdue</SelectItem>
               <SelectItem value="vacant">Vacant units</SelectItem>
               <SelectItem value="collection">Rent collection</SelectItem>
+              <SelectItem value="advance">Tenants in advance</SelectItem>
             </SelectContent>
           </Select>
           <Select value={property} onValueChange={setProperty}>
@@ -163,9 +188,32 @@ export function ReportsView({ units, ledger }: { units: Unit[]; ledger: LedgerEn
         </div>
       </section>
 
-      <section className="mt-5 grid gap-3 sm:grid-cols-3">
+      <section className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <SummaryCard label="Matching records" value={rows.toLocaleString("en-UG")} />
-        <SummaryCard label="Expected rent for selection" value={formatUGX(expected)} />
+        <SummaryCard label="Collected rent so far" value={formatUGX(summary.collectedForPeriod)} />
+        <SummaryCard
+          label="Cash received this month"
+          value={formatUGX(summary.collectedThisMonth)}
+        />
+        <SummaryCard label="Occupied monthly rent" value={formatUGX(summary.grossExpected)} />
+        <SummaryCard label="Advance-covered rent" value={formatUGX(summary.advanceCovered)} />
+        <SummaryCard
+          label="Future advance received"
+          value={formatUGX(summary.futureAdvanceReceived)}
+        />
+        <SummaryCard
+          label="Expected after advances"
+          value={formatUGX(summary.expectedAfterAdvances)}
+        />
+        <SummaryCard label="Remaining balance" value={formatUGX(summary.balanceRemaining)} />
+        <SummaryCard
+          label="Tenants in advance"
+          value={summary.advanceTenants.toLocaleString("en-UG")}
+        />
+        <SummaryCard
+          label="Overdue tenants"
+          value={summary.overdueTenants.toLocaleString("en-UG")}
+        />
         <SummaryCard
           label="Vacant units"
           value={scopedUnits.filter((unit) => !unit.tenant).length.toString()}
@@ -179,6 +227,7 @@ export function ReportsView({ units, ledger }: { units: Unit[]; ledger: LedgerEn
               <th className="px-5 py-3">Property / unit</th>
               <th className="px-5 py-3">Tenant</th>
               <th className="px-5 py-3">Status</th>
+              <th className="px-5 py-3">Rent coverage</th>
               <th className="px-5 py-3 text-right">Amount</th>
             </tr>
           </thead>
@@ -187,14 +236,15 @@ export function ReportsView({ units, ledger }: { units: Unit[]; ledger: LedgerEn
               ? selectedLedger.map((entry) => (
                   <tr key={entry.id}>
                     <td className="px-5 py-3">
-                      {units.find(
-                        (unit) => unit.unit === entry.unit && unit.tenant === entry.tenant,
-                      )?.property ?? "—"}{" "}
-                      · {entry.unit}
+                      {units.find((unit) => unit.id === entry.unitId)?.property ?? "—"} ·{" "}
+                      {entry.unit}
                     </td>
                     <td className="px-5 py-3">{entry.tenant}</td>
                     <td className="px-5 py-3">
                       {entry.status} · {entry.method}
+                    </td>
+                    <td className="px-5 py-3">
+                      {formatRentPeriodRange(entry.rentPeriod, entry.monthsCovered)}
                     </td>
                     <td className="figure px-5 py-3 text-right font-semibold">
                       {formatUGX(entry.amount)}
@@ -208,11 +258,24 @@ export function ReportsView({ units, ledger }: { units: Unit[]; ledger: LedgerEn
                     </td>
                     <td className="px-5 py-3">{unit.tenant ?? "—"}</td>
                     <td className="px-5 py-3">
-                      {unit.tenant
-                        ? unit.paid
-                          ? "Paid"
-                          : getRentStatus(unit.daysUntilDue, unit.paid)
-                        : "Vacant"}
+                      {getUnitRentStatus(unit, ledger, period)}
+                      {getUnitAdvanceMonths(unit, ledger, period) > 0 && (
+                        <span className="block text-xs text-muted-foreground">
+                          {getUnitAdvanceMonths(unit, ledger, period)} months ahead
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-5 py-3">
+                      {getUnitRentStatus(unit, ledger, period) === "Advance"
+                        ? getUnitAdvanceMonths(unit, ledger, period) > 0
+                          ? `Through ${formatRentPeriod(
+                              addRentPeriodMonths(
+                                period,
+                                getUnitAdvanceMonths(unit, ledger, period),
+                              ),
+                            )}`
+                          : `Paid early for ${formatRentPeriod(period)}`
+                        : "—"}
                     </td>
                     <td className="figure px-5 py-3 text-right font-semibold">
                       {formatUGX(unit.rent)}
@@ -221,7 +284,7 @@ export function ReportsView({ units, ledger }: { units: Unit[]; ledger: LedgerEn
                 ))}
             {rows === 0 && (
               <tr>
-                <td colSpan={4} className="px-5 py-10 text-center text-muted-foreground">
+                <td colSpan={5} className="px-5 py-10 text-center text-muted-foreground">
                   No records match these filters.
                 </td>
               </tr>
@@ -240,4 +303,25 @@ function SummaryCard({ label, value }: { label: string; value: string }) {
       <p className="figure mt-2 text-xl font-bold text-primary-deep">{value}</p>
     </div>
   );
+}
+
+function rentDueLabel(unit: Unit, ledger: LedgerEntry[], period: string) {
+  if (!unit.tenant) return "";
+  const status = getUnitRentStatus(unit, ledger, period);
+  if (status === "Advance") {
+    const advanceMonths = getUnitAdvanceMonths(unit, ledger, period);
+    return advanceMonths > 0
+      ? `Paid through ${formatRentPeriod(addRentPeriodMonths(period, advanceMonths))}`
+      : `Paid early for ${formatRentPeriod(period)}`;
+  }
+  if (status === "Paid") return `Paid for ${formatRentPeriod(period)}`;
+  if (status === "Overdue") {
+    const remaining = unit.rent - getUnitPeriodCredit(unit, ledger, period);
+    return `${Math.abs(unit.daysUntilDue)} days overdue${
+      remaining < unit.rent ? ` · ${formatUGX(remaining)} remaining` : ""
+    }`;
+  }
+  if (status === "Partially paid")
+    return `${formatUGX(unit.rent - getUnitPeriodCredit(unit, ledger, period))} remaining`;
+  return `Due in ${unit.daysUntilDue} days`;
 }

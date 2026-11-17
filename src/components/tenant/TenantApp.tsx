@@ -13,7 +13,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { AppSheet } from "@/components/tenant/AppSheet";
 import { PayFlow, type PaymentResult } from "@/components/tenant/PayFlow";
@@ -26,6 +26,15 @@ import { Pill, RentStatusPill } from "@/components/shared/StatusPill";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatUGX, getRentStatus } from "@/lib/rent";
+import {
+  currentRentPeriod,
+  formatRentPeriod,
+  formatRentPeriodRange,
+  getNextUncoveredRentPeriod,
+  getUnitPeriodCredit,
+  localDateIso,
+} from "@/lib/rent-accounting";
+import { useRentDemoData } from "@/lib/useRentDemoData";
 import { ease } from "@/lib/motion";
 import { printPdf } from "@/lib/documents";
 import {
@@ -33,24 +42,28 @@ import {
   complaints as sampleComplaints,
   stageLabel,
   stageOrder,
+  ledger as initialLedger,
   tenantPayments,
   tenantProfile,
+  type LedgerEntry,
   type Listing,
   type Complaint,
   type Payment,
+  type TenantNotification,
 } from "@/lib/sample-data";
 import { readTenantActive, readTenantNotice, type EvictionNotice } from "@/lib/tenant-demo";
 import { cn } from "@/lib/utils";
 
 export type TenantTask = "pay" | "report" | "home";
-type Tab = "home" | "payments" | "complaints" | "homes" | "calendar";
+type Tab = "home" | "payments" | "complaints" | "homes" | "calendar" | "notifications";
 
 const tabs: { id: Tab; label: string; icon: LucideIcon }[] = [
   { id: "home", label: "Home", icon: HomeIcon },
   { id: "payments", label: "Payments", icon: Receipt },
   { id: "complaints", label: "Complaints", icon: MessageSquare },
-  { id: "homes", label: "Find a home", icon: Search },
+  { id: "homes", label: "Homes", icon: Search },
   { id: "calendar", label: "Calendar", icon: CalendarDays },
+  { id: "notifications", label: "Alerts", icon: Bell },
 ];
 
 // Simulates the first network request so the loading state is visible.
@@ -60,16 +73,69 @@ async function fetchTenantHome() {
 }
 
 export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void }) {
+  const { data: rentData, setData: setRentData, loaded: rentDataLoaded } = useRentDemoData();
   const [tab, setTab] = useState<Tab>("home");
   const [dir, setDir] = useState(1);
   const [paid, setPaid] = useState(false);
-  const [payments, setPayments] = useState<Payment[]>(tenantPayments);
   const [requests, setRequests] = useState<Complaint[]>(
     sampleComplaints.filter((m) => m.unit === "B4"),
   );
   const [activeTenant, setActiveTenant] = useState(true);
   const [notice, setNotice] = useState<EvictionNotice | null>(null);
   const [sheet, setSheet] = useState<"pay" | "report" | null>(null);
+  const tenantUnitLabel = tenantProfile.unit.replace("Unit ", "");
+  const tenantUnit = useMemo(
+    () => rentData.units.find((unit) => unit.unit === tenantUnitLabel) ?? null,
+    [rentData.units, tenantUnitLabel],
+  );
+  const period = currentRentPeriod();
+  const nextRentPeriod = tenantUnit
+    ? getNextUncoveredRentPeriod(tenantUnit, rentData.ledger, period)
+    : period;
+  const nextRentBalance = tenantUnit
+    ? Math.max(
+        0,
+        tenantUnit.rent - getUnitPeriodCredit(tenantUnit, rentData.ledger, nextRentPeriod),
+      )
+    : tenantProfile.rent;
+  const payments = useMemo(() => {
+    const savedPayments: Payment[] = rentData.ledger
+      .filter((entry) => entry.unitId === tenantUnit?.id && entry.tenant === tenantProfile.name)
+      .map((entry) => ({
+        id: entry.id,
+        month: formatRentPeriodRange(entry.rentPeriod, entry.monthsCovered),
+        amount: entry.amount,
+        method: entry.method,
+        date: new Intl.DateTimeFormat("en-UG", {
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+        }).format(new Date(`${entry.receivedAt}T00:00:00`)),
+        reference: entry.reference,
+        status: entry.status,
+        rentPeriod: entry.rentPeriod,
+        monthsCovered: entry.monthsCovered,
+        receivedAt: entry.receivedAt,
+      }));
+    return [...savedPayments, ...tenantPayments].sort(
+      (a, b) =>
+        new Date(b.receivedAt ?? b.date).getTime() - new Date(a.receivedAt ?? a.date).getTime(),
+    );
+  }, [rentData.ledger, tenantUnit?.id]);
+  const notifications = rentData.notifications
+    .filter((notification) => notification.unit === tenantUnitLabel)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const unreadNotifications = notifications.filter((notification) => !notification.read).length;
+  const rentBalance = Math.max(
+    0,
+    tenantProfile.rent -
+      (tenantUnit ? getUnitPeriodCredit(tenantUnit, rentData.ledger, period) : 0),
+  );
+
+  useEffect(() => {
+    if (!rentDataLoaded) return;
+    setPaid(rentBalance === 0);
+  }, [rentBalance, rentDataLoaded]);
 
   useEffect(() => {
     try {
@@ -89,22 +155,51 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
 
   const handlePaid = useCallback(
     (r: PaymentResult) => {
-      setPaid(!r.pending);
-      setPayments((p) => [
-        {
-          id: r.reference,
-          month: "November 2026",
-          amount: r.amount,
-          method: r.method,
-          date: "16 Nov 2026",
-          reference: r.reference,
-          status: r.pending ? "Pending" : "Confirmed",
-        },
-        ...p,
-      ]);
+      const now = new Date();
+      const entry: LedgerEntry = {
+        id: r.reference,
+        date: new Intl.DateTimeFormat("en-UG", { day: "numeric", month: "short" }).format(now),
+        receivedAt: localDateIso(now),
+        tenant: tenantProfile.name,
+        unitId: tenantUnit?.id ?? "u3",
+        unit: tenantUnitLabel,
+        amount: r.amount,
+        method: r.method,
+        reference: r.reference,
+        status: r.failed ? "Failed" : r.pending ? "Pending" : "Confirmed",
+        rentPeriod: r.rentPeriod,
+        monthsCovered: r.monthsCovered,
+        coverageAmounts: r.coverageAmounts,
+      };
+      const notification: TenantNotification = {
+        id: `payment-${r.reference}`,
+        unit: tenantUnitLabel,
+        kind: r.pending || r.failed ? "payment" : r.monthsCovered > 1 ? "advance" : "payment",
+        title: r.failed
+          ? "Payment failed"
+          : r.pending
+            ? "Transfer awaiting confirmation"
+            : r.monthsCovered > 1
+              ? "Advance rent payment received"
+              : "Rent payment received",
+        message: `${formatUGX(r.amount)} · ${formatRentPeriodRange(r.rentPeriod, r.monthsCovered)}${
+          r.failed
+            ? " · Try again or choose another payment method"
+            : r.pending
+              ? " · Waiting for landlord confirmation"
+              : ""
+        }`,
+        createdAt: now.toISOString(),
+        read: false,
+      };
+      setRentData((current) => ({
+        ...current,
+        ledger: [entry, ...current.ledger.filter((existing) => existing.id !== entry.id)],
+        notifications: [notification, ...current.notifications],
+      }));
       onTaskDone?.("pay");
     },
-    [onTaskDone],
+    [onTaskDone, setRentData, tenantUnit?.id, tenantUnitLabel],
   );
 
   const handleReport = useCallback(
@@ -155,17 +250,22 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
                 lastPayment={payments[0]}
                 request={requests[0]}
                 notice={notice}
+                notificationCount={unreadNotifications}
+                periodLabel={formatRentPeriod(period)}
+                balance={rentBalance}
                 onPay={() => setSheet("pay")}
                 onReport={() => setSheet("report")}
                 onFindHome={() => go("homes")}
                 onOpenPayments={() => go("payments")}
                 onOpenComplaints={() => go("complaints")}
+                onOpenNotifications={() => go("notifications")}
               />
             )}
             {tab === "payments" && (
               <PaymentsTab
                 payments={payments}
                 paid={paid}
+                balance={rentBalance}
                 activeTenant={activeTenant}
                 onPay={() => setSheet("pay")}
               />
@@ -178,6 +278,29 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
               />
             )}
             {tab === "homes" && <HomesTab onInterested={() => onTaskDone?.("home")} />}
+            {tab === "notifications" && (
+              <NotificationsTab
+                notifications={notifications}
+                onRead={(id) =>
+                  setRentData((current) => ({
+                    ...current,
+                    notifications: current.notifications.map((notification) =>
+                      notification.id === id ? { ...notification, read: true } : notification,
+                    ),
+                  }))
+                }
+                onMarkAllRead={() =>
+                  setRentData((current) => ({
+                    ...current,
+                    notifications: current.notifications.map((notification) =>
+                      notification.unit === tenantUnitLabel
+                        ? { ...notification, read: true }
+                        : notification,
+                    ),
+                  }))
+                }
+              />
+            )}
             {tab === "calendar" && (
               <CalendarView
                 events={tenantCalendarEvents(payments, requests, notice, activeTenant)}
@@ -189,7 +312,7 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
       </div>
 
       <nav
-        className="relative z-20 grid grid-cols-5 border-t border-border bg-card px-1 pb-[max(env(safe-area-inset-bottom),0.5rem)] pt-1.5"
+        className="relative z-20 grid grid-cols-6 border-t border-border bg-card px-1 pb-[max(env(safe-area-inset-bottom),0.5rem)] pt-1.5"
         aria-label="Tenant app"
       >
         {tabs.map((t) => {
@@ -200,11 +323,21 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
               key={t.id}
               onClick={() => go(t.id)}
               aria-current={active ? "page" : undefined}
+              aria-label={
+                t.id === "notifications" && unreadNotifications > 0
+                  ? `${t.label}, ${unreadNotifications} unread`
+                  : undefined
+              }
               className={cn(
-                "relative flex min-h-14 flex-col items-center justify-center gap-1 rounded-lg text-[0.6875rem] font-semibold transition-colors",
+                "relative flex min-h-14 flex-col items-center justify-center gap-1 rounded-lg text-[0.625rem] font-semibold transition-colors",
                 active ? "text-primary-deep" : "text-muted-foreground hover:text-foreground",
               )}
             >
+              {t.id === "notifications" && unreadNotifications > 0 && (
+                <span className="absolute right-2 top-1 grid min-h-4 min-w-4 place-items-center rounded-full bg-destructive px-1 text-[0.625rem] font-bold leading-none text-destructive-foreground">
+                  {unreadNotifications > 99 ? "99+" : unreadNotifications}
+                </span>
+              )}
               {active && (
                 <motion.span
                   layoutId="tenant-tab"
@@ -219,9 +352,15 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
         })}
       </nav>
 
-      <AppSheet open={sheet === "pay"} onClose={() => setSheet(null)} title="Pay November rent">
+      <AppSheet
+        open={sheet === "pay"}
+        onClose={() => setSheet(null)}
+        title={`Pay rent · ${formatRentPeriod(nextRentPeriod)}`}
+      >
         <PayFlow
           rent={tenantProfile.rent}
+          balance={nextRentBalance}
+          rentPeriod={nextRentPeriod}
           defaultPhone={tenantProfile.phone}
           paymentDetails={tenantProfile.paymentDetails}
           onPaid={handlePaid}
@@ -243,22 +382,30 @@ function HomeTab({
   lastPayment,
   request,
   notice,
+  notificationCount,
+  periodLabel,
+  balance,
   onPay,
   onReport,
   onFindHome,
   onOpenPayments,
   onOpenComplaints,
+  onOpenNotifications,
 }: {
   paid: boolean;
   activeTenant: boolean;
   lastPayment?: Payment | undefined;
   request?: Complaint | undefined;
   notice: EvictionNotice | null;
+  notificationCount: number;
+  periodLabel: string;
+  balance: number;
   onPay: () => void;
   onReport: () => void;
   onFindHome: () => void;
   onOpenPayments: () => void;
   onOpenComplaints: () => void;
+  onOpenNotifications: () => void;
 }) {
   const { data, isPending } = useQuery({
     queryKey: ["tenant-home"],
@@ -287,15 +434,18 @@ function HomeTab({
           <h1 className="text-2xl font-bold">Hello, {data.profile.firstName}</h1>
         </div>
         <button
-          onClick={() =>
-            toast("No new notifications", {
-              description: "We will let you know when your landlord replies.",
-            })
-          }
+          onClick={onOpenNotifications}
           className="relative grid size-12 place-items-center rounded-full bg-card shadow-soft"
-          aria-label="Notifications"
+          aria-label={
+            notificationCount ? `Notifications, ${notificationCount} unread` : "Notifications"
+          }
         >
           <Bell className="size-5" />
+          {notificationCount > 0 && (
+            <span className="absolute -right-1 -top-1 grid size-5 place-items-center rounded-full bg-destructive text-[0.625rem] font-bold text-destructive-foreground">
+              {notificationCount > 9 ? "9+" : notificationCount}
+            </span>
+          )}
         </button>
       </motion.header>
 
@@ -325,7 +475,7 @@ function HomeTab({
           <motion.section
             {...stagger(1)}
             className="deep-panel overflow-hidden rounded-2xl p-5"
-            aria-label="November rent"
+            aria-label={`${periodLabel} rent`}
           >
             <div className="flex items-center gap-5">
               <RentRing
@@ -358,20 +508,28 @@ function HomeTab({
                 </AnimatePresence>
               </RentRing>
               <div className="min-w-0 flex-1">
-                <p className="text-sm text-on-deep-muted">November rent</p>
+                <p className="text-sm text-on-deep-muted">
+                  {paid
+                    ? "Monthly rent"
+                    : balance < tenantProfile.rent
+                      ? "Balance due"
+                      : `${periodLabel} rent`}
+                </p>
                 <p className="figure mt-0.5 whitespace-nowrap text-xl font-bold text-on-deep">
-                  {formatUGX(tenantProfile.rent)}
+                  {formatUGX(paid ? tenantProfile.rent : balance)}
                 </p>
                 <p className="mt-1 text-sm text-on-deep-muted">
-                  {paid ? `Receipt ${lastPayment?.reference}` : "Due Sat, 21 Nov"}
+                  {paid
+                    ? `Receipt ${lastPayment?.reference}`
+                    : `Balance due · ${tenantProfile.daysUntilDue} days left`}
                 </p>
               </div>
             </div>
             <div className="mt-5 flex items-center justify-between gap-3">
               <RentStatusPill status={status} />
               {paid ? (
-                <Button variant="onDeepOutline" size="sm" onClick={onOpenPayments}>
-                  View receipt
+                <Button variant="onDeepOutline" size="sm" onClick={onPay}>
+                  Pay more months
                 </Button>
               ) : (
                 <Button variant="accent" onClick={onPay}>
@@ -408,6 +566,110 @@ function HomeTab({
         <SectionHeader title="Last payment" action="History" onAction={onOpenPayments} />
         {lastPayment && <PaymentRow payment={lastPayment} />}
       </motion.section>
+    </div>
+  );
+}
+
+function NotificationsTab({
+  notifications,
+  onRead,
+  onMarkAllRead,
+}: {
+  notifications: TenantNotification[];
+  onRead: (id: string) => void;
+  onMarkAllRead: () => void;
+}) {
+  const unreadCount = notifications.filter((notification) => !notification.read).length;
+
+  return (
+    <div className="space-y-4 px-4 pb-8 pt-5 sm:px-5 sm:pt-6">
+      <header className="flex items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Notifications</h1>
+          <p className="text-sm text-muted-foreground">
+            Rent, payment, advance and landlord updates.
+          </p>
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onMarkAllRead}
+          disabled={unreadCount === 0}
+          className="shrink-0"
+        >
+          Mark all read
+        </Button>
+      </header>
+
+      {notifications.length === 0 ? (
+        <div className="surface px-5 py-10 text-center">
+          <Bell className="mx-auto size-8 text-muted-foreground" aria-hidden />
+          <p className="mt-3 font-semibold">You’re all caught up</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            New rent and landlord updates will appear here.
+          </p>
+        </div>
+      ) : (
+        <ul className="space-y-3">
+          {notifications.map((notification) => {
+            const Icon =
+              notification.kind === "payment"
+                ? Receipt
+                : notification.kind === "advance"
+                  ? CalendarDays
+                  : notification.kind === "update"
+                    ? MessageSquare
+                    : Bell;
+            const date = new Date(notification.createdAt);
+            const dateLabel = Number.isNaN(date.getTime())
+              ? "Recently"
+              : new Intl.DateTimeFormat("en-UG", {
+                  day: "numeric",
+                  month: "short",
+                  hour: "numeric",
+                  minute: "2-digit",
+                }).format(date);
+            return (
+              <li key={notification.id}>
+                <button
+                  type="button"
+                  onClick={() => onRead(notification.id)}
+                  aria-label={`${notification.read ? "" : "Unread: "}${notification.title}. ${notification.message}`}
+                  className={`surface flex w-full items-start gap-3 p-4 text-left transition-colors ${
+                    notification.read ? "" : "border-primary/30 bg-primary-soft/35"
+                  }`}
+                >
+                  <span className="grid size-10 shrink-0 place-items-center rounded-full bg-card text-primary-deep">
+                    <Icon className="size-5" aria-hidden />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-start justify-between gap-2">
+                      <span className="font-bold">{notification.title}</span>
+                      {!notification.read && (
+                        <span className="rounded-full bg-primary px-2 py-0.5 text-[0.625rem] font-bold text-primary-foreground">
+                          New
+                        </span>
+                      )}
+                    </span>
+                    <span className="mt-1 block text-sm text-muted-foreground">
+                      {notification.message}
+                    </span>
+                    <time
+                      className="mt-2 block text-xs text-muted-foreground"
+                      dateTime={notification.createdAt}
+                    >
+                      {dateLabel}
+                    </time>
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <p className="text-center text-xs text-muted-foreground">
+        Demo notifications are saved in this browser and are not sent as push messages or SMS.
+      </p>
     </div>
   );
 }
@@ -577,11 +839,13 @@ function RequestCard({ request }: { request: Complaint }) {
 function PaymentsTab({
   payments,
   paid,
+  balance,
   activeTenant,
   onPay,
 }: {
   payments: Payment[];
   paid: boolean;
+  balance: number;
   activeTenant: boolean;
   onPay: () => void;
 }) {
@@ -591,8 +855,14 @@ function PaymentsTab({
     "border-success/20 bg-success-soft/60",
     "border-chart-4/25 bg-chart-4/10",
   ];
+  const year = String(new Date().getFullYear());
   const total = payments
-    .filter((payment) => payment.status !== "Pending")
+    .filter(
+      (payment) =>
+        payment.status !== "Pending" &&
+        payment.status !== "Failed" &&
+        (payment.receivedAt ?? payment.date).includes(year),
+    )
     .reduce((s, p) => s + p.amount, 0);
   return (
     <div className="min-w-0 px-4 pb-8 pt-5 sm:px-5 sm:pt-6">
@@ -601,21 +871,22 @@ function PaymentsTab({
         <div>
           <p className="text-sm text-muted-foreground">Balance due</p>
           <p className="figure mt-1 text-2xl font-bold">
-            {!activeTenant || paid ? "UGX 0" : formatUGX(tenantProfile.rent)}
+            {!activeTenant ? "UGX 0" : formatUGX(balance)}
           </p>
         </div>
         {!activeTenant ? (
           <Pill tone="neutral" label="No active tenancy" />
-        ) : paid ? (
-          <RentStatusPill status="paid" />
         ) : (
-          <Button onClick={onPay}>Pay now</Button>
+          <div className="flex items-center gap-2">
+            {paid && <RentStatusPill status="paid" />}
+            <Button onClick={onPay}>{paid ? "Pay more months" : "Pay now"}</Button>
+          </div>
         )}
       </div>
       <h2 className="mb-3 mt-7 flex flex-col gap-1 text-base font-bold sm:mt-8 sm:flex-row sm:items-baseline sm:justify-between">
         Receipts
         <span className="figure text-sm font-medium text-muted-foreground">
-          {formatUGX(total)} paid in 2026
+          {formatUGX(total)} paid in {year}
         </span>
       </h2>
       <ul className="space-y-3">
@@ -633,7 +904,9 @@ function PaymentsTab({
                   "overflow-hidden rounded-xl border p-4 shadow-soft sm:p-5",
                   p.status === "Pending"
                     ? "border-warning/30 bg-warning-soft/70"
-                    : receiptColors[i % receiptColors.length],
+                    : p.status === "Failed"
+                      ? "border-destructive/20 bg-destructive-soft/60"
+                      : receiptColors[i % receiptColors.length],
                 )}
               >
                 <div className="flex min-w-0 items-start gap-3">
@@ -642,7 +915,9 @@ function PaymentsTab({
                       "grid size-10 shrink-0 place-items-center rounded-xl",
                       p.status === "Pending"
                         ? "bg-warning text-warning-ink"
-                        : "bg-card/80 text-primary-deep",
+                        : p.status === "Failed"
+                          ? "bg-destructive-soft text-destructive-ink"
+                          : "bg-card/80 text-primary-deep",
                     )}
                   >
                     <Receipt className="size-5" aria-hidden />
@@ -654,6 +929,8 @@ function PaymentsTab({
                     </div>
                     <p className="mt-1 break-words text-sm text-muted-foreground">
                       {p.method} · {p.date}
+                      {p.status === "Pending" ? " · Pending confirmation" : ""}
+                      {p.status === "Failed" ? " · Failed" : ""}
                     </p>
                     <p className="figure mt-1 break-all text-xs text-muted-foreground">
                       Ref {p.reference}
@@ -773,12 +1050,21 @@ function tenantCalendarEvents(
       title:
         payment.status === "Pending"
           ? "Transfer awaiting confirmation"
-          : `${payment.month} payment`,
-      date: new Date(payment.date),
+          : payment.status === "Failed"
+            ? "Payment failed"
+            : `${payment.month} payment`,
+      date: new Date(payment.receivedAt ?? payment.date),
       detail: `${formatUGX(payment.amount)} · ${payment.method}`,
-      kind: payment.status === "Pending" ? ("rent" as const) : ("payment" as const),
+      kind:
+        payment.status === "Confirmed" || !payment.status
+          ? ("payment" as const)
+          : ("rent" as const),
       amount: payment.amount,
-      coverage: `${payment.status === "Pending" ? "Payment pending for" : "Rent period"}: ${paymentPeriod(payment.month)}`,
+      coverage: `${payment.status === "Pending" ? "Payment pending for" : "Rent period"}: ${
+        payment.rentPeriod && payment.monthsCovered
+          ? formatRentPeriodRange(payment.rentPeriod, payment.monthsCovered)
+          : paymentPeriod(payment.month)
+      }`,
     })),
     ...complaints.map((complaint) => ({
       id: `complaint-${complaint.id}`,

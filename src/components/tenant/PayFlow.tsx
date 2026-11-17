@@ -7,6 +7,13 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   detectNetwork,
   formatUGX,
   networkLabel,
@@ -14,6 +21,7 @@ import {
   type MobileNetwork,
 } from "@/lib/rent";
 import type { LandlordPaymentDetails } from "@/lib/sample-data";
+import { formatRentPeriodRange } from "@/lib/rent-accounting";
 import { ease } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
@@ -22,10 +30,14 @@ type Step = "form" | "approve" | "success" | "failed";
 
 export type PaymentResult = {
   amount: number;
+  rentPeriod: string;
+  monthsCovered: number;
+  coverageAmounts: number[];
   method: "MTN Mobile Money" | "Airtel Money" | "Bank transfer" | "Visa";
   reference: string;
   phone: string;
   pending: boolean;
+  failed?: boolean | undefined;
 };
 type PaymentMethod = "mobile" | "bank" | "visa";
 
@@ -33,12 +45,16 @@ const APPROVE_SECONDS = 4;
 
 export function PayFlow({
   rent,
+  balance,
+  rentPeriod,
   defaultPhone,
   paymentDetails,
   onPaid,
   onClose,
 }: {
   rent: number;
+  balance: number;
+  rentPeriod: string;
   defaultPhone: string;
   paymentDetails: LandlordPaymentDetails;
   onPaid: (r: PaymentResult) => void;
@@ -46,6 +62,7 @@ export function PayFlow({
 }) {
   const [step, setStep] = useState<Step>("form");
   const [amountMode, setAmountMode] = useState<"full" | "other">("full");
+  const [monthsCovered, setMonthsCovered] = useState("1");
   const [otherAmount, setOtherAmount] = useState("");
   const [network, setNetwork] = useState<MobileNetwork>(detectNetwork(defaultPhone) ?? "mtn");
   const [method, setMethod] = useState<PaymentMethod>("mobile");
@@ -56,7 +73,14 @@ export function PayFlow({
   );
   const [result, setResult] = useState<PaymentResult | null>(null);
 
-  const amount = amountMode === "full" ? rent : Number(otherAmount.replace(/[^\d]/g, ""));
+  const amount =
+    amountMode === "full"
+      ? balance + rent * (Number(monthsCovered) - 1)
+      : Number(otherAmount.replace(/[^\d]/g, ""));
+  const coverageAmounts =
+    amountMode === "full"
+      ? [balance, ...Array.from({ length: Number(monthsCovered) - 1 }, () => rent)]
+      : [amount];
   const methods: [PaymentMethod, string, LucideIcon][] = [
     ...(paymentDetails.mobileMoneyEnabled
       ? [["mobile", "Mobile money", Smartphone] as [PaymentMethod, string, LucideIcon]]
@@ -81,8 +105,8 @@ export function PayFlow({
     if (amountMode === "other") {
       if (!amount) next.amount = "Enter an amount.";
       else if (amount < 10_000) next.amount = "The minimum payment is UGX 10,000.";
-      else if (amount > rent)
-        next.amount = `You owe ${formatUGX(rent)}. Enter that amount or less.`;
+      else if (amount > balance)
+        next.amount = `Your remaining balance is ${formatUGX(balance)}. Enter that amount or less.`;
     }
     const local = method === "mobile" ? normalizeUgPhone(phone) : null;
     const detected = method === "mobile" ? detectNetwork(phone) : null;
@@ -96,6 +120,9 @@ export function PayFlow({
     if (Object.keys(next).length) return;
     const paymentResult: PaymentResult = {
       amount,
+      rentPeriod,
+      monthsCovered: amountMode === "full" ? Number(monthsCovered) : 1,
+      coverageAmounts,
       method:
         method === "mobile"
           ? network === "mtn"
@@ -132,7 +159,9 @@ export function PayFlow({
             className="space-y-6"
           >
             <div>
-              <p className="text-sm font-medium text-muted-foreground">Amount</p>
+              <p className="text-sm font-medium text-muted-foreground">
+                {balance < rent ? "Remaining balance" : "Amount"}
+              </p>
               <p className="figure mt-1 text-4xl font-bold">
                 {amount ? formatUGX(amount) : "UGX 0"}
               </p>
@@ -161,6 +190,24 @@ export function PayFlow({
                   </button>
                 ))}
               </div>
+              {amountMode === "full" && (
+                <div className="mt-4">
+                  <Label htmlFor="rent-months">Months of rent</Label>
+                  <Select value={monthsCovered} onValueChange={setMonthsCovered}>
+                    <SelectTrigger id="rent-months" className="mt-2 h-12 bg-card">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 12 }, (_, index) => String(index + 1)).map((months) => (
+                        <SelectItem key={months} value={months}>
+                          {months} {months === "1" ? "month" : "months"} ·{" "}
+                          {formatRentPeriodRange(rentPeriod, Number(months))}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <AnimatePresence initial={false}>
                 {amountMode === "other" && (
                   <motion.div
@@ -311,8 +358,10 @@ export function PayFlow({
             method={result.method}
             onCancel={() => setStep("form")}
             onDone={() => {
-              if (simulateDecline) setStep("failed");
-              else {
+              if (simulateDecline) {
+                setStep("failed");
+                onPaid({ ...result, failed: true });
+              } else {
                 setStep("success");
                 onPaid(result);
               }

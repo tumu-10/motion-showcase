@@ -59,7 +59,10 @@ export type Payment = {
   method: "MTN Mobile Money" | "Airtel Money" | "Cash" | "Bank transfer" | "Visa" | "Mastercard";
   date: string;
   reference: string;
-  status?: "Pending" | "Confirmed" | undefined;
+  status?: "Pending" | "Confirmed" | "Failed" | undefined;
+  rentPeriod?: string | undefined;
+  monthsCovered?: number | undefined;
+  receivedAt?: string | undefined;
 };
 
 export const tenantPayments: Payment[] = [
@@ -70,6 +73,9 @@ export const tenantPayments: Payment[] = [
     method: "MTN Mobile Money",
     date: "3 Oct 2026",
     reference: "PTZ-48213",
+    rentPeriod: "2026-10",
+    monthsCovered: 1,
+    receivedAt: "2026-10-03",
   },
   {
     id: "p2",
@@ -78,6 +84,9 @@ export const tenantPayments: Payment[] = [
     method: "MTN Mobile Money",
     date: "4 Sep 2026",
     reference: "PTZ-47102",
+    rentPeriod: "2026-09",
+    monthsCovered: 1,
+    receivedAt: "2026-09-04",
   },
   {
     id: "p1",
@@ -86,6 +95,9 @@ export const tenantPayments: Payment[] = [
     method: "Airtel Money",
     date: "5 Aug 2026",
     reference: "PTZ-45980",
+    rentPeriod: "2026-08",
+    monthsCovered: 1,
+    receivedAt: "2026-08-05",
   },
 ];
 
@@ -344,74 +356,134 @@ export const monthlyCollection = [
 export type LedgerEntry = {
   id: string;
   date: string;
+  receivedAt: string;
   tenant: string;
+  unitId: string;
   unit: string;
   amount: number;
   method: "MTN Mobile Money" | "Airtel Money" | "Cash" | "Bank transfer" | "Visa" | "Mastercard";
   reference: string;
   status: "Confirmed" | "Pending" | "Failed";
+  rentPeriod: string;
+  monthsCovered: number;
+  coverageAmounts?: number[] | undefined;
 };
 
 export const ledger: LedgerEntry[] = [
   {
     id: "l1",
     date: "14 Nov",
+    receivedAt: "2026-11-14",
     tenant: "Grace Achieng",
+    unitId: "u6",
     unit: "C2",
     amount: 850_000,
     method: "Airtel Money",
     reference: "PTZ-49120",
     status: "Confirmed",
+    rentPeriod: "2026-11",
+    monthsCovered: 1,
   },
   {
     id: "l2",
     date: "13 Nov",
+    receivedAt: "2026-11-13",
     tenant: "Moses Tumusiime",
+    unitId: "u10",
     unit: "D2",
     amount: 600_000,
     method: "MTN Mobile Money",
     reference: "PTZ-49087",
     status: "Confirmed",
+    rentPeriod: "2026-11",
+    monthsCovered: 1,
   },
   {
     id: "l3",
     date: "13 Nov",
+    receivedAt: "2026-11-13",
     tenant: "Ivan Kato",
+    unitId: "u12",
     unit: "D4",
     amount: 650_000,
     method: "MTN Mobile Money",
     reference: "PTZ-49081",
     status: "Failed",
+    rentPeriod: "2026-11",
+    monthsCovered: 1,
   },
   {
     id: "l4",
     date: "12 Nov",
+    receivedAt: "2026-11-12",
     tenant: "Ruth Kyomuhendo",
+    unitId: "u4",
     unit: "B5",
     amount: 1_200_000,
     method: "Airtel Money",
     reference: "PTZ-49044",
     status: "Confirmed",
+    rentPeriod: "2026-11",
+    monthsCovered: 1,
   },
   {
     id: "l5",
     date: "11 Nov",
+    receivedAt: "2026-11-11",
     tenant: "Daniel Ssempijja",
+    unitId: "u1",
     unit: "A1",
     amount: 1_500_000,
     method: "Cash",
     reference: "CASH-0112",
     status: "Confirmed",
+    rentPeriod: "2026-11",
+    monthsCovered: 1,
   },
   {
     id: "l6",
     date: "11 Nov",
+    receivedAt: "2026-11-11",
     tenant: "Joseph Mugisha",
+    unitId: "u5",
     unit: "C1",
     amount: 850_000,
     method: "MTN Mobile Money",
     reference: "PTZ-49012",
     status: "Pending",
+    rentPeriod: "2026-11",
+    monthsCovered: 1,
+  },
+];
+
+export type TenantNotification = {
+  id: string;
+  unit: string;
+  kind: "rent" | "payment" | "advance" | "update";
+  title: string;
+  message: string;
+  createdAt: string;
+  read: boolean;
+};
+
+export const tenantNotifications: TenantNotification[] = [
+  {
+    id: "notice-rent-november",
+    unit: "B4",
+    kind: "rent",
+    title: "November rent is due soon",
+    message: "Your rent of UGX 1,200,000 is due in 5 days.",
+    createdAt: "2026-11-16T08:00:00.000Z",
+    read: false,
+  },
+  {
+    id: "notice-repair-update",
+    unit: "B4",
+    kind: "update",
+    title: "Your maintenance request is being reviewed",
+    message: "The landlord is reviewing your kitchen sink report.",
+    createdAt: "2026-11-12T10:00:00.000Z",
+    read: false,
   },
 ];
 

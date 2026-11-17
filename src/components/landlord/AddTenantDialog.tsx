@@ -68,6 +68,7 @@ export function AddTenantDialog({
     startDate?: string | undefined;
   }>({});
   const [state, setState] = useState<"idle" | "saving" | "done">("idle");
+  const formContentRef = useRef<HTMLDivElement>(null);
 
   // Reset only when the dialog opens, not when the unit list changes after saving.
   const wasOpen = useRef(false);
@@ -89,6 +90,10 @@ export function AddTenantDialog({
       setRent(preset ? preset.rent.toLocaleString("en-UG") : "");
     }
   }, [open, presetUnitId, vacantUnits]);
+
+  useEffect(() => {
+    formContentRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  }, [step]);
 
   const unit = vacantUnits.find((u) => u.id === unitId);
   const rentNum = Number(rent.replace(/[^\d]/g, ""));
@@ -142,8 +147,8 @@ export function AddTenantDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[calc(100%-1rem)] max-h-[94dvh] max-w-lg gap-0 overflow-hidden rounded-2xl bg-background p-0">
-        <div className="border-b border-primary/10 bg-primary-soft px-4 pb-4 pt-5 sm:px-6 sm:pb-5 sm:pt-6">
+      <DialogContent className="flex max-h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] max-w-lg flex-col gap-0 overflow-hidden rounded-2xl bg-background p-0">
+        <div className="shrink-0 border-b border-primary/10 bg-primary-soft px-4 pb-4 pt-5 sm:px-6 sm:pb-5 sm:pt-6">
           <DialogTitle className="text-xl font-bold">Add a tenant</DialogTitle>
           <DialogDescription className="mt-1 text-sm text-muted-foreground">
             {state === "done" ? "All set." : `Step ${step + 1} of ${steps.length}: ${steps[step]}`}
@@ -162,7 +167,10 @@ export function AddTenantDialog({
           </div>
         </div>
 
-        <div className="relative min-h-[19rem] overflow-y-auto p-4 sm:p-6">
+        <div
+          ref={formContentRef}
+          className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6"
+        >
           <AnimatePresence mode="wait" custom={dir} initial={false}>
             {state === "done" ? (
               <motion.div
@@ -401,7 +409,7 @@ export function AddTenantDialog({
         </div>
 
         {state !== "done" && (
-          <div className="flex items-center justify-between gap-3 border-t border-border bg-background p-3 sm:p-4">
+          <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border bg-background p-3 sm:p-4">
             <Button
               type="button"
               variant="ghost"

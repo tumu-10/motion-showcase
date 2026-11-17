@@ -36,6 +36,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { formatUGX } from "@/lib/rent";
+import { currentRentPeriod, summarizeRentPeriod } from "@/lib/rent-accounting";
+import { useRentDemoData } from "@/lib/useRentDemoData";
 import { ease } from "@/lib/motion";
 import {
   landlords as initialLandlords,
@@ -87,6 +89,7 @@ const subscriptionMonths: Record<SubscriptionPlan, number> = {
 
 function AdminPage() {
   const [view, setView] = useState<View>("overview");
+  const { data: rentData } = useRentDemoData();
   const [landlords, setLandlords] = useState(initialLandlords);
   const [txns, setTxns] = useState(unmatchedTransactions);
   const [matching, setMatching] = useState<UnmatchedTxn | null>(null);
@@ -97,6 +100,7 @@ function AdminPage() {
   const [createOpen, setCreateOpen] = useState(false);
 
   const pending = landlords.filter((l) => l.verification === "Pending review").length;
+  const rentSummary = summarizeRentPeriod(rentData.units, rentData.ledger, currentRentPeriod());
   const nav: NavItem<View>[] = [
     { id: "overview", label: "Overview", icon: Activity },
     { id: "payments", label: "Match payments", icon: Link2, badge: txns.length },
@@ -162,7 +166,14 @@ function AdminPage() {
       onView={setView}
       account={{ name: "Ops Team", role: "Platform administrator" }}
     >
-      {view === "overview" && <AdminOverview landlords={landlords} txns={txns} onOpen={setView} />}
+      {view === "overview" && (
+        <AdminOverview
+          landlords={landlords}
+          txns={txns}
+          rentSummary={rentSummary}
+          onOpen={setView}
+        />
+      )}
       {view === "payments" && <UnmatchedPayments txns={txns} onMatch={setMatching} />}
       {view === "landlords" && (
         <LandlordList
@@ -252,15 +263,17 @@ const providers: { name: string; status: "Operational" | "Slow"; tone: Tone; not
 function AdminOverview({
   landlords,
   txns,
+  rentSummary,
   onOpen,
 }: {
   landlords: Landlord[];
   txns: UnmatchedTxn[];
+  rentSummary: ReturnType<typeof summarizeRentPeriod>;
   onOpen: (v: View) => void;
 }) {
   const totalUnits = landlords.reduce((s, l) => s + l.units, 0);
   const totalTenants = landlords.reduce((s, l) => s + (l.tenants ?? 0), 0);
-  const totalCollected = landlords.reduce((s, l) => s + (l.collected ?? 0), 0);
+  const totalCollected = rentSummary.collectedThisMonth;
   const totalSubscriptionPaid = landlords.reduce(
     (total, landlord) => total + (landlord.subscriptionPaidAmount ?? 0),
     0,
@@ -290,9 +303,21 @@ function AdminOverview({
       format: true,
     },
     {
-      label: "Collected this month",
+      label: "Cash received this month",
       value: totalCollected,
       sub: formatUGX(totalCollected),
+      format: true,
+    },
+    {
+      label: "Rent expected after advances",
+      value: rentSummary.expectedAfterAdvances,
+      sub: `${rentSummary.advanceTenants} tenants paying ahead · demo portfolio`,
+      format: true,
+    },
+    {
+      label: "Rent already covered",
+      value: rentSummary.advanceCovered,
+      sub: `${formatUGX(rentSummary.advanceCovered)} covered by advance rent`,
       format: true,
     },
     {

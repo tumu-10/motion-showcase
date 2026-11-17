@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { formatUGX } from "@/lib/rent";
 import { printPdf } from "@/lib/documents";
 import { ease } from "@/lib/motion";
+import { currentRentPeriod, formatRentPeriodRange } from "@/lib/rent-accounting";
 import type { LedgerEntry } from "@/lib/sample-data";
 
 const statusTone: Record<LedgerEntry["status"], Tone> = {
@@ -16,9 +17,29 @@ const statusTone: Record<LedgerEntry["status"], Tone> = {
 };
 
 function exportCsv(rows: LedgerEntry[]) {
-  const header = ["Date", "Tenant", "Unit", "Amount (UGX)", "Method", "Reference", "Status"];
+  const header = [
+    "Date received",
+    "Tenant",
+    "Unit",
+    "Amount (UGX)",
+    "Rent period",
+    "Months covered",
+    "Method",
+    "Reference",
+    "Status",
+  ];
   const lines = rows.map((r) =>
-    [r.date, r.tenant, r.unit, r.amount, r.method, r.reference, r.status]
+    [
+      r.date,
+      r.tenant,
+      r.unit,
+      r.amount,
+      formatRentPeriodRange(r.rentPeriod, r.monthsCovered),
+      r.monthsCovered,
+      r.method,
+      r.reference,
+      r.status,
+    ]
       .map((v) => `"${String(v).replace(/"/g, '""')}"`)
       .join(","),
   );
@@ -26,7 +47,7 @@ function exportCsv(rows: LedgerEntry[]) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "propatiz-payments-november-2026.csv";
+  a.download = `propatiz-payments-${currentRentPeriod()}.csv`;
   a.click();
   URL.revokeObjectURL(url);
   toast.success("Payments exported", {
@@ -34,9 +55,15 @@ function exportCsv(rows: LedgerEntry[]) {
   });
 }
 
-export function PaymentsView({ ledger }: { ledger: LedgerEntry[] }) {
+export function PaymentsView({
+  ledger,
+  onConfirm,
+}: {
+  ledger: LedgerEntry[];
+  onConfirm: (id: string) => void;
+}) {
   const confirmed = ledger
-    .filter((l) => l.status === "Confirmed")
+    .filter((l) => l.status === "Confirmed" && l.receivedAt.slice(0, 7) === currentRentPeriod())
     .reduce((s, l) => s + l.amount, 0);
   return (
     <>
@@ -71,6 +98,12 @@ export function PaymentsView({ ledger }: { ledger: LedgerEntry[] }) {
                   <p className="text-xs text-muted-foreground">Method</p>
                   <p className="mt-0.5 break-words font-medium">{entry.method}</p>
                 </div>
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground">Rent coverage</p>
+                  <p className="mt-0.5 font-medium">
+                    {formatRentPeriodRange(entry.rentPeriod, entry.monthsCovered)}
+                  </p>
+                </div>
                 <div className="min-w-0 text-right">
                   <p className="text-xs text-muted-foreground">Amount</p>
                   <p className="figure mt-0.5 font-bold">{formatUGX(entry.amount)}</p>
@@ -87,17 +120,23 @@ export function PaymentsView({ ledger }: { ledger: LedgerEntry[] }) {
               >
                 <FileText /> Download receipt
               </Button>
+              {entry.status === "Pending" && (
+                <Button className="mt-2 w-full" onClick={() => onConfirm(entry.id)}>
+                  Confirm payment
+                </Button>
+              )}
             </article>
           </li>
         ))}
       </ul>
       <div className="surface hidden overflow-x-auto md:block">
-        <table className="w-full min-w-[44rem] text-sm">
+        <table className="w-full min-w-[52rem] text-sm">
           <thead>
             <tr className="border-b border-border text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               <th className="px-6 py-3 font-semibold">Date</th>
               <th className="px-6 py-3 font-semibold">Tenant</th>
               <th className="px-6 py-3 font-semibold">Method</th>
+              <th className="px-6 py-3 font-semibold">Rent coverage</th>
               <th className="px-6 py-3 font-semibold">Reference</th>
               <th className="px-6 py-3 text-right font-semibold">Amount</th>
               <th className="px-6 py-3 font-semibold">Status</th>
@@ -120,20 +159,33 @@ export function PaymentsView({ ledger }: { ledger: LedgerEntry[] }) {
                   <span className="block text-xs text-muted-foreground">Unit {l.unit}</span>
                 </td>
                 <td className="px-6 py-4">{l.method}</td>
+                <td className="px-6 py-4">
+                  {formatRentPeriodRange(l.rentPeriod, l.monthsCovered)}
+                  {l.monthsCovered > 1 && (
+                    <span className="ml-1 text-xs text-muted-foreground">Advance</span>
+                  )}
+                </td>
                 <td className="figure px-6 py-4 text-muted-foreground">{l.reference}</td>
                 <td className="figure px-6 py-4 text-right font-bold">{formatUGX(l.amount)}</td>
                 <td className="px-6 py-4">
                   <Pill tone={statusTone[l.status]} label={l.status} />
                 </td>
                 <td className="px-6 py-4 text-right">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    aria-label={`Download receipt for ${l.tenant}, ${l.reference}`}
-                    onClick={() => downloadReceipt(l)}
-                  >
-                    <FileText /> PDF
-                  </Button>
+                  <div className="flex justify-end gap-2">
+                    {l.status === "Pending" && (
+                      <Button size="sm" onClick={() => onConfirm(l.id)}>
+                        Confirm
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      aria-label={`Download receipt for ${l.tenant}, ${l.reference}`}
+                      onClick={() => downloadReceipt(l)}
+                    >
+                      <FileText /> PDF
+                    </Button>
+                  </div>
                 </td>
               </motion.tr>
             ))}
@@ -151,6 +203,7 @@ function downloadReceipt(entry: LedgerEntry) {
       ["Unit", entry.unit],
       ["Date", entry.date],
       ["Method", entry.method],
+      ["Rent coverage", formatRentPeriodRange(entry.rentPeriod, entry.monthsCovered)],
       ["Reference", entry.reference],
       ["Amount", formatUGX(entry.amount)],
       ["Status", entry.status],
