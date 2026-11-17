@@ -234,6 +234,7 @@ function HomeTab({
             size={100}
             stroke={10}
             trackClassName="stroke-on-deep/15"
+            immediate
           >
             <AnimatePresence mode="wait" initial={false}>
               {paid ? (

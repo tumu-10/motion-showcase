@@ -165,7 +165,7 @@ function Hero() {
               </p>
             </div>
           </motion.div>
-          <div className="absolute bottom-4 right-4">
+          <div className="absolute left-4 top-4">
             <SampleTag className="bg-card" />
           </div>
         </div>

@@ -28,3 +28,7 @@ use the editor.
   own key and store it in Secrets.
 - **Secrets.** Lovable manages them. Do not put secret values in the repo.
 <!-- LOVABLE:END -->
+
+## Project rules
+- Demo data lives in src/lib/sample-data.ts and rent/phone rules in src/lib/rent.ts (tested); screens must not hardcode their own copies.
+- Motion tokens and reveal timing live in src/lib/motion.ts; use Reveal/TransitionLink so the preloader and page wipe stay in sync.

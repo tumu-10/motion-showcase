@@ -20,9 +20,11 @@ export function RentRing({
   stroke = 12,
   className,
   trackClassName = "stroke-muted",
+  immediate = false,
   children,
 }: {
   trackClassName?: string;
+  immediate?: boolean;
   daysLeft: number;
   cycleDays?: number;
   status: RentStatus;
@@ -33,7 +35,8 @@ export function RentRing({
 }) {
   const reduce = useReducedMotion();
   const ref = useRef<HTMLDivElement>(null);
-  const inView = useInView(ref, { once: true });
+  const seen = useInView(ref, { once: true });
+  const inView = immediate || seen;
   const r = (size - stroke) / 2;
   const progress =
     status === "paid" ? 1 : status === "overdue" ? 1 : Math.max(0.02, Math.min(1, daysLeft / cycleDays));
