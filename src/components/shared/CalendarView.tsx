@@ -64,15 +64,15 @@ export function CalendarView({
   };
 
   return (
-    <section className="min-w-0 space-y-4 sm:space-y-5">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+    <section className="@container min-w-0 space-y-4 @sm:space-y-5">
+      <header className="flex flex-col gap-3 @sm:flex-row @sm:items-end @sm:justify-between">
         <div>
           <p className="text-sm font-medium text-muted-foreground">
             {audience === "landlord" ? "Property schedule" : "Your schedule"}
           </p>
           <h1 className="mt-1 text-3xl font-bold tracking-tight text-primary-deep">Calendar</h1>
         </div>
-        <div className="flex w-full items-center justify-between gap-2 rounded-xl border border-border bg-card p-1.5 shadow-soft sm:w-auto">
+        <div className="flex w-full items-center justify-between gap-2 rounded-xl border border-border bg-card p-1.5 shadow-soft @sm:w-auto">
           <Button
             variant="outline"
             size="iconSm"
@@ -81,7 +81,7 @@ export function CalendarView({
           >
             <ChevronLeft />
           </Button>
-          <p className="min-w-0 flex-1 text-center text-sm font-semibold sm:min-w-36 sm:text-base">
+          <p className="min-w-0 flex-1 text-center text-sm font-semibold @sm:min-w-36 @sm:text-base">
             {format(month, "MMMM yyyy")}
           </p>
           <Button
@@ -96,22 +96,22 @@ export function CalendarView({
       </header>
 
       <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-xl border border-success/20 bg-success-soft p-3 sm:p-4">
+        <div className="rounded-xl border border-success/20 bg-success-soft p-3 @sm:p-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-success-ink">
             Paid this month
           </p>
-          <p className="figure mt-1 text-lg font-bold text-success-ink sm:text-xl">
+          <p className="figure mt-1 text-lg font-bold text-success-ink @sm:text-xl">
             {paidTotal ? formatAmount(paidTotal) : "—"}
           </p>
           <p className="mt-0.5 text-xs text-success-ink/80">
             {paidEvents.length} {paidEvents.length === 1 ? "payment" : "payments"}
           </p>
         </div>
-        <div className="rounded-xl border border-warning/25 bg-warning-soft p-3 sm:p-4">
+        <div className="rounded-xl border border-warning/25 bg-warning-soft p-3 @sm:p-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-warning-ink">
             Due this month
           </p>
-          <p className="figure mt-1 text-lg font-bold text-warning-ink sm:text-xl">
+          <p className="figure mt-1 text-lg font-bold text-warning-ink @sm:text-xl">
             {dueTotal ? formatAmount(dueTotal) : "—"}
           </p>
           <p className="mt-0.5 text-xs text-warning-ink/80">
@@ -120,16 +120,16 @@ export function CalendarView({
         </div>
       </div>
 
-      <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(18rem,0.8fr)]">
-        <div className="surface min-w-0 overflow-hidden p-2.5 sm:p-5">
+      <div className="grid min-w-0 gap-4 @5xl:grid-cols-[minmax(0,1.5fr)_minmax(18rem,0.8fr)]">
+        <div className="surface min-w-0 overflow-hidden p-2.5 @sm:p-5">
           <div className="grid grid-cols-7 border-b border-border">
             {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((weekday) => (
               <span
                 key={weekday}
-                className="py-2 text-center text-[0.625rem] font-semibold uppercase tracking-wide text-muted-foreground sm:text-xs"
+                className="py-2 text-center text-[0.625rem] font-semibold uppercase tracking-wide text-muted-foreground @sm:text-xs"
               >
-                <span className="sm:hidden">{weekday.slice(0, 2)}</span>
-                <span className="hidden sm:inline">{weekday}</span>
+                <span className="@sm:hidden">{weekday.slice(0, 2)}</span>
+                <span className="hidden @sm:inline">{weekday}</span>
               </span>
             ))}
             {days.map((day) => {
@@ -142,7 +142,7 @@ export function CalendarView({
                   aria-label={`${format(day, "EEEE, d MMMM")}${dayEvents.length ? `, ${dayEvents.map((event) => event.title).join(", ")}` : ""}`}
                   onClick={() => setSelected(day)}
                   className={cn(
-                    "mx-0.5 my-1 flex min-h-12 min-w-0 flex-col items-center justify-start gap-1 rounded-lg px-0.5 py-1.5 text-xs transition-colors sm:min-h-20 sm:gap-1.5 sm:p-2 sm:text-sm",
+                    "mx-0.5 my-1 flex min-h-12 min-w-0 flex-col items-center justify-start gap-1 rounded-lg px-0.5 py-1.5 text-xs transition-colors @sm:min-h-20 @sm:gap-1.5 @sm:p-2 @sm:text-sm",
                     active
                       ? "bg-primary text-primary-foreground shadow-soft"
                       : "hover:bg-secondary focus-visible:bg-secondary",
@@ -151,18 +151,18 @@ export function CalendarView({
                 >
                   <span
                     className={cn(
-                      "figure grid size-6 place-items-center rounded-full sm:size-7",
+                      "figure grid size-6 place-items-center rounded-full @sm:size-7",
                       active && "bg-primary-deep/30",
                     )}
                   >
                     {format(day, "d")}
                   </span>
-                  <span className="flex h-1.5 max-w-full items-center justify-center gap-0.5 sm:gap-1">
+                  <span className="flex h-1.5 max-w-full items-center justify-center gap-0.5 @sm:gap-1">
                     {dayEvents.slice(0, 3).map((event) => (
                       <span
                         key={event.id}
                         className={cn(
-                          "size-1 rounded-full sm:size-1.5",
+                          "size-1 rounded-full @sm:size-1.5",
                           active ? "bg-primary-foreground" : kindStyle[event.kind],
                         )}
                       />
@@ -172,7 +172,7 @@ export function CalendarView({
               );
             })}
           </div>
-          <div className="mt-3 flex flex-wrap gap-x-3 gap-y-2 border-t border-border pt-3 text-[0.6875rem] text-muted-foreground sm:mt-4 sm:gap-x-4 sm:pt-4 sm:text-xs">
+          <div className="mt-3 flex flex-wrap gap-x-3 gap-y-2 border-t border-border pt-3 text-[0.6875rem] text-muted-foreground @sm:mt-4 @sm:gap-x-4 @sm:pt-4 @sm:text-xs">
             {[
               ["rent", "Rent due"],
               ["payment", "Payment"],
@@ -189,7 +189,7 @@ export function CalendarView({
           </div>
         </div>
 
-        <aside className="surface min-w-0 p-4 sm:p-5">
+        <aside className="surface min-w-0 p-4 @sm:p-5">
           <div className="flex min-w-0 items-center gap-2">
             <CalendarDays className="size-5 text-primary" aria-hidden />
             <h2 className="min-w-0 font-bold">{format(selected, "EEEE, d MMMM")}</h2>
