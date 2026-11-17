@@ -54,7 +54,7 @@ export function RentRing({
           stroke="currentColor"
           className={cn("transition-colors duration-500", strokeTone[status])}
           initial={reduce ? false : { pathLength: 0 }}
-          animate={inView ? { pathLength: progress } : undefined}
+          animate={inView ? { pathLength: progress } : {}}
           transition={{ duration: 1.2, ease: ease.outExpo, delay: inView ? entryDelay() : 0 }}
         />
       </svg>

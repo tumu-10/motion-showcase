@@ -16,7 +16,7 @@ export function Reveal({ delay = 0, y = 18, children, ...rest }: RevealProps) {
     <motion.div
       ref={ref}
       initial={reduce ? false : { opacity: 0, y }}
-      animate={inView ? { opacity: 1, y: 0 } : undefined}
+      animate={inView ? { opacity: 1, y: 0 } : {}}
       transition={{ duration: 0.7, ease: ease.outExpo, delay: inView ? entryDelay() + delay : 0 }}
       {...rest}
     >
@@ -50,7 +50,7 @@ export function SplitHeading({
           <motion.span
             className="inline-block"
             initial={reduce ? false : { y: "110%" }}
-            animate={inView ? { y: "0%" } : undefined}
+            animate={inView ? { y: "0%" } : {}}
             transition={{ duration: 0.85, ease: ease.outExpo, delay: start + i * 0.06 }}
           >
             {w}
