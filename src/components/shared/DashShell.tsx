@@ -47,7 +47,9 @@ export function DashShell<T extends string>({
               aria-current={active ? "page" : undefined}
               className={cn(
                 "relative flex min-h-12 items-center gap-3 rounded-lg px-3.5 text-sm font-semibold transition-colors",
-                active ? "text-sidebar-primary-foreground" : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-foreground",
+                active
+                  ? "text-sidebar-primary-foreground"
+                  : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-foreground",
               )}
             >
               {active && (
@@ -63,7 +65,9 @@ export function DashShell<T extends string>({
                 <span
                   className={cn(
                     "figure relative grid h-6 min-w-6 place-items-center rounded-full px-1.5 text-xs",
-                    active ? "bg-primary-deep text-on-deep" : "bg-destructive text-destructive-foreground",
+                    active
+                      ? "bg-primary-deep text-on-deep"
+                      : "bg-destructive text-destructive-foreground",
                   )}
                 >
                   {item.badge}
@@ -100,12 +104,20 @@ export function DashShell<T extends string>({
         <OfflineBanner />
         <div className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-background px-4 lg:hidden">
           <Logo />
-          <Button variant="outline" size="iconSm" onClick={() => setOpen(true)} aria-label="Open menu">
+          <Button
+            variant="outline"
+            size="iconSm"
+            onClick={() => setOpen(true)}
+            aria-label="Open menu"
+          >
             <Menu />
           </Button>
         </div>
         <Sheet open={open} onOpenChange={setOpen}>
-          <SheetContent side="left" className="deep-panel w-[85%] max-w-xs border-none p-0 [&>button]:text-on-deep">
+          <SheetContent
+            side="left"
+            className="deep-panel !bg-primary-deep w-[85%] max-w-xs border-none p-0 [&>button]:text-on-deep"
+          >
             <SheetTitle className="sr-only">Menu</SheetTitle>
             {sidebar("mobile", () => setOpen(false))}
           </SheetContent>
@@ -129,12 +141,22 @@ export function DashShell<T extends string>({
   );
 }
 
-export function PageHeading({ eyebrow, title, children }: { eyebrow?: string; title: string; children?: ReactNode }) {
+export function PageHeading({
+  eyebrow,
+  title,
+  children,
+}: {
+  eyebrow?: string;
+  title: string;
+  children?: ReactNode;
+}) {
   return (
     <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
       <div>
         {eyebrow && <p className="text-sm font-medium text-muted-foreground">{eyebrow}</p>}
-        <h1 className="mt-1 text-3xl font-bold tracking-tight text-primary-deep sm:text-4xl">{title}</h1>
+        <h1 className="mt-1 text-3xl font-bold tracking-tight text-primary-deep sm:text-4xl">
+          {title}
+        </h1>
       </div>
       {children && <div className="flex flex-wrap gap-2">{children}</div>}
     </div>
