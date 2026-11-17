@@ -1,49 +1,56 @@
 import { useQuery } from "@tanstack/react-query";
+import { format, getDaysInMonth, parse } from "date-fns";
 import {
   Bell,
+  CalendarDays,
   ChevronRight,
+  FileText,
   Home as HomeIcon,
   House,
+  MessageSquare,
   Receipt,
   Search,
-  Wrench,
   type LucideIcon,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { AppSheet } from "@/components/tenant/AppSheet";
 import { PayFlow, type PaymentResult } from "@/components/tenant/PayFlow";
 import { ReportFlow, type ReportInput } from "@/components/tenant/ReportFlow";
 import { SwipeDeck } from "@/components/tenant/SwipeDeck";
 import { OfflineBanner } from "@/components/shared/OfflineBanner";
+import { CalendarView, type CalendarEvent } from "@/components/shared/CalendarView";
 import { RentRing } from "@/components/shared/RentRing";
 import { Pill, RentStatusPill } from "@/components/shared/StatusPill";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatUGX, getRentStatus } from "@/lib/rent";
 import { ease } from "@/lib/motion";
+import { printPdf } from "@/lib/documents";
 import {
   listings,
-  maintenanceRequests,
+  complaints as sampleComplaints,
   stageLabel,
   stageOrder,
   tenantPayments,
   tenantProfile,
   type Listing,
-  type MaintenanceRequest,
+  type Complaint,
   type Payment,
 } from "@/lib/sample-data";
+import { readTenantActive, readTenantNotice, type EvictionNotice } from "@/lib/tenant-demo";
 import { cn } from "@/lib/utils";
 
 export type TenantTask = "pay" | "report" | "home";
-type Tab = "home" | "payments" | "repairs" | "homes";
+type Tab = "home" | "payments" | "complaints" | "homes" | "calendar";
 
 const tabs: { id: Tab; label: string; icon: LucideIcon }[] = [
   { id: "home", label: "Home", icon: HomeIcon },
   { id: "payments", label: "Payments", icon: Receipt },
-  { id: "repairs", label: "Repairs", icon: Wrench },
+  { id: "complaints", label: "Complaints", icon: MessageSquare },
   { id: "homes", label: "Find a home", icon: Search },
+  { id: "calendar", label: "Calendar", icon: CalendarDays },
 ];
 
 // Simulates the first network request so the loading state is visible.
@@ -57,8 +64,23 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
   const [dir, setDir] = useState(1);
   const [paid, setPaid] = useState(false);
   const [payments, setPayments] = useState<Payment[]>(tenantPayments);
-  const [requests, setRequests] = useState<MaintenanceRequest[]>(maintenanceRequests.filter((m) => m.unit === "B4"));
+  const [requests, setRequests] = useState<Complaint[]>(
+    sampleComplaints.filter((m) => m.unit === "B4"),
+  );
+  const [activeTenant, setActiveTenant] = useState(true);
+  const [notice, setNotice] = useState<EvictionNotice | null>(null);
   const [sheet, setSheet] = useState<"pay" | "report" | null>(null);
+
+  useEffect(() => {
+    try {
+      setActiveTenant(readTenantActive());
+      const savedNotice = readTenantNotice();
+      setNotice(savedNotice?.unit === tenantProfile.unit.replace("Unit ", "") ? savedNotice : null);
+    } catch (error) {
+      console.error("Could not load tenant demo updates.", error);
+      toast.error("Some tenant updates could not be loaded.");
+    }
+  }, []);
 
   const go = (next: Tab) => {
     setDir(tabs.findIndex((t) => t.id === next) > tabs.findIndex((t) => t.id === tab) ? 1 : -1);
@@ -67,9 +89,17 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
 
   const handlePaid = useCallback(
     (r: PaymentResult) => {
-      setPaid(true);
+      setPaid(!r.pending);
       setPayments((p) => [
-        { id: r.reference, month: "November 2026", amount: r.amount, method: r.method as Payment["method"], date: "16 Nov 2026", reference: r.reference },
+        {
+          id: r.reference,
+          month: "November 2026",
+          amount: r.amount,
+          method: r.method,
+          date: "16 Nov 2026",
+          reference: r.reference,
+          status: r.pending ? "Pending" : "Confirmed",
+        },
         ...p,
       ]);
       onTaskDone?.("pay");
@@ -121,23 +151,47 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
             {tab === "home" && (
               <HomeTab
                 paid={paid}
+                activeTenant={activeTenant}
                 lastPayment={payments[0]}
                 request={requests[0]}
+                notice={notice}
                 onPay={() => setSheet("pay")}
                 onReport={() => setSheet("report")}
                 onFindHome={() => go("homes")}
                 onOpenPayments={() => go("payments")}
-                onOpenRepairs={() => go("repairs")}
+                onOpenComplaints={() => go("complaints")}
               />
             )}
-            {tab === "payments" && <PaymentsTab payments={payments} paid={paid} onPay={() => setSheet("pay")} />}
-            {tab === "repairs" && <RepairsTab requests={requests} onReport={() => setSheet("report")} />}
+            {tab === "payments" && (
+              <PaymentsTab
+                payments={payments}
+                paid={paid}
+                activeTenant={activeTenant}
+                onPay={() => setSheet("pay")}
+              />
+            )}
+            {tab === "complaints" && (
+              <ComplaintsTab
+                requests={requests}
+                activeTenant={activeTenant}
+                onReport={() => setSheet("report")}
+              />
+            )}
             {tab === "homes" && <HomesTab onInterested={() => onTaskDone?.("home")} />}
+            {tab === "calendar" && (
+              <CalendarView
+                events={tenantCalendarEvents(payments, requests, notice, activeTenant)}
+                audience="tenant"
+              />
+            )}
           </motion.div>
         </AnimatePresence>
       </div>
 
-      <nav className="relative z-20 grid grid-cols-4 border-t border-border bg-card px-2 pb-[max(env(safe-area-inset-bottom),0.5rem)] pt-1.5" aria-label="Tenant app">
+      <nav
+        className="relative z-20 grid grid-cols-5 border-t border-border bg-card px-1 pb-[max(env(safe-area-inset-bottom),0.5rem)] pt-1.5"
+        aria-label="Tenant app"
+      >
         {tabs.map((t) => {
           const Icon = t.icon;
           const active = tab === t.id;
@@ -166,9 +220,15 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
       </nav>
 
       <AppSheet open={sheet === "pay"} onClose={() => setSheet(null)} title="Pay November rent">
-        <PayFlow rent={tenantProfile.rent} defaultPhone={tenantProfile.phone} onPaid={handlePaid} onClose={() => setSheet(null)} />
+        <PayFlow
+          rent={tenantProfile.rent}
+          defaultPhone={tenantProfile.phone}
+          paymentDetails={tenantProfile.paymentDetails}
+          onPaid={handlePaid}
+          onClose={() => setSheet(null)}
+        />
       </AppSheet>
-      <AppSheet open={sheet === "report"} onClose={() => setSheet(null)} title="Report a problem">
+      <AppSheet open={sheet === "report"} onClose={() => setSheet(null)} title="Send a complaint">
         <ReportFlow onSubmitted={handleReport} onClose={() => setSheet(null)} />
       </AppSheet>
     </div>
@@ -179,24 +239,32 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
 
 function HomeTab({
   paid,
+  activeTenant,
   lastPayment,
   request,
+  notice,
   onPay,
   onReport,
   onFindHome,
   onOpenPayments,
-  onOpenRepairs,
+  onOpenComplaints,
 }: {
   paid: boolean;
+  activeTenant: boolean;
   lastPayment?: Payment | undefined;
-  request?: MaintenanceRequest | undefined;
+  request?: Complaint | undefined;
+  notice: EvictionNotice | null;
   onPay: () => void;
   onReport: () => void;
   onFindHome: () => void;
   onOpenPayments: () => void;
-  onOpenRepairs: () => void;
+  onOpenComplaints: () => void;
 }) {
-  const { data, isPending } = useQuery({ queryKey: ["tenant-home"], queryFn: fetchTenantHome, staleTime: Infinity });
+  const { data, isPending } = useQuery({
+    queryKey: ["tenant-home"],
+    queryFn: fetchTenantHome,
+    staleTime: Infinity,
+  });
   const status = getRentStatus(tenantProfile.daysUntilDue, paid);
 
   if (isPending || !data) return <HomeSkeleton />;
@@ -212,12 +280,18 @@ function HomeTab({
       <motion.header {...stagger(0)} className="flex items-center justify-between">
         <div>
           <p className="text-sm text-muted-foreground">
-            {tenantProfile.unit}, {tenantProfile.property}
+            {activeTenant
+              ? `${tenantProfile.unit}, ${tenantProfile.property}`
+              : `Past home · ${tenantProfile.unit}, ${tenantProfile.property}`}
           </p>
           <h1 className="text-2xl font-bold">Hello, {data.profile.firstName}</h1>
         </div>
         <button
-          onClick={() => toast("No new notifications", { description: "We will let you know when your landlord replies." })}
+          onClick={() =>
+            toast("No new notifications", {
+              description: "We will let you know when your landlord replies.",
+            })
+          }
           className="relative grid size-12 place-items-center rounded-full bg-card shadow-soft"
           aria-label="Notifications"
         >
@@ -225,66 +299,131 @@ function HomeTab({
         </button>
       </motion.header>
 
-      <motion.section {...stagger(1)} className="deep-panel overflow-hidden rounded-2xl p-5" aria-label="November rent">
-        <div className="flex items-center gap-5">
-          <RentRing
-            daysLeft={tenantProfile.daysUntilDue}
-            cycleDays={tenantProfile.cycleDays}
-            status={status}
-            size={100}
-            stroke={10}
-            trackClassName="stroke-on-deep/15"
-            immediate
-          >
-            <AnimatePresence mode="wait" initial={false}>
-              {paid ? (
-                <motion.span key="paid" initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="text-sm font-bold text-on-deep">
-                  Paid
-                </motion.span>
-              ) : (
-                <motion.span key="days" exit={{ opacity: 0 }} className="leading-none">
-                  <span className="figure block text-3xl font-bold text-on-deep">{tenantProfile.daysUntilDue}</span>
-                  <span className="text-xs text-on-deep-muted">days left</span>
-                </motion.span>
-              )}
-            </AnimatePresence>
-          </RentRing>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm text-on-deep-muted">November rent</p>
-            <p className="figure mt-0.5 whitespace-nowrap text-xl font-bold text-on-deep">{formatUGX(tenantProfile.rent)}</p>
-            <p className="mt-1 text-sm text-on-deep-muted">{paid ? `Receipt ${lastPayment?.reference}` : "Due Sat, 21 Nov"}</p>
+      {!activeTenant ? (
+        <motion.section {...stagger(1)} className="surface space-y-4 p-5">
+          <div className="flex items-center gap-3">
+            <span className="grid size-11 place-items-center rounded-full bg-muted text-muted-foreground">
+              <House className="size-5" />
+            </span>
+            <div>
+              <p className="font-bold">Your tenancy has ended</p>
+              <p className="text-sm text-muted-foreground">
+                You no longer have an active unit. Your payment history is still available.
+              </p>
+            </div>
           </div>
-        </div>
-        <div className="mt-5 flex items-center justify-between gap-3">
-          <RentStatusPill status={status} />
-          {paid ? (
-            <Button variant="onDeepOutline" size="sm" onClick={onOpenPayments}>
-              View receipt
+          {notice && <NoticeCard notice={notice} />}
+          <div className="grid grid-cols-2 gap-2">
+            <Button variant="outline" onClick={onOpenPayments}>
+              Payment history
             </Button>
-          ) : (
-            <Button variant="accent" onClick={onPay}>
-              Pay rent
-            </Button>
-          )}
-        </div>
-      </motion.section>
-
-      <motion.section {...stagger(2)} className="grid grid-cols-2 gap-3" aria-label="Quick actions">
-        <QuickAction icon={Wrench} label="Report a problem" onClick={onReport} />
-        <QuickAction icon={House} label="Find a home" onClick={onFindHome} />
-      </motion.section>
-
-      {request && (
-        <motion.section {...stagger(3)}>
-          <SectionHeader title="Repair in progress" action="All repairs" onAction={onOpenRepairs} />
-          <RequestCard request={request} />
+            <Button onClick={onFindHome}>Available homes</Button>
+          </div>
         </motion.section>
+      ) : (
+        <>
+          <motion.section
+            {...stagger(1)}
+            className="deep-panel overflow-hidden rounded-2xl p-5"
+            aria-label="November rent"
+          >
+            <div className="flex items-center gap-5">
+              <RentRing
+                daysLeft={tenantProfile.daysUntilDue}
+                cycleDays={tenantProfile.cycleDays}
+                status={status}
+                size={100}
+                stroke={10}
+                trackClassName="stroke-on-deep/15"
+                immediate
+              >
+                <AnimatePresence mode="wait" initial={false}>
+                  {paid ? (
+                    <motion.span
+                      key="paid"
+                      initial={{ scale: 0.6, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      className="text-sm font-bold text-on-deep"
+                    >
+                      Paid
+                    </motion.span>
+                  ) : (
+                    <motion.span key="days" exit={{ opacity: 0 }} className="leading-none">
+                      <span className="figure block text-3xl font-bold text-on-deep">
+                        {tenantProfile.daysUntilDue}
+                      </span>
+                      <span className="text-xs text-on-deep-muted">days left</span>
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+              </RentRing>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm text-on-deep-muted">November rent</p>
+                <p className="figure mt-0.5 whitespace-nowrap text-xl font-bold text-on-deep">
+                  {formatUGX(tenantProfile.rent)}
+                </p>
+                <p className="mt-1 text-sm text-on-deep-muted">
+                  {paid ? `Receipt ${lastPayment?.reference}` : "Due Sat, 21 Nov"}
+                </p>
+              </div>
+            </div>
+            <div className="mt-5 flex items-center justify-between gap-3">
+              <RentStatusPill status={status} />
+              {paid ? (
+                <Button variant="onDeepOutline" size="sm" onClick={onOpenPayments}>
+                  View receipt
+                </Button>
+              ) : (
+                <Button variant="accent" onClick={onPay}>
+                  Pay rent
+                </Button>
+              )}
+            </div>
+          </motion.section>
+
+          <motion.section
+            {...stagger(2)}
+            className="grid grid-cols-2 gap-3"
+            aria-label="Quick actions"
+          >
+            <QuickAction icon={MessageSquare} label="Send a complaint" onClick={onReport} />
+            <QuickAction icon={House} label="Find a home" onClick={onFindHome} />
+          </motion.section>
+
+          {request && (
+            <motion.section {...stagger(3)}>
+              <SectionHeader
+                title="Complaint update"
+                action="All complaints"
+                onAction={onOpenComplaints}
+              />
+              <RequestCard request={request} />
+            </motion.section>
+          )}
+          {notice && <NoticeCard notice={notice} />}
+        </>
       )}
 
       <motion.section {...stagger(4)}>
         <SectionHeader title="Last payment" action="History" onAction={onOpenPayments} />
         {lastPayment && <PaymentRow payment={lastPayment} />}
       </motion.section>
+    </div>
+  );
+}
+
+function NoticeCard({ notice }: { notice: EvictionNotice }) {
+  return (
+    <div className="rounded-lg border border-warning/40 bg-warning-soft p-4">
+      <p className="font-bold text-warning-ink">Notice from your landlord</p>
+      <p className="mt-1 text-sm text-warning-ink">
+        {notice.property} · Unit {notice.unit}
+      </p>
+      <p className="mt-2 text-sm">
+        Requested move-out date: <strong>{notice.vacateBy}</strong>
+      </p>
+      {notice.reason && <p className="mt-2 text-sm">{notice.reason}</p>}
+      <p className="mt-2 text-xs text-warning-ink">Issued {notice.issuedOn}</p>
     </div>
   );
 }
@@ -309,9 +448,20 @@ function HomeSkeleton() {
   );
 }
 
-function QuickAction({ icon: Icon, label, onClick }: { icon: LucideIcon; label: string; onClick: () => void }) {
+function QuickAction({
+  icon: Icon,
+  label,
+  onClick,
+}: {
+  icon: LucideIcon;
+  label: string;
+  onClick: () => void;
+}) {
   return (
-    <button onClick={onClick} className="surface press flex min-h-24 flex-col justify-between p-4 text-left">
+    <button
+      onClick={onClick}
+      className="surface press flex min-h-24 flex-col justify-between p-4 text-left"
+    >
       <span className="grid size-10 place-items-center rounded-full bg-accent-soft text-warning-ink">
         <Icon className="size-5" aria-hidden />
       </span>
@@ -320,12 +470,23 @@ function QuickAction({ icon: Icon, label, onClick }: { icon: LucideIcon; label: 
   );
 }
 
-function SectionHeader({ title, action, onAction }: { title: string; action?: string; onAction?: () => void }) {
+function SectionHeader({
+  title,
+  action,
+  onAction,
+}: {
+  title: string;
+  action?: string;
+  onAction?: () => void;
+}) {
   return (
     <div className="mb-3 flex items-center justify-between">
       <h2 className="text-base font-bold">{title}</h2>
       {action && (
-        <button onClick={onAction} className="flex min-h-11 items-center gap-0.5 px-1 text-sm font-semibold text-primary">
+        <button
+          onClick={onAction}
+          className="flex min-h-11 items-center gap-0.5 px-1 text-sm font-semibold text-primary"
+        >
           {action}
           <ChevronRight className="size-4" aria-hidden />
         </button>
@@ -344,6 +505,7 @@ function PaymentRow({ payment }: { payment: Payment }) {
         <p className="font-semibold">{payment.month}</p>
         <p className="text-sm text-muted-foreground">
           {payment.method} · {payment.date}
+          {payment.status === "Pending" ? " · Pending confirmation" : ""}
         </p>
       </div>
       <p className="figure text-right font-bold">{formatUGX(payment.amount)}</p>
@@ -351,7 +513,7 @@ function PaymentRow({ payment }: { payment: Payment }) {
   );
 }
 
-function StageTracker({ stage }: { stage: MaintenanceRequest["stage"] }) {
+function StageTracker({ stage }: { stage: Complaint["stage"] }) {
   const idx = stageOrder.indexOf(stage);
   return (
     <div>
@@ -368,12 +530,22 @@ function StageTracker({ stage }: { stage: MaintenanceRequest["stage"] }) {
         {stageOrder.map((s, i) => (
           <div key={s} className="relative flex flex-col items-center gap-2">
             <motion.span
-              className={cn("size-3.5 rounded-full border-2", i <= idx ? "border-primary bg-primary" : "border-input bg-card")}
+              className={cn(
+                "size-3.5 rounded-full border-2",
+                i <= idx ? "border-primary bg-primary" : "border-input bg-card",
+              )}
               initial={{ scale: 0.4 }}
               animate={{ scale: 1 }}
               transition={{ delay: 0.2 + i * 0.12, type: "spring", stiffness: 400, damping: 20 }}
             />
-            <span className={cn("text-[0.6875rem] font-medium", i <= idx ? "text-foreground" : "text-muted-foreground")}>{stageLabel[s]}</span>
+            <span
+              className={cn(
+                "text-[0.6875rem] font-medium",
+                i <= idx ? "text-foreground" : "text-muted-foreground",
+              )}
+            >
+              {stageLabel[s]}
+            </span>
           </div>
         ))}
       </div>
@@ -381,8 +553,9 @@ function StageTracker({ stage }: { stage: MaintenanceRequest["stage"] }) {
   );
 }
 
-function RequestCard({ request }: { request: MaintenanceRequest }) {
-  const tone = request.stage === "resolved" ? "success" : request.stage === "submitted" ? "neutral" : "info";
+function RequestCard({ request }: { request: Complaint }) {
+  const tone =
+    request.stage === "resolved" ? "success" : request.stage === "submitted" ? "neutral" : "info";
   return (
     <div className="surface p-4">
       <div className="flex items-start justify-between gap-3">
@@ -401,27 +574,119 @@ function RequestCard({ request }: { request: MaintenanceRequest }) {
 
 /* ------------------------------- Payments tab ------------------------------ */
 
-function PaymentsTab({ payments, paid, onPay }: { payments: Payment[]; paid: boolean; onPay: () => void }) {
-  const total = payments.reduce((s, p) => s + p.amount, 0);
+function PaymentsTab({
+  payments,
+  paid,
+  activeTenant,
+  onPay,
+}: {
+  payments: Payment[];
+  paid: boolean;
+  activeTenant: boolean;
+  onPay: () => void;
+}) {
+  const receiptColors = [
+    "border-primary/20 bg-primary-soft/55",
+    "border-accent/35 bg-accent-soft/70",
+    "border-success/20 bg-success-soft/60",
+    "border-chart-4/25 bg-chart-4/10",
+  ];
+  const total = payments
+    .filter((payment) => payment.status !== "Pending")
+    .reduce((s, p) => s + p.amount, 0);
   return (
-    <div className="px-5 pb-8 pt-6">
+    <div className="min-w-0 px-4 pb-8 pt-5 sm:px-5 sm:pt-6">
       <h1 className="text-2xl font-bold">Payments</h1>
-      <div className="surface mt-5 flex items-center justify-between p-5">
+      <div className="surface mt-4 flex flex-wrap items-center justify-between gap-4 p-4 sm:mt-5 sm:p-5">
         <div>
           <p className="text-sm text-muted-foreground">Balance due</p>
-          <p className="figure mt-1 text-2xl font-bold">{paid ? "UGX 0" : formatUGX(tenantProfile.rent)}</p>
+          <p className="figure mt-1 text-2xl font-bold">
+            {!activeTenant || paid ? "UGX 0" : formatUGX(tenantProfile.rent)}
+          </p>
         </div>
-        {paid ? <RentStatusPill status="paid" /> : <Button onClick={onPay}>Pay now</Button>}
+        {!activeTenant ? (
+          <Pill tone="neutral" label="No active tenancy" />
+        ) : paid ? (
+          <RentStatusPill status="paid" />
+        ) : (
+          <Button onClick={onPay}>Pay now</Button>
+        )}
       </div>
-      <h2 className="mb-3 mt-8 flex items-baseline justify-between text-base font-bold">
+      <h2 className="mb-3 mt-7 flex flex-col gap-1 text-base font-bold sm:mt-8 sm:flex-row sm:items-baseline sm:justify-between">
         Receipts
-        <span className="figure text-sm font-medium text-muted-foreground">{formatUGX(total)} paid in 2026</span>
+        <span className="figure text-sm font-medium text-muted-foreground">
+          {formatUGX(total)} paid in 2026
+        </span>
       </h2>
       <ul className="space-y-3">
         <AnimatePresence initial={false}>
           {payments.map((p, i) => (
-            <motion.li key={p.id} layout initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04, duration: 0.4, ease: ease.outExpo }}>
-              <PaymentRow payment={p} />
+            <motion.li
+              key={p.id}
+              layout
+              initial={{ opacity: 0, y: -12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.04, duration: 0.4, ease: ease.outExpo }}
+            >
+              <article
+                className={cn(
+                  "overflow-hidden rounded-xl border p-4 shadow-soft sm:p-5",
+                  p.status === "Pending"
+                    ? "border-warning/30 bg-warning-soft/70"
+                    : receiptColors[i % receiptColors.length],
+                )}
+              >
+                <div className="flex min-w-0 items-start gap-3">
+                  <span
+                    className={cn(
+                      "grid size-10 shrink-0 place-items-center rounded-xl",
+                      p.status === "Pending"
+                        ? "bg-warning text-warning-ink"
+                        : "bg-card/80 text-primary-deep",
+                    )}
+                  >
+                    <Receipt className="size-5" aria-hidden />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+                      <p className="font-bold">{p.month}</p>
+                      <p className="figure font-bold">{formatUGX(p.amount)}</p>
+                    </div>
+                    <p className="mt-1 break-words text-sm text-muted-foreground">
+                      {p.method} · {p.date}
+                    </p>
+                    <p className="figure mt-1 break-all text-xs text-muted-foreground">
+                      Ref {p.reference}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  size="default"
+                  variant="outline"
+                  className="mt-4 w-full border-primary/25 bg-card/80 sm:mt-5"
+                  onClick={() => {
+                    try {
+                      printPdf("Rent payment receipt", [
+                        ["Tenant", tenantProfile.name],
+                        ["Property / unit", `${tenantProfile.property} · ${tenantProfile.unit}`],
+                        ["Payment month", p.month],
+                        ["Date", p.date],
+                        ["Method", p.method],
+                        ["Reference", p.reference],
+                        ["Amount", formatUGX(p.amount)],
+                        ["Status", p.status ?? "Confirmed"],
+                      ]);
+                    } catch (error) {
+                      toast.error("Could not open the receipt", {
+                        description:
+                          error instanceof Error ? error.message : "Allow pop-ups and try again.",
+                      });
+                    }
+                  }}
+                >
+                  <FileText /> Download receipt
+                </Button>
+              </article>
             </motion.li>
           ))}
         </AnimatePresence>
@@ -430,27 +695,49 @@ function PaymentsTab({ payments, paid, onPay }: { payments: Payment[]; paid: boo
   );
 }
 
-/* -------------------------------- Repairs tab ------------------------------ */
+/* ------------------------------ Complaints tab ----------------------------- */
 
-function RepairsTab({ requests, onReport }: { requests: MaintenanceRequest[]; onReport: () => void }) {
+function ComplaintsTab({
+  requests,
+  activeTenant,
+  onReport,
+}: {
+  requests: Complaint[];
+  activeTenant: boolean;
+  onReport: () => void;
+}) {
   return (
     <div className="px-5 pb-8 pt-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Repairs</h1>
-        <Button size="sm" onClick={onReport}>
-          <Wrench /> Report
+        <h1 className="text-2xl font-bold">Complaints</h1>
+        <Button size="sm" onClick={onReport} disabled={!activeTenant}>
+          <MessageSquare /> New complaint
         </Button>
       </div>
+      {!activeTenant && (
+        <p className="mt-3 text-sm text-muted-foreground">
+          Your tenancy has ended. Existing complaints remain visible, but new complaints require an
+          active unit.
+        </p>
+      )}
       {requests.length === 0 ? (
         <div className="mt-10 rounded-lg border-2 border-dashed border-input p-8 text-center">
-          <p className="font-semibold">No repair requests</p>
-          <p className="mt-1 text-sm text-muted-foreground">When something needs fixing, report it here.</p>
+          <p className="font-semibold">No complaints yet</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Send your landlord a complaint or report a property concern here.
+          </p>
         </div>
       ) : (
         <ul className="mt-5 space-y-3">
           <AnimatePresence initial={false}>
             {requests.map((r) => (
-              <motion.li key={r.id} layout initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4, ease: ease.outExpo }}>
+              <motion.li
+                key={r.id}
+                layout
+                initial={{ opacity: 0, scale: 0.97 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.4, ease: ease.outExpo }}
+              >
                 <RequestCard request={r} />
               </motion.li>
             ))}
@@ -459,6 +746,76 @@ function RepairsTab({ requests, onReport }: { requests: MaintenanceRequest[]; on
       )}
     </div>
   );
+}
+
+function tenantCalendarEvents(
+  payments: Payment[],
+  complaints: Complaint[],
+  notice: EvictionNotice | null,
+  activeTenant: boolean,
+) {
+  const events: CalendarEvent[] = [
+    ...(activeTenant
+      ? [
+          {
+            id: "rent-due",
+            title: "November rent due",
+            date: new Date(2026, 10, 21),
+            detail: `${formatUGX(tenantProfile.rent)} · ${tenantProfile.unit}`,
+            kind: "rent" as const,
+            amount: tenantProfile.rent,
+            coverage: "Due November 21 · 5 days left",
+          },
+        ]
+      : []),
+    ...payments.map((payment) => ({
+      id: `payment-${payment.id}`,
+      title:
+        payment.status === "Pending"
+          ? "Transfer awaiting confirmation"
+          : `${payment.month} payment`,
+      date: new Date(payment.date),
+      detail: `${formatUGX(payment.amount)} · ${payment.method}`,
+      kind: payment.status === "Pending" ? ("rent" as const) : ("payment" as const),
+      amount: payment.amount,
+      coverage: `${payment.status === "Pending" ? "Payment pending for" : "Rent period"}: ${paymentPeriod(payment.month)}`,
+    })),
+    ...complaints.map((complaint) => ({
+      id: `complaint-${complaint.id}`,
+      title: `Complaint: ${complaint.title}`,
+      date:
+        complaint.reported === "Today"
+          ? new Date(2026, 10, 16)
+          : new Date(`${complaint.reported} 2026`),
+      detail: `${complaint.category} · ${stageLabel[complaint.stage]}`,
+      kind: "complaint" as const,
+    })),
+  ];
+  if (notice) {
+    events.push(
+      {
+        id: "eviction-notice",
+        title: "Notice received",
+        date: new Date(notice.issuedOn),
+        detail: `Requested move-out by ${notice.vacateBy}`,
+        kind: "notice" as const,
+      },
+      {
+        id: "move-out-date",
+        title: "Requested move-out date",
+        date: new Date(notice.vacateBy),
+        detail: `${notice.property} · Unit ${notice.unit}`,
+        kind: "notice" as const,
+      },
+    );
+  }
+  return events;
+}
+
+function paymentPeriod(month: string) {
+  const date = parse(month, "MMMM yyyy", new Date(2026, 0, 1));
+  if (Number.isNaN(date.getTime())) return month;
+  return `${format(date, "MMMM")} 1–${getDaysInMonth(date)}, ${format(date, "yyyy")}`;
 }
 
 /* --------------------------------- Homes tab ------------------------------- */
@@ -477,13 +834,20 @@ function HomesTab({ onInterested }: { onInterested: () => void }) {
   const [shortlist, setShortlist] = useState<{ item: Listing; requested: boolean }[]>([]);
 
   const matches = listings.filter(
-    (l) => (area === areas[0] || l.area === area) && l.rent <= (budgets[budget]?.max ?? Infinity) && !seen.includes(l.id),
+    (l) =>
+      (area === areas[0] || l.area === area) &&
+      l.rent <= (budgets[budget]?.max ?? Infinity) &&
+      !seen.includes(l.id),
   );
 
   return (
     <div className="px-5 pb-8 pt-6">
       <h1 className="text-2xl font-bold">Find a home</h1>
-      <div className="-mx-5 mt-4 flex gap-2 overflow-x-auto px-5 pb-1" role="group" aria-label="Area">
+      <div
+        className="-mx-5 mt-4 flex gap-2 overflow-x-auto px-5 pb-1"
+        role="group"
+        aria-label="Area"
+      >
         {areas.map((a) => (
           <Chip key={a} active={area === a} onClick={() => setArea(a)}>
             {a}
@@ -508,20 +872,39 @@ function HomesTab({ onInterested }: { onInterested: () => void }) {
           }}
           onDecide={(item, yes) => {
             setSeen((s) => [...s, item.id]);
-            if (yes) setShortlist((s) => (s.some((x) => x.item.id === item.id) ? s : [{ item, requested: false }, ...s]));
+            if (yes)
+              setShortlist((s) =>
+                s.some((x) => x.item.id === item.id) ? s : [{ item, requested: false }, ...s],
+              );
           }}
         />
       </div>
 
       <AnimatePresence>
         {shortlist.length > 0 && (
-          <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mt-8">
+          <motion.section
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-8"
+          >
             <h2 className="mb-3 text-base font-bold">Your shortlist</h2>
             <ul className="space-y-3">
               <AnimatePresence initial={false}>
                 {shortlist.map(({ item, requested }) => (
-                  <motion.li key={item.id} layout initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.4, ease: ease.outExpo }} className="surface flex items-center gap-3 p-3">
-                    <img src={item.image} alt="" className="size-16 shrink-0 rounded-sm object-cover" loading="lazy" />
+                  <motion.li
+                    key={item.id}
+                    layout
+                    initial={{ opacity: 0, x: 30 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.4, ease: ease.outExpo }}
+                    className="surface flex items-center gap-3 p-3"
+                  >
+                    <img
+                      src={item.image}
+                      alt=""
+                      className="size-16 shrink-0 rounded-sm object-cover"
+                      loading="lazy"
+                    />
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-semibold">{item.title}</p>
                       <p className="figure text-sm text-muted-foreground">
@@ -534,9 +917,13 @@ function HomesTab({ onInterested }: { onInterested: () => void }) {
                       <Button
                         size="sm"
                         onClick={() => {
-                          setShortlist((s) => s.map((x) => (x.item.id === item.id ? { ...x, requested: true } : x)));
+                          setShortlist((s) =>
+                            s.map((x) => (x.item.id === item.id ? { ...x, requested: true } : x)),
+                          );
                           onInterested();
-                          toast.success("Viewing requested", { description: `The landlord for ${item.title} in ${item.area} will contact you.` });
+                          toast.success("Viewing requested", {
+                            description: `The landlord for ${item.title} in ${item.area} will contact you.`,
+                          });
                         }}
                       >
                         Request viewing
@@ -553,14 +940,24 @@ function HomesTab({ onInterested }: { onInterested: () => void }) {
   );
 }
 
-function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+function Chip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
   return (
     <button
       onClick={onClick}
       aria-pressed={active}
       className={cn(
         "h-10 shrink-0 rounded-full border px-4 text-sm font-semibold transition-colors",
-        active ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-foreground hover:bg-secondary",
+        active
+          ? "border-primary bg-primary text-primary-foreground"
+          : "border-border bg-card text-foreground hover:bg-secondary",
       )}
     >
       {children}

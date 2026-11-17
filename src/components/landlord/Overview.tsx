@@ -7,7 +7,7 @@ import { Pill, SampleTag } from "@/components/shared/StatusPill";
 import { Button } from "@/components/ui/button";
 import { formatCompactUGX, formatUGX, getRentStatus } from "@/lib/rent";
 import { ease } from "@/lib/motion";
-import { monthlyCollection, stageLabel, type MaintenanceRequest, type Unit } from "@/lib/sample-data";
+import { monthlyCollection, stageLabel, type Complaint, type Unit } from "@/lib/sample-data";
 import { cn } from "@/lib/utils";
 
 export function Overview({
@@ -17,20 +17,20 @@ export function Overview({
   onRemind,
   onAddTenant,
   onOpenUnits,
-  onOpenMaintenance,
+  onOpenComplaints,
   onOpenUnit,
 }: {
   units: Unit[];
-  requests: MaintenanceRequest[];
+  requests: Complaint[];
   reminded: string[];
   onRemind: (id: string) => void;
   onAddTenant: () => void;
   onOpenUnits: () => void;
-  onOpenMaintenance: () => void;
+  onOpenComplaints: () => void;
   onOpenUnit: (u: Unit) => void;
 }) {
   const occupied = units.filter((u) => u.tenant);
-  const expected = occupied.reduce((s, u) => s + u.rent, 0);
+  const expected = units.reduce((s, u) => s + u.rent, 0);
   const collected = occupied.filter((u) => u.paid).reduce((s, u) => s + u.rent, 0);
   const groups = {
     paid: occupied.filter((u) => getRentStatus(u.daysUntilDue, u.paid) === "paid"),
@@ -40,16 +40,44 @@ export function Overview({
   };
   const sum = (list: Unit[]) => list.reduce((s, u) => s + u.rent, 0);
   const segments = [
-    { key: "paid", label: "Paid", cls: "bg-success", value: sum(groups.paid), count: groups.paid.length },
-    { key: "due-soon", label: "Due soon", cls: "bg-warning", value: sum(groups["due-soon"]), count: groups["due-soon"].length },
-    { key: "upcoming", label: "Upcoming", cls: "bg-chart-4", value: sum(groups.upcoming), count: groups.upcoming.length },
-    { key: "overdue", label: "Overdue", cls: "bg-destructive", value: sum(groups.overdue), count: groups.overdue.length },
+    {
+      key: "paid",
+      label: "Paid",
+      cls: "bg-success",
+      value: sum(groups.paid),
+      count: groups.paid.length,
+    },
+    {
+      key: "due-soon",
+      label: "Due soon",
+      cls: "bg-warning",
+      value: sum(groups["due-soon"]),
+      count: groups["due-soon"].length,
+    },
+    {
+      key: "upcoming",
+      label: "Upcoming",
+      cls: "bg-chart-4",
+      value: sum(groups.upcoming),
+      count: groups.upcoming.length,
+    },
+    {
+      key: "overdue",
+      label: "Overdue",
+      cls: "bg-destructive",
+      value: sum(groups.overdue),
+      count: groups.overdue.length,
+    },
   ];
   const overdue = [...groups.overdue].sort((a, b) => a.daysUntilDue - b.daysUntilDue);
   const openRequests = requests
     .filter((r) => r.stage !== "resolved")
     .sort((a, b) => (a.urgency === "Urgent" ? -1 : b.urgency === "Urgent" ? 1 : 0));
-  const chartData = monthlyCollection.map((m) => (m.month === "Nov" ? { ...m, collected } : m));
+  const chartData = monthlyCollection.map((m) => ({
+    ...m,
+    expected,
+    collected: m.month === "Nov" ? collected : m.collected,
+  }));
 
   return (
     <>
@@ -70,7 +98,11 @@ export function Overview({
             <p className="figure text-muted-foreground">of {formatUGX(expected)}</p>
           </div>
 
-          <div className="mt-8 flex h-4 w-full gap-1 overflow-hidden rounded-full" role="img" aria-label="Rent collection by status">
+          <div
+            className="mt-8 flex h-4 w-full gap-1 overflow-hidden rounded-full"
+            role="img"
+            aria-label="Rent collection by status"
+          >
             {segments.map((s, i) =>
               s.value ? (
                 <motion.div
@@ -101,27 +133,65 @@ export function Overview({
           </dl>
         </div>
 
-        <div className="surface p-6">
+        <div className="surface min-w-0 p-4 sm:p-6">
           <div className="flex items-center justify-between">
             <p className="text-sm font-semibold text-muted-foreground">Last six months</p>
             <div className="flex gap-4 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-full bg-primary" aria-hidden />Collected</span>
-              <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-full bg-chart-5" aria-hidden />Expected</span>
+              <span className="flex items-center gap-1.5">
+                <span className="size-2.5 rounded-full bg-primary" aria-hidden />
+                Collected
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="size-2.5 rounded-full bg-chart-5" aria-hidden />
+                Expected
+              </span>
             </div>
           </div>
-          <div className="mt-4 h-56">
+          <div className="mt-4 h-48 min-w-0 sm:h-56">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} barGap={-28} barCategoryGap="30%">
+              <BarChart data={chartData} barGap={-20} barCategoryGap="20%">
                 <CartesianGrid vertical={false} stroke="var(--border)" />
-                <XAxis dataKey="month" tickLine={false} axisLine={false} tick={{ fill: "var(--muted-foreground)", fontSize: 12 }} />
-                <YAxis tickLine={false} axisLine={false} width={44} tick={{ fill: "var(--muted-foreground)", fontSize: 12 }} tickFormatter={(v) => `${v / 1_000_000}M`} />
+                <XAxis
+                  dataKey="month"
+                  tickLine={false}
+                  axisLine={false}
+                  tick={{ fill: "var(--muted-foreground)", fontSize: 11 }}
+                />
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                  width={34}
+                  tick={{ fill: "var(--muted-foreground)", fontSize: 10 }}
+                  tickFormatter={(v) => `${v / 1_000_000}M`}
+                />
                 <Tooltip
                   cursor={{ fill: "var(--muted)" }}
-                  contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 13 }}
-                  formatter={(v: number, name) => [formatUGX(v), name === "collected" ? "Collected" : "Expected"]}
+                  contentStyle={{
+                    background: "var(--card)",
+                    border: "1px solid var(--border)",
+                    borderRadius: 8,
+                    fontSize: 13,
+                  }}
+                  formatter={(v: number, name) => [
+                    formatUGX(v),
+                    name === "collected" ? "Collected" : "Expected",
+                  ]}
                 />
-                <Bar dataKey="expected" fill="var(--chart-5)" radius={[6, 6, 0, 0]} barSize={28} animationDuration={900} />
-                <Bar dataKey="collected" fill="var(--primary)" radius={[6, 6, 0, 0]} barSize={28} animationDuration={1100} animationBegin={200} />
+                <Bar
+                  dataKey="expected"
+                  fill="var(--chart-5)"
+                  radius={[6, 6, 0, 0]}
+                  barSize={18}
+                  animationDuration={900}
+                />
+                <Bar
+                  dataKey="collected"
+                  fill="var(--primary)"
+                  radius={[6, 6, 0, 0]}
+                  barSize={18}
+                  animationDuration={1100}
+                  animationBegin={200}
+                />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -132,14 +202,19 @@ export function Overview({
         <div className="surface overflow-hidden">
           <div className="flex items-center justify-between border-b border-border px-6 py-4">
             <h2 className="font-bold">Overdue rent</h2>
-            <button onClick={onOpenUnits} className="flex min-h-11 items-center gap-1 text-sm font-semibold text-primary">
+            <button
+              onClick={onOpenUnits}
+              className="flex min-h-11 items-center gap-1 text-sm font-semibold text-primary"
+            >
               All units <ArrowRight className="size-4" aria-hidden />
             </button>
           </div>
           {overdue.length === 0 ? (
             <div className="px-6 py-12 text-center">
               <p className="font-semibold">No overdue rent</p>
-              <p className="mt-1 text-sm text-muted-foreground">Every occupied unit is paid or not yet due.</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Every occupied unit is paid or not yet due.
+              </p>
             </div>
           ) : (
             <ul className="divide-y divide-border">
@@ -158,12 +233,29 @@ export function Overview({
                     <button onClick={() => onOpenUnit(u)} className="min-w-0 flex-1 text-left">
                       <p className="truncate font-semibold hover:text-primary">{u.tenant}</p>
                       <p className="text-sm text-muted-foreground">
-                        {u.unit}, {u.property} · <span className="font-semibold text-destructive-ink">{Math.abs(u.daysUntilDue)} days late</span>
+                        {u.unit}, {u.property} ·{" "}
+                        <span className="font-semibold text-destructive-ink">
+                          {Math.abs(u.daysUntilDue)} days late
+                        </span>
                       </p>
                     </button>
                     <p className="figure hidden font-bold sm:block">{formatUGX(u.rent)}</p>
-                    <Button size="sm" variant={sent ? "secondary" : "outline"} disabled={sent} onClick={() => onRemind(u.id)} className="w-32">
-                      {sent ? (<><Check /> Sent</>) : (<><Bell /> Remind</>)}
+                    <Button
+                      size="sm"
+                      variant={sent ? "secondary" : "outline"}
+                      disabled={sent}
+                      onClick={() => onRemind(u.id)}
+                      className="w-32"
+                    >
+                      {sent ? (
+                        <>
+                          <Check /> Sent
+                        </>
+                      ) : (
+                        <>
+                          <Bell /> Remind
+                        </>
+                      )}
                     </Button>
                   </motion.li>
                 );
@@ -174,8 +266,11 @@ export function Overview({
 
         <div className="surface overflow-hidden">
           <div className="flex items-center justify-between border-b border-border px-6 py-4">
-            <h2 className="font-bold">Open repairs</h2>
-            <button onClick={onOpenMaintenance} className="flex min-h-11 items-center gap-1 text-sm font-semibold text-primary">
+            <h2 className="font-bold">Open complaints</h2>
+            <button
+              onClick={onOpenComplaints}
+              className="flex min-h-11 items-center gap-1 text-sm font-semibold text-primary"
+            >
               Manage <ArrowRight className="size-4" aria-hidden />
             </button>
           </div>
@@ -189,7 +284,10 @@ export function Overview({
                   </p>
                 </div>
                 {r.urgency === "Urgent" && <Pill tone="danger" label="Urgent" />}
-                <Pill tone={r.stage === "submitted" ? "neutral" : "info"} label={stageLabel[r.stage]} />
+                <Pill
+                  tone={r.stage === "submitted" ? "neutral" : "info"}
+                  label={stageLabel[r.stage]}
+                />
               </li>
             ))}
           </ul>

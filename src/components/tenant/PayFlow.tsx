@@ -1,4 +1,4 @@
-import { Loader2, Smartphone } from "lucide-react";
+import { CreditCard, Landmark, Loader2, Smartphone } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { AnimatedCheck } from "@/components/shared/AnimatedCheck";
@@ -6,24 +6,41 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { detectNetwork, formatUGX, networkLabel, normalizeUgPhone, type MobileNetwork } from "@/lib/rent";
+import {
+  detectNetwork,
+  formatUGX,
+  networkLabel,
+  normalizeUgPhone,
+  type MobileNetwork,
+} from "@/lib/rent";
+import type { LandlordPaymentDetails } from "@/lib/sample-data";
 import { ease } from "@/lib/motion";
 import { cn } from "@/lib/utils";
+import type { LucideIcon } from "lucide-react";
 
 type Step = "form" | "approve" | "success" | "failed";
 
-export type PaymentResult = { amount: number; method: string; reference: string; phone: string };
+export type PaymentResult = {
+  amount: number;
+  method: "MTN Mobile Money" | "Airtel Money" | "Bank transfer" | "Visa";
+  reference: string;
+  phone: string;
+  pending: boolean;
+};
+type PaymentMethod = "mobile" | "bank" | "visa";
 
 const APPROVE_SECONDS = 4;
 
 export function PayFlow({
   rent,
   defaultPhone,
+  paymentDetails,
   onPaid,
   onClose,
 }: {
   rent: number;
   defaultPhone: string;
+  paymentDetails: LandlordPaymentDetails;
   onPaid: (r: PaymentResult) => void;
   onClose: () => void;
 }) {
@@ -31,12 +48,32 @@ export function PayFlow({
   const [amountMode, setAmountMode] = useState<"full" | "other">("full");
   const [otherAmount, setOtherAmount] = useState("");
   const [network, setNetwork] = useState<MobileNetwork>(detectNetwork(defaultPhone) ?? "mtn");
+  const [method, setMethod] = useState<PaymentMethod>("mobile");
   const [phone, setPhone] = useState(defaultPhone);
   const [simulateDecline, setSimulateDecline] = useState(false);
-  const [errors, setErrors] = useState<{ amount?: string | undefined; phone?: string | undefined }>({});
+  const [errors, setErrors] = useState<{ amount?: string | undefined; phone?: string | undefined }>(
+    {},
+  );
   const [result, setResult] = useState<PaymentResult | null>(null);
 
   const amount = amountMode === "full" ? rent : Number(otherAmount.replace(/[^\d]/g, ""));
+  const methods: [PaymentMethod, string, LucideIcon][] = [
+    ...(paymentDetails.mobileMoneyEnabled
+      ? [["mobile", "Mobile money", Smartphone] as [PaymentMethod, string, LucideIcon]]
+      : []),
+    ...(paymentDetails.bankEnabled
+      ? [["bank", "Bank transfer", Landmark] as [PaymentMethod, string, LucideIcon]]
+      : []),
+    ["visa", "Visa", CreditCard],
+  ];
+
+  useEffect(() => {
+    if (method === "mobile" && !paymentDetails.mobileMoneyEnabled) {
+      setMethod(paymentDetails.bankEnabled ? "bank" : "visa");
+    } else if (method === "bank" && !paymentDetails.bankEnabled) {
+      setMethod(paymentDetails.mobileMoneyEnabled ? "mobile" : "visa");
+    }
+  }, [method, paymentDetails.bankEnabled, paymentDetails.mobileMoneyEnabled]);
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -44,23 +81,40 @@ export function PayFlow({
     if (amountMode === "other") {
       if (!amount) next.amount = "Enter an amount.";
       else if (amount < 10_000) next.amount = "The minimum payment is UGX 10,000.";
-      else if (amount > rent) next.amount = `You owe ${formatUGX(rent)}. Enter that amount or less.`;
+      else if (amount > rent)
+        next.amount = `You owe ${formatUGX(rent)}. Enter that amount or less.`;
     }
-    const local = normalizeUgPhone(phone);
-    const detected = detectNetwork(phone);
-    if (!local) next.phone = "Enter a Ugandan mobile number, for example 0772 123 456.";
-    else if (!detected) next.phone = "This number is not an MTN or Airtel line.";
-    else if (detected !== network)
+    const local = method === "mobile" ? normalizeUgPhone(phone) : null;
+    const detected = method === "mobile" ? detectNetwork(phone) : null;
+    if (method === "mobile" && !local)
+      next.phone = "Enter a Ugandan mobile number, for example 0772 123 456.";
+    else if (method === "mobile" && !detected)
+      next.phone = "This number is not an MTN or Airtel line.";
+    else if (method === "mobile" && detected && detected !== network)
       next.phone = `This is an ${detected === "mtn" ? "MTN" : "Airtel"} number. Switch to ${networkLabel[detected]} or use another number.`;
     setErrors(next);
     if (Object.keys(next).length) return;
-    setResult({
+    const paymentResult: PaymentResult = {
       amount,
-      method: networkLabel[network],
-      phone: local!,
+      method:
+        method === "mobile"
+          ? network === "mtn"
+            ? "MTN Mobile Money"
+            : "Airtel Money"
+          : method === "bank"
+            ? "Bank transfer"
+            : "Visa",
+      phone: local ?? "",
       reference: `PTZ-${Math.floor(49200 + Math.random() * 700)}`,
-    });
-    setStep("approve");
+      pending: method === "bank",
+    };
+    setResult(paymentResult);
+    if (method === "bank") {
+      setStep("success");
+      onPaid(paymentResult);
+    } else {
+      setStep("approve");
+    }
   }
 
   return (
@@ -79,8 +133,14 @@ export function PayFlow({
           >
             <div>
               <p className="text-sm font-medium text-muted-foreground">Amount</p>
-              <p className="figure mt-1 text-4xl font-bold">{amount ? formatUGX(amount) : "UGX 0"}</p>
-              <div className="mt-4 grid grid-cols-2 gap-2 rounded-full bg-muted p-1" role="radiogroup" aria-label="Amount">
+              <p className="figure mt-1 text-4xl font-bold">
+                {amount ? formatUGX(amount) : "UGX 0"}
+              </p>
+              <div
+                className="mt-4 grid grid-cols-2 gap-2 rounded-full bg-muted p-1"
+                role="radiogroup"
+                aria-label="Amount"
+              >
                 {(["full", "other"] as const).map((m) => (
                   <button
                     key={m}
@@ -91,7 +151,11 @@ export function PayFlow({
                     className="relative h-11 rounded-full text-sm font-semibold"
                   >
                     {amountMode === m && (
-                      <motion.span layoutId="amount-mode" className="absolute inset-0 rounded-full bg-card shadow-soft" transition={{ type: "spring", stiffness: 420, damping: 34 }} />
+                      <motion.span
+                        layoutId="amount-mode"
+                        className="absolute inset-0 rounded-full bg-card shadow-soft"
+                        transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                      />
                     )}
                     <span className="relative">{m === "full" ? "Full rent" : "Part payment"}</span>
                   </button>
@@ -99,7 +163,12 @@ export function PayFlow({
               </div>
               <AnimatePresence initial={false}>
                 {amountMode === "other" && (
-                  <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="overflow-hidden"
+                  >
                     <div className="pt-4">
                       <Label htmlFor="amount">Amount in UGX</Label>
                       <Input
@@ -123,50 +192,111 @@ export function PayFlow({
             </div>
 
             <fieldset>
-              <legend className="text-sm font-medium text-muted-foreground">Pay with</legend>
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                {(["mtn", "airtel"] as const).map((n) => (
+              <legend className="text-sm font-medium text-muted-foreground">Payment method</legend>
+              <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {methods.map(([id, label, Icon]) => (
                   <button
-                    key={n}
+                    key={id}
                     type="button"
-                    aria-pressed={network === n}
-                    onClick={() => setNetwork(n)}
+                    aria-pressed={method === id}
+                    onClick={() => setMethod(id)}
                     className={cn(
-                      "press flex min-h-16 flex-col items-start justify-center rounded-lg border-2 px-4 text-left",
-                      network === n ? "border-primary bg-primary-soft" : "border-border bg-card",
+                      "press flex min-h-20 min-w-0 flex-col items-center justify-center gap-1 rounded-lg border-2 px-2 text-center text-xs font-semibold sm:min-h-16",
+                      method === id ? "border-primary bg-primary-soft" : "border-border bg-card",
                     )}
                   >
-                    <span className="text-sm font-bold">{n === "mtn" ? "MTN MoMo" : "Airtel Money"}</span>
-                    <span className="text-xs text-muted-foreground">{n === "mtn" ? "076, 077, 078" : "070, 074, 075"}</span>
+                    <Icon className="size-4" aria-hidden />
+                    {label}
                   </button>
                 ))}
               </div>
+              {method === "mobile" && (
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  {(["mtn", "airtel"] as const).map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      aria-pressed={network === n}
+                      onClick={() => setNetwork(n)}
+                      className={cn(
+                        "press flex min-h-16 flex-col items-start justify-center rounded-lg border-2 px-4 text-left",
+                        network === n ? "border-primary bg-primary-soft" : "border-border bg-card",
+                      )}
+                    >
+                      <span className="text-sm font-bold">
+                        {n === "mtn" ? "MTN MoMo" : "Airtel Money"}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {n === "mtn" ? "076, 077, 078" : "070, 074, 075"}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </fieldset>
 
-            <div>
-              <Label htmlFor="phone">Mobile money number</Label>
-              <Input
-                id="phone"
-                type="tel"
-                inputMode="tel"
-                autoComplete="tel"
-                value={phone}
-                onChange={(e) => {
-                  setPhone(e.target.value);
-                  const d = detectNetwork(e.target.value);
-                  if (d) setNetwork(d);
-                }}
-                aria-invalid={!!errors.phone}
-                aria-describedby="phone-error"
-                className="figure mt-2"
-              />
-              <FieldError id="phone-error" message={errors.phone} />
-            </div>
+            {method === "mobile" ? (
+              <div>
+                <Label htmlFor="phone">Mobile money number</Label>
+                <Input
+                  id="phone"
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  value={phone}
+                  onChange={(e) => {
+                    setPhone(e.target.value);
+                    const d = detectNetwork(e.target.value);
+                    if (d) setNetwork(d);
+                  }}
+                  aria-invalid={!!errors.phone}
+                  aria-describedby="phone-error"
+                  className="figure mt-2"
+                />
+                <FieldError id="phone-error" message={errors.phone} />
+              </div>
+            ) : method === "bank" ? (
+              <div className="rounded-xl border border-primary/15 bg-primary-soft/60 p-4 text-sm">
+                <p className="font-bold text-primary-deep">Bank transfer details</p>
+                <dl className="mt-2 space-y-2">
+                  <PaymentDetail label="Bank" value={paymentDetails.bankName} />
+                  <PaymentDetail label="Account name" value={paymentDetails.bankAccountName} />
+                  <PaymentDetail label="Account number" value={paymentDetails.bankAccountNumber} />
+                </dl>
+                <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+                  Transfers are recorded as pending until the landlord confirms receipt. Use the
+                  reference shown after submitting.
+                </p>
+              </div>
+            ) : (
+              <div className="rounded-xl border border-border bg-secondary/60 p-4 text-sm text-muted-foreground">
+                Visa checkout is simulated for this demo. No card details are requested or
+                processed.
+              </div>
+            )}
 
-            <label className="flex items-center gap-3 rounded-sm border border-dashed border-input p-3 text-sm text-muted-foreground">
-              <Checkbox checked={simulateDecline} onCheckedChange={(v) => setSimulateDecline(v === true)} />
-              Demo only: simulate a declined payment
-            </label>
+            {method === "mobile" && paymentDetails.mobileMoneyNumber && (
+              <div className="rounded-xl border border-success/20 bg-success-soft/60 p-4 text-sm">
+                <p className="font-bold text-success-ink">Pay the landlord</p>
+                <dl className="mt-2 space-y-2">
+                  <PaymentDetail label="Registered name" value={paymentDetails.mobileMoneyName} />
+                  <PaymentDetail
+                    label="Mobile money number"
+                    value={paymentDetails.mobileMoneyNumber}
+                  />
+                </dl>
+              </div>
+            )}
+
+            {method !== "bank" && (
+              <label className="flex items-center gap-3 rounded-sm border border-dashed border-input p-3 text-sm text-muted-foreground">
+                <Checkbox
+                  checked={simulateDecline}
+                  onCheckedChange={(v) => setSimulateDecline(v === true)}
+                />
+                Demo only: simulate a declined payment
+              </label>
+            )}
 
             <Button type="submit" size="lg" className="w-full">
               Pay {amount ? formatUGX(amount) : ""}
@@ -191,16 +321,31 @@ export function PayFlow({
         )}
 
         {step === "success" && result && (
-          <motion.div key="success" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center pt-4 text-center">
+          <motion.div
+            key="success"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="flex flex-col items-center pt-4 text-center"
+          >
             <AnimatedCheck />
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6, duration: 0.4, ease: ease.outExpo }} className="w-full">
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.6, duration: 0.4, ease: ease.outExpo }}
+              className="w-full"
+            >
               <h3 className="mt-5 text-xl font-bold">Payment received</h3>
-              <p className="mt-1 text-muted-foreground">Your landlord has been notified.</p>
+              <p className="mt-1 text-muted-foreground">
+                {result.pending
+                  ? "Your bank transfer is waiting for landlord confirmation."
+                  : "Your landlord has been notified."}
+              </p>
               <dl className="mt-6 divide-y divide-border rounded-lg border border-border text-left text-sm">
                 {[
                   ["Amount", formatUGX(result.amount)],
                   ["Paid with", result.method],
-                  ["Number", result.phone],
+                  ...(result.phone ? [["Number", result.phone] as [string, string]] : []),
                   ["Receipt", result.reference],
                 ].map(([k, v]) => (
                   <div key={k} className="flex justify-between gap-4 px-4 py-3">
@@ -217,7 +362,13 @@ export function PayFlow({
         )}
 
         {step === "failed" && (
-          <motion.div key="failed" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center pt-4 text-center">
+          <motion.div
+            key="failed"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="flex flex-col items-center pt-4 text-center"
+          >
             <AnimatedCheck tone="danger" />
             <h3 className="mt-5 text-xl font-bold">Payment not approved</h3>
             <p className="mt-1 max-w-xs text-muted-foreground">
@@ -236,7 +387,17 @@ export function PayFlow({
   );
 }
 
-function Approve({ phone, method, onCancel, onDone }: { phone: string; method: string; onCancel: () => void; onDone: () => void }) {
+function Approve({
+  phone,
+  method,
+  onCancel,
+  onDone,
+}: {
+  phone: string;
+  method: string;
+  onCancel: () => void;
+  onDone: () => void;
+}) {
   const [left, setLeft] = useState(APPROVE_SECONDS);
   const doneRef = useRef(onDone);
   doneRef.current = onDone;
@@ -267,7 +428,14 @@ function Approve({ phone, method, onCancel, onDone }: { phone: string; method: s
       </div>
       <h3 className="mt-6 text-xl font-bold">Check your phone</h3>
       <p className="mt-2 max-w-xs text-muted-foreground">
-        Enter your PIN on the {method} prompt sent to <span className="figure font-semibold text-foreground">{phone}</span>.
+        {method === "Visa" ? (
+          "This is a demo card authorization. No real card will be charged."
+        ) : (
+          <>
+            Enter your PIN on the {method} prompt sent to{" "}
+            <span className="figure font-semibold text-foreground">{phone}</span>.
+          </>
+        )}
       </p>
       <div className="mt-8 h-2 w-full overflow-hidden rounded-full bg-muted">
         <motion.div
@@ -304,5 +472,15 @@ export function FieldError({ id, message }: { id: string; message?: string | und
         </motion.p>
       )}
     </AnimatePresence>
+  );
+}
+
+function PaymentDetail({ label, value }: { label: string; value?: string | undefined }) {
+  if (!value) return null;
+  return (
+    <div className="grid grid-cols-[7rem_minmax(0,1fr)] gap-2">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="figure break-all text-right font-semibold">{value}</dd>
+    </div>
   );
 }

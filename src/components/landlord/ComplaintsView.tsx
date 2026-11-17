@@ -5,32 +5,41 @@ import { PageHeading } from "@/components/shared/DashShell";
 import { Pill, type Tone } from "@/components/shared/StatusPill";
 import { Button } from "@/components/ui/button";
 import { ease } from "@/lib/motion";
-import { stageLabel, stageOrder, type MaintenanceRequest, type MaintenanceStage } from "@/lib/sample-data";
+import { stageLabel, stageOrder, type Complaint, type ComplaintStage } from "@/lib/sample-data";
 
-const stageTone: Record<MaintenanceStage, Tone> = {
+const stageTone: Record<ComplaintStage, Tone> = {
   submitted: "neutral",
   assigned: "info",
   "in-progress": "warning",
   resolved: "success",
 };
 
-const nextAction: Record<MaintenanceStage, string> = {
-  submitted: "Assign technician",
-  assigned: "Mark in progress",
+const nextAction: Record<ComplaintStage, string> = {
+  submitted: "Review complaint",
+  assigned: "Send response",
   "in-progress": "Mark resolved",
   resolved: "",
 };
 
-export function MaintenanceView({ requests, onAdvance }: { requests: MaintenanceRequest[]; onAdvance: (id: string) => void }) {
-  const [filter, setFilter] = useState<"open" | MaintenanceStage>("open");
-  const rows = requests.filter((r) => (filter === "open" ? r.stage !== "resolved" : r.stage === filter));
-  const count = (s: "open" | MaintenanceStage) => requests.filter((r) => (s === "open" ? r.stage !== "resolved" : r.stage === s)).length;
+export function ComplaintsView({
+  requests,
+  onAdvance,
+}: {
+  requests: Complaint[];
+  onAdvance: (id: string) => void;
+}) {
+  const [filter, setFilter] = useState<"open" | ComplaintStage>("open");
+  const rows = requests.filter((r) =>
+    filter === "open" ? r.stage !== "resolved" : r.stage === filter,
+  );
+  const count = (s: "open" | ComplaintStage) =>
+    requests.filter((r) => (s === "open" ? r.stage !== "resolved" : r.stage === s)).length;
 
   return (
     <>
-      <PageHeading eyebrow="Requests from tenants" title="Repairs" />
+      <PageHeading eyebrow="Reports from tenants" title="Complaints" />
 
-      <div className="grid gap-3 sm:grid-cols-5" role="tablist" aria-label="Filter repairs">
+      <div className="grid gap-3 sm:grid-cols-5" role="tablist" aria-label="Filter complaints">
         {(["open", ...stageOrder] as const).map((s) => (
           <button
             key={s}
@@ -39,8 +48,16 @@ export function MaintenanceView({ requests, onAdvance }: { requests: Maintenance
             onClick={() => setFilter(s)}
             className="press relative flex min-h-16 items-center justify-between rounded-lg border border-border bg-card px-4 text-left"
           >
-            {filter === s && <motion.span layoutId="repair-filter" className="absolute inset-0 rounded-lg border-2 border-primary" transition={{ type: "spring", stiffness: 420, damping: 34 }} />}
-            <span className="text-sm font-semibold">{s === "open" ? "All open" : stageLabel[s]}</span>
+            {filter === s && (
+              <motion.span
+                layoutId="complaint-filter"
+                className="absolute inset-0 rounded-lg border-2 border-primary"
+                transition={{ type: "spring", stiffness: 420, damping: 34 }}
+              />
+            )}
+            <span className="text-sm font-semibold">
+              {s === "open" ? "All open" : stageLabel[s]}
+            </span>
             <span className="figure text-2xl font-bold text-primary-deep">{count(s)}</span>
           </button>
         ))}
@@ -87,7 +104,7 @@ export function MaintenanceView({ requests, onAdvance }: { requests: Maintenance
       {rows.length === 0 && (
         <div className="surface px-6 py-16 text-center">
           <p className="font-semibold">Nothing here</p>
-          <p className="mt-1 text-sm text-muted-foreground">No repair requests are at this stage.</p>
+          <p className="mt-1 text-sm text-muted-foreground">No complaints are at this stage.</p>
         </div>
       )}
     </>

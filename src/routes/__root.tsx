@@ -88,14 +88,15 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       {
         name: "description",
         content:
-          "Collect rent through mobile money, track every unit and handle repairs. Propatiz connects landlords, tenants and property managers.",
+          "Collect rent through mobile money, track every unit and respond to tenant complaints. Propatiz connects landlords, tenants and property managers.",
       },
       { name: "author", content: "LandVille Ventures" },
       { name: "theme-color", content: "#1f3d30" },
       { property: "og:title", content: "Propatiz | Property management for Uganda" },
       {
         property: "og:description",
-        content: "Rent collection, maintenance and records for landlords and tenants in Uganda.",
+        content:
+          "Rent collection, tenant complaints and records for landlords and tenants in Uganda.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

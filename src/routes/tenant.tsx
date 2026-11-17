@@ -17,10 +17,14 @@ export const Route = createFileRoute("/tenant")({
       { title: "Tenant app | Propatiz" },
       {
         name: "description",
-        content: "Pay rent by mobile money, report repairs and find a new home. Try the Propatiz tenant app with sample data.",
+        content:
+          "Pay rent by mobile money or Visa, send a complaint, review receipts and find a new home. Try the Propatiz tenant app with sample data.",
       },
       { property: "og:title", content: "Propatiz tenant app" },
-      { property: "og:description", content: "Pay rent, report a problem and request a viewing in three taps or fewer." },
+      {
+        property: "og:description",
+        content: "Pay rent, report a problem and request a viewing in three taps or fewer.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -29,14 +33,29 @@ export const Route = createFileRoute("/tenant")({
 });
 
 const tasks: { id: TenantTask; title: string; hint: string }[] = [
-  { id: "pay", title: "Pay your rent", hint: "Tap Pay rent, then confirm. Try a part payment or a wrong network to see the checks." },
-  { id: "report", title: "Report a problem", hint: "Choose a category, describe it and send. Add a photo if you like." },
-  { id: "home", title: "Request a viewing", hint: "In Find a home, swipe right on a place you like, then request a viewing." },
+  {
+    id: "pay",
+    title: "Pay your rent",
+    hint: "Tap Pay rent, then confirm. Try a part payment or a wrong network to see the checks.",
+  },
+  {
+    id: "report",
+    title: "Report a problem",
+    hint: "Choose a category, describe it and send. Add a photo if you like.",
+  },
+  {
+    id: "home",
+    title: "Request a viewing",
+    hint: "In Find a home, swipe right on a place you like, then request a viewing.",
+  },
 ];
 
 function TenantPage() {
   const [done, setDone] = useState<TenantTask[]>([]);
-  const onTaskDone = useCallback((t: TenantTask) => setDone((d) => (d.includes(t) ? d : [...d, t])), []);
+  const onTaskDone = useCallback(
+    (t: TenantTask) => setDone((d) => (d.includes(t) ? d : [...d, t])),
+    [],
+  );
 
   return (
     <div className="min-h-dvh bg-secondary">
@@ -51,7 +70,9 @@ function TenantPage() {
           </Reveal>
           <Reveal delay={0.1} className="mt-12">
             <span className="text-eyebrow text-primary">Tenant app</span>
-            <h1 className="text-title mt-3 max-w-sm text-primary-deep">Everything a tenant needs, within three taps.</h1>
+            <h1 className="text-title mt-3 max-w-sm text-primary-deep">
+              Everything a tenant needs, within three taps.
+            </h1>
             <p className="mt-4 max-w-sm text-muted-foreground">
               Designed for phones first. On a phone, this view fills the screen.
             </p>
@@ -65,14 +86,23 @@ function TenantPage() {
           transition={{ duration: 0.9, ease: ease.outExpo, delay: 0.25 }}
         >
           <div className="flex h-12 items-center justify-between gap-3 bg-primary-deep px-4 lg:hidden">
-            <TransitionLink to="/" className="flex min-h-11 items-center gap-1.5 text-sm font-semibold text-on-deep">
+            <TransitionLink
+              to="/"
+              className="flex min-h-11 items-center gap-1.5 text-sm font-semibold text-on-deep"
+            >
               <ArrowLeft className="size-4" aria-hidden /> Overview
             </TransitionLink>
             <div className="flex gap-1 text-xs font-semibold">
-              <TransitionLink to="/landlord" className="flex min-h-11 items-center px-2 text-on-deep-muted hover:text-on-deep">
+              <TransitionLink
+                to="/landlord"
+                className="flex min-h-11 items-center px-2 text-on-deep-muted hover:text-on-deep"
+              >
                 Landlord view
               </TransitionLink>
-              <TransitionLink to="/admin" className="flex min-h-11 items-center px-2 text-on-deep-muted hover:text-on-deep">
+              <TransitionLink
+                to="/admin"
+                className="flex min-h-11 items-center px-2 text-on-deep-muted hover:text-on-deep"
+              >
                 Admin view
               </TransitionLink>
             </div>
@@ -94,16 +124,29 @@ function TenantPage() {
               {tasks.map((t, i) => {
                 const isDone = done.includes(t.id);
                 return (
-                  <li key={t.id} className={cn("surface flex gap-4 p-4 transition-colors", isDone && "bg-success-soft")}>
+                  <li
+                    key={t.id}
+                    className={cn(
+                      "surface flex gap-4 p-4 transition-colors",
+                      isDone && "bg-success-soft",
+                    )}
+                  >
                     <span
                       className={cn(
                         "grid size-8 shrink-0 place-items-center rounded-full text-sm font-bold transition-colors",
-                        isDone ? "bg-success text-primary-foreground" : "bg-muted text-muted-foreground",
+                        isDone
+                          ? "bg-success text-primary-foreground"
+                          : "bg-muted text-muted-foreground",
                       )}
                     >
                       <AnimatePresence mode="wait" initial={false}>
                         {isDone ? (
-                          <motion.span key="c" initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 500, damping: 20 }}>
+                          <motion.span
+                            key="c"
+                            initial={{ scale: 0 }}
+                            animate={{ scale: 1 }}
+                            transition={{ type: "spring", stiffness: 500, damping: 20 }}
+                          >
                             <Check className="size-4" aria-label="Done" />
                           </motion.span>
                         ) : (

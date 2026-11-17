@@ -7,14 +7,30 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { formatUGX, normalizeUgPhone } from "@/lib/rent";
 import { ease } from "@/lib/motion";
 import type { Unit } from "@/lib/sample-data";
 
 const steps = ["Tenant details", "Unit and rent", "Review"];
 
-export type NewTenant = { name: string; phone: string; unitId: string; rent: number; startDate: string };
+export type NewTenant = {
+  name: string;
+  phone: string;
+  email: string;
+  occupants: number;
+  occupation: string;
+  sex: string;
+  unitId: string;
+  rent: number;
+  startDate: string;
+};
 
 export function AddTenantDialog({
   open,
@@ -33,10 +49,24 @@ export function AddTenantDialog({
   const [dir, setDir] = useState(1);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [occupants, setOccupants] = useState("1");
+  const [occupation, setOccupation] = useState("");
+  const [sex, setSex] = useState("");
   const [unitId, setUnitId] = useState("");
   const [rent, setRent] = useState("");
   const [startDate, setStartDate] = useState("2026-12-01");
-  const [errors, setErrors] = useState<{ name?: string | undefined; phone?: string | undefined; unit?: string | undefined; rent?: string | undefined; startDate?: string | undefined }>({});
+  const [errors, setErrors] = useState<{
+    name?: string | undefined;
+    phone?: string | undefined;
+    email?: string | undefined;
+    occupants?: string | undefined;
+    occupation?: string | undefined;
+    sex?: string | undefined;
+    unit?: string | undefined;
+    rent?: string | undefined;
+    startDate?: string | undefined;
+  }>({});
   const [state, setState] = useState<"idle" | "saving" | "done">("idle");
 
   // Reset only when the dialog opens, not when the unit list changes after saving.
@@ -48,6 +78,10 @@ export function AddTenantDialog({
       setStep(0);
       setName("");
       setPhone("");
+      setEmail("");
+      setOccupants("1");
+      setOccupation("");
+      setSex("");
       setErrors({});
       setState("idle");
       const preset = vacantUnits.find((u) => u.id === presetUnitId) ?? vacantUnits[0];
@@ -62,8 +96,13 @@ export function AddTenantDialog({
   function validate(s: number) {
     const e: typeof errors = {};
     if (s === 0) {
-      if (name.trim().split(/\s+/).length < 2) e.name = "Enter the tenant's first and last name.";
-      if (!normalizeUgPhone(phone)) e.phone = "Enter a Ugandan mobile number, for example 0772 123 456.";
+      if (!name.trim()) e.name = "Enter the tenant's name.";
+      if (!normalizeUgPhone(phone))
+        e.phone = "Enter a Ugandan mobile number, for example 0772 123 456.";
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+        e.email = "Enter a valid email address.";
+      if (!Number.isInteger(Number(occupants)) || Number(occupants) < 1)
+        e.occupants = "Enter at least one occupant.";
     }
     if (s === 1) {
       if (!unitId) e.unit = "Choose a vacant unit.";
@@ -87,14 +126,24 @@ export function AddTenantDialog({
     setState("saving");
     window.setTimeout(() => {
       setState("done");
-      onCreate({ name: name.trim(), phone: normalizeUgPhone(phone)!, unitId, rent: rentNum, startDate });
+      onCreate({
+        name: name.trim(),
+        phone: normalizeUgPhone(phone) ?? phone.trim(),
+        email: email.trim(),
+        occupants: Number(occupants),
+        occupation: occupation.trim(),
+        sex,
+        unitId,
+        rent: rentNum,
+        startDate,
+      });
     }, 900);
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg gap-0 overflow-hidden rounded-lg bg-card p-0">
-        <div className="border-b border-border p-6 pb-5">
+      <DialogContent className="w-[calc(100%-1rem)] max-h-[94dvh] max-w-lg gap-0 overflow-hidden rounded-2xl bg-background p-0">
+        <div className="border-b border-primary/10 bg-primary-soft px-4 pb-4 pt-5 sm:px-6 sm:pb-5 sm:pt-6">
           <DialogTitle className="text-xl font-bold">Add a tenant</DialogTitle>
           <DialogDescription className="mt-1 text-sm text-muted-foreground">
             {state === "done" ? "All set." : `Step ${step + 1} of ${steps.length}: ${steps[step]}`}
@@ -113,10 +162,15 @@ export function AddTenantDialog({
           </div>
         </div>
 
-        <div className="relative min-h-[19rem] overflow-hidden p-6">
+        <div className="relative min-h-[19rem] overflow-y-auto p-4 sm:p-6">
           <AnimatePresence mode="wait" custom={dir} initial={false}>
             {state === "done" ? (
-              <motion.div key="done" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center py-4 text-center">
+              <motion.div
+                key="done"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="flex flex-col items-center py-4 text-center"
+              >
                 <AnimatedCheck />
                 <h3 className="mt-5 text-lg font-bold">{name.split(" ")[0]} has been added</h3>
                 <p className="mt-1 max-w-xs text-sm text-muted-foreground">
@@ -145,14 +199,105 @@ export function AddTenantDialog({
                   <>
                     <div>
                       <Label htmlFor="t-name">Full name</Label>
-                      <Input id="t-name" className="mt-2" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Sarah Namubiru" aria-invalid={!!errors.name} aria-describedby="t-name-err" autoFocus />
+                      <Input
+                        id="t-name"
+                        className="mt-2"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder="e.g. Sarah Namubiru"
+                        aria-invalid={!!errors.name}
+                        aria-describedby="t-name-err"
+                        autoFocus
+                      />
                       <FieldError id="t-name-err" message={errors.name} />
                     </div>
                     <div>
                       <Label htmlFor="t-phone">Mobile number</Label>
-                      <Input id="t-phone" type="tel" className="figure mt-2" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0772 123 456" aria-invalid={!!errors.phone} aria-describedby="t-phone-err" />
+                      <Input
+                        id="t-phone"
+                        type="tel"
+                        className="figure mt-2"
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        placeholder="0772 123 456"
+                        aria-invalid={!!errors.phone}
+                        aria-describedby="t-phone-err"
+                      />
                       <FieldError id="t-phone-err" message={errors.phone} />
-                      <p className="mt-2 text-xs text-muted-foreground">Used for rent reminders and mobile money payments.</p>
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        Used for rent reminders and mobile money payments.
+                      </p>
+                    </div>
+                    <div>
+                      <Label htmlFor="t-email">
+                        Email address{" "}
+                        <span className="font-normal text-muted-foreground">(optional)</span>
+                      </Label>
+                      <Input
+                        id="t-email"
+                        type="email"
+                        autoComplete="email"
+                        className="mt-2"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="tenant@example.com"
+                        aria-invalid={!!errors.email}
+                        aria-describedby="t-email-err"
+                      />
+                      <FieldError id="t-email-err" message={errors.email} />
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <Label htmlFor="t-occupants">Number of occupants</Label>
+                        <Input
+                          id="t-occupants"
+                          type="number"
+                          min="1"
+                          step="1"
+                          className="mt-2"
+                          value={occupants}
+                          onChange={(e) => setOccupants(e.target.value)}
+                          aria-invalid={!!errors.occupants}
+                          aria-describedby="t-occupants-err"
+                        />
+                        <FieldError id="t-occupants-err" message={errors.occupants} />
+                      </div>
+                      <div>
+                        <Label htmlFor="t-sex">
+                          Sex <span className="font-normal text-muted-foreground">(optional)</span>
+                        </Label>
+                        <Select value={sex} onValueChange={(value) => setSex(value)}>
+                          <SelectTrigger
+                            id="t-sex"
+                            className="mt-2 h-12 bg-card"
+                            aria-invalid={!!errors.sex}
+                          >
+                            <SelectValue placeholder="Choose" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Female">Female</SelectItem>
+                            <SelectItem value="Male">Male</SelectItem>
+                            <SelectItem value="Prefer not to say">Prefer not to say</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FieldError id="t-sex-err" message={errors.sex} />
+                      </div>
+                    </div>
+                    <div>
+                      <Label htmlFor="t-occupation">
+                        Occupation{" "}
+                        <span className="font-normal text-muted-foreground">(optional)</span>
+                      </Label>
+                      <Input
+                        id="t-occupation"
+                        className="mt-2"
+                        value={occupation}
+                        onChange={(e) => setOccupation(e.target.value)}
+                        placeholder="e.g. Accountant"
+                        aria-invalid={!!errors.occupation}
+                        aria-describedby="t-occupation-err"
+                      />
+                      <FieldError id="t-occupation-err" message={errors.occupation} />
                     </div>
                   </>
                 )}
@@ -161,7 +306,9 @@ export function AddTenantDialog({
                     <div>
                       <Label htmlFor="t-unit">Unit</Label>
                       {vacantUnits.length === 0 ? (
-                        <p className="mt-2 rounded-sm bg-muted p-3 text-sm text-muted-foreground">There are no vacant units right now.</p>
+                        <p className="mt-2 rounded-sm bg-muted p-3 text-sm text-muted-foreground">
+                          There are no vacant units right now.
+                        </p>
                       ) : (
                         <Select
                           value={unitId}
@@ -171,7 +318,11 @@ export function AddTenantDialog({
                             if (u) setRent(u.rent.toLocaleString("en-UG"));
                           }}
                         >
-                          <SelectTrigger id="t-unit" className="mt-2 h-12 bg-card" aria-invalid={!!errors.unit}>
+                          <SelectTrigger
+                            id="t-unit"
+                            className="mt-2 h-12 bg-card"
+                            aria-invalid={!!errors.unit}
+                          >
                             <SelectValue placeholder="Choose a unit" />
                           </SelectTrigger>
                           <SelectContent>
@@ -185,7 +336,7 @@ export function AddTenantDialog({
                       )}
                       <FieldError id="t-unit-err" message={errors.unit} />
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-4 sm:grid-cols-2">
                       <div>
                         <Label htmlFor="t-rent">Monthly rent (UGX)</Label>
                         <Input
@@ -204,7 +355,14 @@ export function AddTenantDialog({
                       </div>
                       <div>
                         <Label htmlFor="t-start">Lease starts</Label>
-                        <Input id="t-start" type="date" className="mt-2" value={startDate} onChange={(e) => setStartDate(e.target.value)} aria-invalid={!!errors.startDate} />
+                        <Input
+                          id="t-start"
+                          type="date"
+                          className="mt-2"
+                          value={startDate}
+                          onChange={(e) => setStartDate(e.target.value)}
+                          aria-invalid={!!errors.startDate}
+                        />
                         <FieldError id="t-start-err" message={errors.startDate} />
                       </div>
                     </div>
@@ -215,9 +373,20 @@ export function AddTenantDialog({
                     {[
                       ["Tenant", name],
                       ["Mobile", normalizeUgPhone(phone) ?? phone],
+                      ["Email", email || "Not provided"],
+                      ["Occupants", String(occupants)],
+                      ["Occupation", occupation],
+                      ["Sex", sex],
                       ["Unit", unit ? `${unit.unit}, ${unit.property}` : "-"],
                       ["Monthly rent", formatUGX(rentNum)],
-                      ["Lease starts", new Date(startDate).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })],
+                      [
+                        "Lease starts",
+                        new Date(startDate).toLocaleDateString("en-GB", {
+                          day: "numeric",
+                          month: "long",
+                          year: "numeric",
+                        }),
+                      ],
                     ].map(([k, v]) => (
                       <div key={k} className="flex justify-between gap-4 px-4 py-3">
                         <dt className="text-muted-foreground">{k}</dt>
@@ -232,17 +401,33 @@ export function AddTenantDialog({
         </div>
 
         {state !== "done" && (
-          <div className="flex items-center justify-between gap-3 border-t border-border bg-background p-4">
-            <Button variant="ghost" onClick={back} disabled={step === 0 || state === "saving"} className={step === 0 ? "invisible" : ""}>
+          <div className="flex items-center justify-between gap-3 border-t border-border bg-background p-3 sm:p-4">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={back}
+              disabled={step === 0 || state === "saving"}
+              className={step === 0 ? "invisible" : ""}
+            >
               <ArrowLeft /> Back
             </Button>
             {step < 2 ? (
-              <Button onClick={next} disabled={step === 1 && vacantUnits.length === 0}>
+              <Button
+                type="button"
+                onClick={next}
+                disabled={step === 1 && vacantUnits.length === 0}
+              >
                 Continue
               </Button>
             ) : (
-              <Button onClick={submit} disabled={state === "saving"}>
-                {state === "saving" ? (<><Loader2 className="animate-spin" /> Adding tenant</>) : "Add tenant"}
+              <Button type="button" onClick={submit} disabled={state === "saving"}>
+                {state === "saving" ? (
+                  <>
+                    <Loader2 className="animate-spin" /> Adding tenant
+                  </>
+                ) : (
+                  "Add tenant"
+                )}
               </Button>
             )}
           </div>
