@@ -10,6 +10,7 @@ export type RentCollectionSummary = {
   futureAdvanceReceived: number;
   balanceRemaining: number;
   advanceTenants: number;
+  expectedTenants: number;
   overdueTenants: number;
 };
 
@@ -167,6 +168,9 @@ export function summarizeRentPeriod(
     futureAdvanceReceived,
     balanceRemaining,
     advanceTenants: occupied.filter((unit) => isUnitPrepaidForPeriod(unit, ledger, period)).length,
+    expectedTenants:
+      occupied.length -
+      occupied.filter((unit) => isUnitPrepaidForPeriod(unit, ledger, period)).length,
     overdueTenants: occupied.filter((unit) => getUnitRentStatus(unit, ledger, period) === "Overdue")
       .length,
   };

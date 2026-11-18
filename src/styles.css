@@ -77,66 +77,68 @@
 
   --shadow-soft: 0 1px 2px oklch(0.3 0.03 70 / 0.06), 0 8px 24px -12px oklch(0.3 0.03 70 / 0.18);
   --shadow-lift: 0 2px 4px oklch(0.3 0.03 70 / 0.06), 0 24px 48px -20px oklch(0.25 0.05 160 / 0.35);
-  --shadow-device: 0 40px 80px -30px oklch(0.22 0.05 160 / 0.45), 0 0 0 1px oklch(0.24 0.012 70 / 0.08);
+  --shadow-device:
+    0 40px 80px -30px oklch(0.22 0.05 160 / 0.45), 0 0 0 1px oklch(0.24 0.012 70 / 0.08);
 }
 
 :root {
   --radius: 1rem;
 
-  --background: oklch(0.972 0.012 84);
-  --foreground: oklch(0.235 0.012 70);
-  --card: oklch(0.993 0.005 84);
-  --card-foreground: oklch(0.235 0.012 70);
-  --popover: oklch(0.993 0.005 84);
-  --popover-foreground: oklch(0.235 0.012 70);
+  /* Sampled from the supplied Propatiz logo: navy, teal, gold and warm cream. */
+  --background: oklch(0.975 0.012 88);
+  --foreground: oklch(0.27 0.035 220);
+  --card: oklch(0.995 0.006 88);
+  --card-foreground: oklch(0.27 0.035 220);
+  --popover: oklch(0.995 0.006 88);
+  --popover-foreground: oklch(0.27 0.035 220);
 
-  --primary: oklch(0.42 0.085 158);
-  --primary-foreground: oklch(0.985 0.008 84);
-  --primary-deep: oklch(0.28 0.055 160);
-  --primary-soft: oklch(0.93 0.035 155);
+  --primary: oklch(0.54 0.105 210);
+  --primary-foreground: oklch(0.985 0.008 88);
+  --primary-deep: oklch(0.277 0.045 226);
+  --primary-soft: oklch(0.93 0.035 205);
 
-  --secondary: oklch(0.935 0.02 82);
-  --secondary-foreground: oklch(0.235 0.012 70);
-  --muted: oklch(0.945 0.015 82);
-  --muted-foreground: oklch(0.47 0.015 70);
+  --secondary: oklch(0.94 0.022 88);
+  --secondary-foreground: oklch(0.27 0.035 220);
+  --muted: oklch(0.95 0.016 88);
+  --muted-foreground: oklch(0.48 0.025 220);
 
-  --accent: oklch(0.8 0.145 72);
-  --accent-foreground: oklch(0.235 0.03 60);
-  --accent-soft: oklch(0.94 0.05 80);
+  --accent: oklch(0.75 0.17 65);
+  --accent-foreground: oklch(0.277 0.045 226);
+  --accent-soft: oklch(0.94 0.06 82);
 
-  --success: oklch(0.55 0.13 152);
-  --success-soft: oklch(0.93 0.05 152);
-  --success-ink: oklch(0.38 0.09 152);
-  --warning: oklch(0.74 0.15 68);
-  --warning-soft: oklch(0.95 0.055 80);
-  --warning-ink: oklch(0.46 0.11 55);
+  --success: oklch(0.54 0.105 210);
+  --success-soft: oklch(0.93 0.04 200);
+  --success-ink: oklch(0.4 0.08 215);
+  --warning: oklch(0.75 0.17 65);
+  --warning-soft: oklch(0.95 0.055 82);
+  --warning-ink: oklch(0.45 0.1 58);
   --destructive: oklch(0.56 0.19 27);
-  --destructive-foreground: oklch(0.985 0.008 84);
+  --destructive-foreground: oklch(0.985 0.008 88);
   --destructive-soft: oklch(0.94 0.04 25);
   --destructive-ink: oklch(0.45 0.16 27);
 
-  --on-deep: oklch(0.97 0.015 84);
-  --on-deep-muted: oklch(0.82 0.03 120);
-  --overlay: oklch(0.2 0.03 160 / 0.55);
+  --on-deep: oklch(0.97 0.015 88);
+  --on-deep-muted: oklch(0.82 0.045 205);
+  --overlay: oklch(0.2 0.04 226 / 0.6);
 
-  --border: oklch(0.895 0.016 82);
-  --input: oklch(0.87 0.018 82);
-  --ring: oklch(0.42 0.085 158);
+  --border: oklch(0.895 0.02 88);
+  --input: oklch(0.87 0.022 88);
+  --ring: oklch(0.54 0.105 210);
 
-  --chart-1: oklch(0.42 0.085 158);
-  --chart-2: oklch(0.8 0.145 72);
+  --chart-1: oklch(0.54 0.105 210);
+  --chart-2: oklch(0.75 0.17 65);
   --chart-3: oklch(0.56 0.19 27);
-  --chart-4: oklch(0.66 0.07 158);
-  --chart-5: oklch(0.86 0.03 82);
+  --chart-4: oklch(0.66 0.08 195);
+  --chart-5: oklch(0.87 0.045 88);
 
-  --sidebar: oklch(0.28 0.055 160);
-  --sidebar-foreground: oklch(0.97 0.015 84);
-  --sidebar-primary: oklch(0.8 0.145 72);
-  --sidebar-primary-foreground: oklch(0.235 0.03 60);
-  --sidebar-accent: oklch(0.34 0.06 160);
-  --sidebar-accent-foreground: oklch(0.97 0.015 84);
-  --sidebar-border: oklch(0.36 0.05 160);
-  --sidebar-ring: oklch(0.8 0.145 72);
+  --sidebar: oklch(0.277 0.045 226);
+  --sidebar-foreground: oklch(0.97 0.015 88);
+  --sidebar-primary: oklch(0.75 0.17 65);
+  --sidebar-primary-foreground: oklch(0.277 0.045 226);
+  --sidebar-accent: oklch(0.35 0.055 220);
+  --sidebar-accent-foreground: oklch(0.97 0.015 88);
+  --sidebar-border: oklch(0.39 0.05 220);
+  --sidebar-ring: oklch(0.75 0.17 65);
 }
 
 @layer base {
@@ -231,8 +233,8 @@
   background-color: var(--primary-deep);
   color: var(--on-deep);
   background-image:
-    radial-gradient(120% 80% at 100% 0%, oklch(0.34 0.07 158 / 0.9), transparent 60%),
-    radial-gradient(90% 60% at 0% 100%, oklch(0.24 0.05 160), transparent 70%);
+    radial-gradient(120% 80% at 100% 0%, oklch(0.4 0.08 210 / 0.5), transparent 60%),
+    radial-gradient(90% 60% at 0% 100%, oklch(0.23 0.045 226), transparent 70%);
 }
 
 /* Skeleton shimmer */
@@ -245,12 +247,7 @@
     position: absolute;
     inset: 0;
     transform: translateX(-100%);
-    background: linear-gradient(
-      90deg,
-      transparent,
-      oklch(0.99 0.005 84 / 0.7),
-      transparent
-    );
+    background: linear-gradient(90deg, transparent, oklch(0.99 0.005 84 / 0.7), transparent);
     animation: shimmer 1.4s var(--ease-in-out-quart) infinite;
   }
 }

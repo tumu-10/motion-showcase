@@ -1,11 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import {
   Building2,
-  CalendarDays,
-  FileBarChart2,
-  LayoutDashboard,
-  MessageSquare,
-  Receipt,
+  CalendarRange,
+  ChartNoAxesCombined,
+  LayoutGrid,
+  MessageSquareText,
+  WalletCards,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -92,12 +92,12 @@ function LandlordPage() {
   const openComplaints = requests.filter((r) => r.stage !== "resolved").length;
 
   const nav: NavItem<View>[] = [
-    { id: "overview", label: "Overview", icon: LayoutDashboard },
+    { id: "overview", label: "Overview", icon: LayoutGrid },
     { id: "units", label: "Units", icon: Building2, badge: overdueCount },
-    { id: "complaints", label: "Complaints", icon: MessageSquare, badge: openComplaints },
-    { id: "payments", label: "Payments", icon: Receipt },
-    { id: "calendar", label: "Calendar", icon: CalendarDays },
-    { id: "reports", label: "Reports", icon: FileBarChart2 },
+    { id: "complaints", label: "Repairs", icon: MessageSquareText, badge: openComplaints },
+    { id: "payments", label: "Payments", icon: WalletCards },
+    { id: "calendar", label: "Calendar", icon: CalendarRange },
+    { id: "reports", label: "Reports", icon: ChartNoAxesCombined },
   ];
 
   const remind = (id: string) => {
@@ -252,6 +252,7 @@ function LandlordPage() {
       {view === "overview" && (
         <Overview
           units={units}
+          ledger={ledger}
           requests={requests}
           reminded={reminded}
           onRemind={remind}

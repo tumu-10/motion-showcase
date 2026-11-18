@@ -1,17 +1,34 @@
-import { ArrowRight, Bell, Check, UserPlus } from "lucide-react";
+import {
+  ArrowRight,
+  BellRing,
+  CalendarClock,
+  ChartNoAxesCombined,
+  Check,
+  UserPlus,
+  UsersRound,
+  WalletCards,
+} from "lucide-react";
 import { motion } from "motion/react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { CountUp } from "@/components/shared/CountUp";
 import { PageHeading } from "@/components/shared/DashShell";
 import { Pill, SampleTag } from "@/components/shared/StatusPill";
 import { Button } from "@/components/ui/button";
-import { formatCompactUGX, formatUGX, getRentStatus } from "@/lib/rent";
+import { formatCompactUGX, formatUGX } from "@/lib/rent";
 import { ease } from "@/lib/motion";
-import { monthlyCollection, stageLabel, type Complaint, type Unit } from "@/lib/sample-data";
+import { currentRentPeriod, getUnitRentStatus, summarizeRentPeriod } from "@/lib/rent-accounting";
+import {
+  monthlyCollection,
+  stageLabel,
+  type Complaint,
+  type LedgerEntry,
+  type Unit,
+} from "@/lib/sample-data";
 import { cn } from "@/lib/utils";
 
 export function Overview({
   units,
+  ledger,
   requests,
   reminded,
   onRemind,
@@ -21,6 +38,7 @@ export function Overview({
   onOpenUnit,
 }: {
   units: Unit[];
+  ledger: LedgerEntry[];
   requests: Complaint[];
   reminded: string[];
   onRemind: (id: string) => void;
@@ -29,14 +47,22 @@ export function Overview({
   onOpenComplaints: () => void;
   onOpenUnit: (u: Unit) => void;
 }) {
+  const period = currentRentPeriod();
+  const summary = summarizeRentPeriod(units, ledger, period);
   const occupied = units.filter((u) => u.tenant);
-  const expected = units.reduce((s, u) => s + u.rent, 0);
-  const collected = occupied.filter((u) => u.paid).reduce((s, u) => s + u.rent, 0);
+  const expected = summary.grossExpected;
+  const collected = summary.collectedForPeriod;
+  const statusFor = (unit: Unit) => getUnitRentStatus(unit, ledger, period);
   const groups = {
-    paid: occupied.filter((u) => getRentStatus(u.daysUntilDue, u.paid) === "paid"),
-    "due-soon": occupied.filter((u) => getRentStatus(u.daysUntilDue, u.paid) === "due-soon"),
-    upcoming: occupied.filter((u) => getRentStatus(u.daysUntilDue, u.paid) === "upcoming"),
-    overdue: occupied.filter((u) => getRentStatus(u.daysUntilDue, u.paid) === "overdue"),
+    paid: occupied.filter((u) => statusFor(u) === "Paid"),
+    advance: occupied.filter((u) => statusFor(u) === "Advance"),
+    "due-soon": occupied.filter(
+      (u) => ["Due", "Partially paid"].includes(statusFor(u)) && u.daysUntilDue <= 5,
+    ),
+    upcoming: occupied.filter(
+      (u) => ["Due", "Partially paid"].includes(statusFor(u)) && u.daysUntilDue > 5,
+    ),
+    overdue: occupied.filter((u) => statusFor(u) === "Overdue"),
   };
   const sum = (list: Unit[]) => list.reduce((s, u) => s + u.rent, 0);
   const segments = [
@@ -46,6 +72,13 @@ export function Overview({
       cls: "bg-success",
       value: sum(groups.paid),
       count: groups.paid.length,
+    },
+    {
+      key: "advance",
+      label: "Advance",
+      cls: "bg-primary",
+      value: sum(groups.advance),
+      count: groups.advance.length,
     },
     {
       key: "due-soon",
@@ -88,6 +121,29 @@ export function Overview({
         </Button>
       </PageHeading>
 
+      <section className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Rent position">
+        <OverviewMetric
+          icon={WalletCards}
+          label="Cash received this month"
+          value={formatUGX(summary.collectedThisMonth)}
+        />
+        <OverviewMetric
+          icon={ChartNoAxesCombined}
+          label="Expected after advances"
+          value={formatUGX(summary.expectedAfterAdvances)}
+        />
+        <OverviewMetric
+          icon={UsersRound}
+          label="Tenants expected to pay"
+          value={`${summary.expectedTenants} of ${occupied.length}`}
+        />
+        <OverviewMetric
+          icon={CalendarClock}
+          label="Rent covered by advances"
+          value={formatUGX(summary.advanceCovered)}
+        />
+      </section>
+
       <section className="grid gap-6 xl:grid-cols-[1.25fr_1fr]">
         <div className="surface p-6 sm:p-8">
           <p className="text-sm font-semibold text-muted-foreground">Collected in November</p>
@@ -95,7 +151,7 @@ export function Overview({
             <p className="figure text-4xl font-bold tracking-tight text-primary-deep sm:text-5xl">
               <CountUp value={collected} format={(n) => formatUGX(n)} />
             </p>
-            <p className="figure text-muted-foreground">of {formatUGX(expected)}</p>
+            <p className="figure text-muted-foreground">of {formatUGX(expected)} gross expected</p>
           </div>
 
           <div
@@ -117,10 +173,10 @@ export function Overview({
               ) : null,
             )}
           </div>
-          <dl className="mt-6 grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-4">
+          <dl className="mt-6 grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3">
             {segments.map((s) => (
               <div key={s.key}>
-                <dt className="flex items-center gap-2 text-sm text-muted-foreground">
+                <dt className="flex items-center gap-2 whitespace-nowrap text-sm text-muted-foreground">
                   <span className={cn("size-2.5 rounded-full", s.cls)} aria-hidden />
                   {s.label}
                 </dt>
@@ -253,7 +309,7 @@ export function Overview({
                         </>
                       ) : (
                         <>
-                          <Bell /> Remind
+                          <BellRing /> Remind
                         </>
                       )}
                     </Button>
@@ -314,5 +370,27 @@ export function Overview({
         </p>
       </section>
     </>
+  );
+}
+
+function OverviewMetric({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: typeof WalletCards;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="surface flex items-center gap-3 p-4">
+      <span className="grid size-11 shrink-0 place-items-center rounded-full bg-primary-soft text-primary-deep">
+        <Icon className="size-5" strokeWidth={1.8} aria-hidden />
+      </span>
+      <div className="min-w-0">
+        <p className="text-xs font-medium text-muted-foreground">{label}</p>
+        <p className="figure mt-0.5 truncate text-lg font-bold text-primary-deep">{value}</p>
+      </div>
+    </div>
   );
 }

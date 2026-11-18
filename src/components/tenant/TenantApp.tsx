@@ -1,15 +1,18 @@
 import { useQuery } from "@tanstack/react-query";
 import { format, getDaysInMonth, parse } from "date-fns";
 import {
-  Bell,
+  ArrowLeft,
+  BellRing,
   CalendarDays,
+  CalendarRange,
   ChevronRight,
   FileText,
-  Home as HomeIcon,
   House,
   MessageSquare,
+  MessageSquareText,
   Receipt,
   Search,
+  WalletCards,
   type LucideIcon,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
@@ -57,13 +60,13 @@ import { cn } from "@/lib/utils";
 export type TenantTask = "pay" | "report" | "home";
 type Tab = "home" | "payments" | "complaints" | "homes" | "calendar" | "notifications";
 
+const tabOrder: Tab[] = ["home", "payments", "complaints", "homes", "calendar", "notifications"];
 const tabs: { id: Tab; label: string; icon: LucideIcon }[] = [
-  { id: "home", label: "Home", icon: HomeIcon },
-  { id: "payments", label: "Payments", icon: Receipt },
-  { id: "complaints", label: "Complaints", icon: MessageSquare },
+  { id: "home", label: "Home", icon: House },
+  { id: "payments", label: "Payments", icon: WalletCards },
+  { id: "complaints", label: "Repairs", icon: MessageSquareText },
   { id: "homes", label: "Homes", icon: Search },
-  { id: "calendar", label: "Calendar", icon: CalendarDays },
-  { id: "notifications", label: "Alerts", icon: Bell },
+  { id: "calendar", label: "Calendar", icon: CalendarRange },
 ];
 
 // Simulates the first network request so the loading state is visible.
@@ -149,7 +152,7 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
   }, []);
 
   const go = (next: Tab) => {
-    setDir(tabs.findIndex((t) => t.id === next) > tabs.findIndex((t) => t.id === tab) ? 1 : -1);
+    setDir(tabOrder.indexOf(next) > tabOrder.indexOf(tab) ? 1 : -1);
     setTab(next);
   };
 
@@ -281,6 +284,7 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
             {tab === "notifications" && (
               <NotificationsTab
                 notifications={notifications}
+                onBack={() => go("home")}
                 onRead={(id) =>
                   setRentData((current) => ({
                     ...current,
@@ -312,7 +316,7 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
       </div>
 
       <nav
-        className="relative z-20 grid grid-cols-6 border-t border-border bg-card px-1 pb-[max(env(safe-area-inset-bottom),0.5rem)] pt-1.5"
+        className="relative z-20 grid grid-cols-5 border-t border-border bg-card px-1 pb-[max(env(safe-area-inset-bottom),0.5rem)] pt-1.5"
         aria-label="Tenant app"
       >
         {tabs.map((t) => {
@@ -323,21 +327,11 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
               key={t.id}
               onClick={() => go(t.id)}
               aria-current={active ? "page" : undefined}
-              aria-label={
-                t.id === "notifications" && unreadNotifications > 0
-                  ? `${t.label}, ${unreadNotifications} unread`
-                  : undefined
-              }
               className={cn(
                 "relative flex min-h-14 flex-col items-center justify-center gap-1 rounded-lg text-[0.625rem] font-semibold transition-colors",
                 active ? "text-primary-deep" : "text-muted-foreground hover:text-foreground",
               )}
             >
-              {t.id === "notifications" && unreadNotifications > 0 && (
-                <span className="absolute right-2 top-1 grid min-h-4 min-w-4 place-items-center rounded-full bg-destructive px-1 text-[0.625rem] font-bold leading-none text-destructive-foreground">
-                  {unreadNotifications > 99 ? "99+" : unreadNotifications}
-                </span>
-              )}
               {active && (
                 <motion.span
                   layoutId="tenant-tab"
@@ -345,7 +339,7 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
                   transition={{ type: "spring", stiffness: 420, damping: 34 }}
                 />
               )}
-              <Icon className="relative mt-1 size-5" aria-hidden />
+              <Icon className="relative mt-1 size-5" strokeWidth={1.8} aria-hidden />
               <span className="relative">{t.label}</span>
             </button>
           );
@@ -440,7 +434,7 @@ function HomeTab({
             notificationCount ? `Notifications, ${notificationCount} unread` : "Notifications"
           }
         >
-          <Bell className="size-5" />
+          <BellRing className="size-5" strokeWidth={1.8} />
           {notificationCount > 0 && (
             <span className="absolute -right-1 -top-1 grid size-5 place-items-center rounded-full bg-destructive text-[0.625rem] font-bold text-destructive-foreground">
               {notificationCount > 9 ? "9+" : notificationCount}
@@ -572,10 +566,12 @@ function HomeTab({
 
 function NotificationsTab({
   notifications,
+  onBack,
   onRead,
   onMarkAllRead,
 }: {
   notifications: TenantNotification[];
+  onBack: () => void;
   onRead: (id: string) => void;
   onMarkAllRead: () => void;
 }) {
@@ -584,11 +580,16 @@ function NotificationsTab({
   return (
     <div className="space-y-4 px-4 pb-8 pt-5 sm:px-5 sm:pt-6">
       <header className="flex items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">Notifications</h1>
-          <p className="text-sm text-muted-foreground">
-            Rent, payment, advance and landlord updates.
-          </p>
+        <div className="flex min-w-0 items-center gap-3">
+          <Button variant="outline" size="iconSm" onClick={onBack} aria-label="Back to home">
+            <ArrowLeft />
+          </Button>
+          <div>
+            <h1 className="text-2xl font-bold">Notifications</h1>
+            <p className="text-sm text-muted-foreground">
+              Rent, payment, advance and landlord updates.
+            </p>
+          </div>
         </div>
         <Button
           variant="ghost"
@@ -603,7 +604,7 @@ function NotificationsTab({
 
       {notifications.length === 0 ? (
         <div className="surface px-5 py-10 text-center">
-          <Bell className="mx-auto size-8 text-muted-foreground" aria-hidden />
+          <BellRing className="mx-auto size-8 text-muted-foreground" aria-hidden />
           <p className="mt-3 font-semibold">You’re all caught up</p>
           <p className="mt-1 text-sm text-muted-foreground">
             New rent and landlord updates will appear here.
@@ -619,7 +620,7 @@ function NotificationsTab({
                   ? CalendarDays
                   : notification.kind === "update"
                     ? MessageSquare
-                    : Bell;
+                    : BellRing;
             const date = new Date(notification.createdAt);
             const dateLabel = Number.isNaN(date.getTime())
               ? "Recently"

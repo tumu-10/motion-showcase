@@ -63,6 +63,7 @@ describe("rent period accounting", () => {
     expect(summary.advanceCovered).toBe(1_000_000);
     expect(summary.expectedAfterAdvances).toBe(0);
     expect(summary.advanceTenants).toBe(1);
+    expect(summary.expectedTenants).toBe(0);
     expect(summary.futureAdvanceReceived).toBe(1_000_000);
     expect(getUnitAdvanceMonths(unit, [advance], "2026-11")).toBe(1);
     expect(getNextUncoveredRentPeriod(unit, [advance], "2026-11")).toBe("2027-01");

@@ -1,9 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import {
-  Activity,
   Ban,
   BadgeCheck,
-  Building,
+  Building2,
+  ClipboardCheck,
+  Download,
+  LayoutGrid,
   Link2,
   Loader2,
   ShieldCheck,
@@ -11,7 +13,7 @@ import {
   Users,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { CountUp } from "@/components/shared/CountUp";
 import { CreateLandlordDialog } from "@/components/admin/CreateLandlordDialog";
@@ -35,17 +37,26 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { downloadCsv } from "@/lib/documents";
 import { formatUGX } from "@/lib/rent";
-import { currentRentPeriod, summarizeRentPeriod } from "@/lib/rent-accounting";
+import {
+  currentRentPeriod,
+  formatRentPeriodRange,
+  getNextUncoveredRentPeriod,
+  localDateIso,
+  summarizeRentPeriod,
+} from "@/lib/rent-accounting";
 import { useRentDemoData } from "@/lib/useRentDemoData";
 import { ease } from "@/lib/motion";
 import {
   landlords as initialLandlords,
   PROPERTY_TYPE_LABELS,
   SUBSCRIPTION_RATE_PER_TENANT_MONTH,
-  units,
   unmatchedTransactions,
   type Landlord,
+  type LedgerEntry,
+  type TenantNotification,
+  type Unit,
   type PropertyType,
   type SubscriptionPlan,
   type UnmatchedTxn,
@@ -74,7 +85,7 @@ export const Route = createFileRoute("/admin")({
   component: AdminPage,
 });
 
-type View = "overview" | "payments" | "landlords";
+type View = "overview" | "operations" | "payments" | "landlords";
 
 const verificationTone: Record<Landlord["verification"], Tone> = {
   Verified: "success",
@@ -89,7 +100,7 @@ const subscriptionMonths: Record<SubscriptionPlan, number> = {
 
 function AdminPage() {
   const [view, setView] = useState<View>("overview");
-  const { data: rentData } = useRentDemoData();
+  const { data: rentData, setData: setRentData } = useRentDemoData();
   const [landlords, setLandlords] = useState(initialLandlords);
   const [txns, setTxns] = useState(unmatchedTransactions);
   const [matching, setMatching] = useState<UnmatchedTxn | null>(null);
@@ -102,10 +113,20 @@ function AdminPage() {
   const pending = landlords.filter((l) => l.verification === "Pending review").length;
   const rentSummary = summarizeRentPeriod(rentData.units, rentData.ledger, currentRentPeriod());
   const nav: NavItem<View>[] = [
-    { id: "overview", label: "Overview", icon: Activity },
+    { id: "overview", label: "Overview", icon: LayoutGrid },
+    { id: "operations", label: "Payment operations", icon: ClipboardCheck },
     { id: "payments", label: "Match payments", icon: Link2, badge: txns.length },
-    { id: "landlords", label: "Landlords", icon: Building, badge: pending },
+    { id: "landlords", label: "Landlords", icon: Building2, badge: pending },
   ];
+
+  useEffect(() => {
+    setTxns((current) =>
+      current.filter(
+        (transaction) =>
+          !rentData.ledger.some((entry) => entry.reference === transaction.reference),
+      ),
+    );
+  }, [rentData.ledger]);
 
   const applyVerification = (l: Landlord, action: "approve" | "suspend") => {
     setLandlords((list) =>
@@ -174,6 +195,9 @@ function AdminPage() {
           onOpen={setView}
         />
       )}
+      {view === "operations" && (
+        <PaymentOperations units={rentData.units} ledger={rentData.ledger} />
+      )}
       {view === "payments" && <UnmatchedPayments txns={txns} onMatch={setMatching} />}
       {view === "landlords" && (
         <LandlordList
@@ -202,12 +226,54 @@ function AdminPage() {
 
       <MatchDialog
         txn={matching}
+        units={rentData.units}
         onClose={() => setMatching(null)}
-        onMatched={(t, unitLabel) => {
-          setTxns((list) => list.filter((x) => x.id !== t.id));
+        onMatched={(transaction, unit) => {
+          const now = new Date();
+          const period = currentRentPeriod(now);
+          const monthsCovered =
+            unit.rent > 0 &&
+            transaction.amount >= unit.rent * 2 &&
+            transaction.amount % unit.rent === 0
+              ? transaction.amount / unit.rent
+              : 1;
+          const rentPeriod = getNextUncoveredRentPeriod(unit, rentData.ledger, period);
+          const entry: LedgerEntry = {
+            id: `matched-${transaction.id}`,
+            date: new Intl.DateTimeFormat("en-UG", { day: "numeric", month: "short" }).format(now),
+            receivedAt: localDateIso(now),
+            tenant: unit.tenant ?? transaction.sender,
+            unitId: unit.id,
+            unit: unit.unit,
+            amount: transaction.amount,
+            method: transaction.network,
+            reference: transaction.reference,
+            status: "Confirmed",
+            rentPeriod,
+            monthsCovered,
+            coverageAmounts:
+              monthsCovered > 1
+                ? Array.from({ length: monthsCovered }, () => unit.rent)
+                : undefined,
+          };
+          const notification: TenantNotification = {
+            id: `payment-${entry.id}`,
+            unit: unit.unit,
+            kind: monthsCovered > 1 ? "advance" : "payment",
+            title: monthsCovered > 1 ? "Advance rent payment matched" : "Rent payment matched",
+            message: `${formatUGX(entry.amount)} was matched to ${unit.property}, ${unit.unit} for ${formatRentPeriodRange(rentPeriod, monthsCovered)}.`,
+            createdAt: now.toISOString(),
+            read: false,
+          };
+          setRentData((current) => ({
+            ...current,
+            ledger: [entry, ...current.ledger.filter((item) => item.reference !== entry.reference)],
+            notifications: [notification, ...current.notifications],
+          }));
+          setTxns((list) => list.filter((x) => x.id !== transaction.id));
           setMatching(null);
           toast.success("Payment matched", {
-            description: `${formatUGX(t.amount)} recorded against ${unitLabel}.`,
+            description: `${formatUGX(transaction.amount)} recorded against ${unit.unit}, ${unit.property}.`,
           });
         }}
       />
@@ -392,6 +458,17 @@ function AdminOverview({
             </li>
             <li>
               <button
+                onClick={() => onOpen("operations")}
+                className="press flex min-h-16 w-full items-center gap-3 rounded-lg bg-secondary px-4 text-left"
+              >
+                <ClipboardCheck className="size-5 text-primary-deep" aria-hidden />
+                <span className="flex-1 font-semibold text-primary-deep">
+                  Review collections, advances and payment exceptions
+                </span>
+              </button>
+            </li>
+            <li>
+              <button
                 onClick={() => onOpen("landlords")}
                 className="press flex min-h-16 w-full items-center gap-3 rounded-lg bg-primary-soft px-4 text-left"
               >
@@ -406,6 +483,200 @@ function AdminOverview({
         </div>
       </section>
     </>
+  );
+}
+
+type OperationsFilter = "all" | "attention" | "advance";
+
+function PaymentOperations({ units, ledger }: { units: Unit[]; ledger: LedgerEntry[] }) {
+  const [filter, setFilter] = useState<OperationsFilter>("all");
+  const [query, setQuery] = useState("");
+  const period = currentRentPeriod();
+  const summary = summarizeRentPeriod(units, ledger, period);
+  const visible = ledger.filter((entry) => {
+    const unit = units.find((item) => item.id === entry.unitId);
+    const matchesFilter =
+      filter === "all" ||
+      (filter === "attention" && entry.status !== "Confirmed") ||
+      (filter === "advance" && entry.monthsCovered > 1);
+    const matchesQuery = [entry.tenant, entry.unit, entry.reference, unit?.property ?? ""].some(
+      (value) => value.toLowerCase().includes(query.trim().toLowerCase()),
+    );
+    return matchesFilter && matchesQuery;
+  });
+  const pending = ledger.filter((entry) => entry.status === "Pending").length;
+  const failed = ledger.filter((entry) => entry.status === "Failed").length;
+
+  function exportOperations() {
+    downloadCsv("propatiz-payment-operations.csv", [
+      [
+        "Received",
+        "Tenant",
+        "Property",
+        "Unit",
+        "Coverage",
+        "Months",
+        "Amount (UGX)",
+        "Method",
+        "Reference",
+        "Status",
+      ],
+      ...visible.map((entry) => [
+        entry.receivedAt,
+        entry.tenant,
+        units.find((unit) => unit.id === entry.unitId)?.property ?? "",
+        entry.unit,
+        formatRentPeriodRange(entry.rentPeriod, entry.monthsCovered),
+        entry.monthsCovered,
+        entry.amount,
+        entry.method,
+        entry.reference,
+        entry.status,
+      ]),
+    ]);
+    toast.success("Payment operations exported", {
+      description: `${visible.length} payment records included.`,
+    });
+  }
+
+  return (
+    <>
+      <PageHeading
+        eyebrow="One audit trail for collections, advance coverage and payment exceptions"
+        title="Payment operations"
+      >
+        <SampleTag className="self-center" />
+        <Button onClick={exportOperations} disabled={visible.length === 0}>
+          <Download /> Export view
+        </Button>
+      </PageHeading>
+
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Payment controls">
+        <OperationsMetric
+          label="Confirmed cash this month"
+          value={formatUGX(summary.collectedThisMonth)}
+        />
+        <OperationsMetric
+          label="Expected after advances"
+          value={formatUGX(summary.expectedAfterAdvances)}
+        />
+        <OperationsMetric
+          label="Advance payments"
+          value={`${summary.advanceTenants} tenants · ${formatUGX(summary.advanceCovered)}`}
+        />
+        <OperationsMetric
+          label="Payment exceptions"
+          value={`${pending} pending · ${failed} failed · ${summary.overdueTenants} overdue`}
+        />
+      </section>
+
+      <section className="surface mt-5 overflow-hidden">
+        <div className="flex flex-col gap-3 border-b border-border p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="font-bold">Payment audit trail</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Confirmed, pending and failed payments remain visible with their rent coverage.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <label className="sr-only" htmlFor="operations-filter">
+              Filter payments
+            </label>
+            <select
+              id="operations-filter"
+              value={filter}
+              onChange={(event) => setFilter(event.target.value as OperationsFilter)}
+              className="h-11 rounded-lg border border-input bg-card px-3 text-sm font-semibold"
+            >
+              <option value="all">All payments</option>
+              <option value="attention">Pending and failed</option>
+              <option value="advance">Advance payments</option>
+            </select>
+            <label className="sr-only" htmlFor="operations-search">
+              Search payments
+            </label>
+            <input
+              id="operations-search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Tenant, unit or reference"
+              className="h-11 rounded-lg border border-input bg-card px-3 text-sm"
+            />
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[64rem] text-sm">
+            <thead>
+              <tr className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
+                <th className="px-5 py-3">Received</th>
+                <th className="px-5 py-3">Tenant / unit</th>
+                <th className="px-5 py-3">Coverage</th>
+                <th className="px-5 py-3">Method / reference</th>
+                <th className="px-5 py-3">Status</th>
+                <th className="px-5 py-3 text-right">Amount</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {visible.map((entry) => (
+                <tr key={entry.id}>
+                  <td className="px-5 py-4 text-muted-foreground">{entry.receivedAt}</td>
+                  <td className="px-5 py-4">
+                    <span className="font-semibold">{entry.tenant}</span>
+                    <span className="block text-xs text-muted-foreground">
+                      {units.find((unit) => unit.id === entry.unitId)?.property ?? ""} ·{" "}
+                      {entry.unit}
+                    </span>
+                  </td>
+                  <td className="px-5 py-4">
+                    {formatRentPeriodRange(entry.rentPeriod, entry.monthsCovered)}
+                    {entry.monthsCovered > 1 && (
+                      <Pill tone="info" label={`${entry.monthsCovered} months`} className="ml-2" />
+                    )}
+                  </td>
+                  <td className="px-5 py-4">
+                    {entry.method}
+                    <span className="figure block text-xs text-muted-foreground">
+                      {entry.reference}
+                    </span>
+                  </td>
+                  <td className="px-5 py-4">
+                    <Pill
+                      tone={
+                        entry.status === "Confirmed"
+                          ? "success"
+                          : entry.status === "Pending"
+                            ? "warning"
+                            : "danger"
+                      }
+                      label={entry.status}
+                    />
+                  </td>
+                  <td className="figure px-5 py-4 text-right font-bold">
+                    {formatUGX(entry.amount)}
+                  </td>
+                </tr>
+              ))}
+              {visible.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-5 py-12 text-center text-muted-foreground">
+                    No payments match this view.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </>
+  );
+}
+
+function OperationsMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="surface p-5">
+      <p className="text-sm text-muted-foreground">{label}</p>
+      <p className="figure mt-2 text-lg font-bold text-primary-deep">{value}</p>
+    </div>
   );
 }
 
@@ -469,12 +740,14 @@ function UnmatchedPayments({
 
 function MatchDialog({
   txn,
+  units,
   onClose,
   onMatched,
 }: {
   txn: UnmatchedTxn | null;
+  units: Unit[];
   onClose: () => void;
-  onMatched: (t: UnmatchedTxn, unitLabel: string) => void;
+  onMatched: (t: UnmatchedTxn, unit: Unit) => void;
 }) {
   const [selected, setSelected] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -543,7 +816,7 @@ function MatchDialog({
               window.setTimeout(() => {
                 setSaving(false);
                 setSelected(null);
-                onMatched(txn, `${u.unit}, ${u.property}`);
+                onMatched(txn, u);
               }, 700);
             }}
           >
@@ -561,7 +834,7 @@ function MatchDialog({
   );
 }
 
-function score(u: (typeof units)[number], t: UnmatchedTxn) {
+function score(u: Unit, t: UnmatchedTxn) {
   let s = 0;
   if (u.phone.replace(/\s/g, "") === t.phone.replace(/\s/g, "")) s += 2;
   if (u.rent === t.amount) s += 1;
@@ -725,14 +998,6 @@ function LandlordList({
                               {detail?.waterMeter && (
                                 <span className="block">Water meter: {detail.waterMeter}</span>
                               )}
-                              {detail?.electricityMeter && (
-                                <span className="block">
-                                  Electricity / Yaka: {detail.electricityMeter}
-                                </span>
-                              )}
-                              {detail?.waterMeter && (
-                                <span className="block">Water meter: {detail.waterMeter}</span>
-                              )}
                             </li>
                           );
                         })}
@@ -803,9 +1068,6 @@ function LandlordList({
                   <span>
                     {l.propertyName ??
                       `${l.properties} registered ${l.properties === 1 ? "property" : "properties"}`}
-                  </span>
-                  <span className="block text-xs font-medium text-primary">
-                    {PROPERTY_TYPE_LABELS[l.propertyType ?? "apartment"]}
                   </span>
                   <span className="block text-xs font-medium text-primary">
                     {PROPERTY_TYPE_LABELS[l.propertyType ?? "apartment"]}

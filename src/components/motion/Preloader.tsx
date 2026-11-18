@@ -1,9 +1,7 @@
 import { animate, motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
-import { LogoMark } from "@/components/brand/Logo";
+import logo from "@/assets/propatiz-logo.jpg.asset.json";
 import { ease, PRELOADER_MS, setRevealAt } from "@/lib/motion";
-
-const WORD = "Propatiz".split("");
 
 /** Full-screen brand loader shown once per full page load. */
 export function Preloader() {
@@ -47,19 +45,24 @@ export function Preloader() {
       }}
     >
       <div className="flex flex-1 flex-col items-center justify-center gap-6">
-        <LogoMark animate className="size-16 text-on-deep" />
-        <div className="flex overflow-hidden text-3xl font-bold tracking-tight text-on-deep" aria-hidden>
-          {WORD.map((ch, i) => (
-            <motion.span
-              key={i}
-              initial={{ y: "105%" }}
-              animate={{ y: "0%" }}
-              transition={{ duration: 0.7, delay: 0.35 + i * 0.04, ease: ease.outExpo }}
-            >
-              {ch}
-            </motion.span>
-          ))}
-        </div>
+        <motion.div
+          className="overflow-hidden rounded-[2rem] shadow-lift"
+          initial={{
+            opacity: 0,
+            y: 24,
+            scale: 0.86,
+            clipPath: "inset(45% 45% 45% 45% round 32px)",
+          }}
+          animate={{ opacity: 1, y: 0, scale: 1, clipPath: "inset(0% 0% 0% 0% round 32px)" }}
+          transition={{ duration: 1, delay: 0.15, ease: ease.outExpo }}
+        >
+          <img
+            src={logo.url}
+            alt="Propatiz — Buy and rent now"
+            className="size-40 object-cover sm:size-48"
+            draggable={false}
+          />
+        </motion.div>
       </div>
       <div className="flex items-end justify-between px-6 pb-6 text-on-deep-muted sm:px-10 sm:pb-10">
         <motion.p

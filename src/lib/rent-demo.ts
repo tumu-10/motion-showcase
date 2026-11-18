@@ -44,12 +44,12 @@ export function isRentDemoState(value: unknown): value is RentDemoState {
   if (typeof value !== "object" || value === null) return false;
   const state = value as Record<string, unknown>;
   return (
-    Array.isArray(state.units) &&
-    state.units.every(isUnit) &&
-    Array.isArray(state.ledger) &&
-    state.ledger.every(isLedgerEntry) &&
-    Array.isArray(state.notifications) &&
-    state.notifications.every(isTenantNotification)
+    Array.isArray(state["units"]) &&
+    state["units"].every(isUnit) &&
+    Array.isArray(state["ledger"]) &&
+    state["ledger"].every(isLedgerEntry) &&
+    Array.isArray(state["notifications"]) &&
+    state["notifications"].every(isTenantNotification)
   );
 }
 
@@ -57,15 +57,15 @@ function isUnit(value: unknown): value is Unit {
   if (typeof value !== "object" || value === null) return false;
   const unit = value as Record<string, unknown>;
   return (
-    typeof unit.id === "string" &&
-    typeof unit.unit === "string" &&
-    typeof unit.property === "string" &&
-    (typeof unit.tenant === "string" || unit.tenant === null) &&
-    typeof unit.phone === "string" &&
-    typeof unit.rent === "number" &&
-    typeof unit.daysUntilDue === "number" &&
-    typeof unit.paid === "boolean" &&
-    typeof unit.leaseEnds === "string"
+    typeof unit["id"] === "string" &&
+    typeof unit["unit"] === "string" &&
+    typeof unit["property"] === "string" &&
+    (typeof unit["tenant"] === "string" || unit["tenant"] === null) &&
+    typeof unit["phone"] === "string" &&
+    typeof unit["rent"] === "number" &&
+    typeof unit["daysUntilDue"] === "number" &&
+    typeof unit["paid"] === "boolean" &&
+    typeof unit["leaseEnds"] === "string"
   );
 }
 
@@ -73,28 +73,29 @@ function isLedgerEntry(value: unknown): value is LedgerEntry {
   if (typeof value !== "object" || value === null) return false;
   const entry = value as Record<string, unknown>;
   return (
-    typeof entry.id === "string" &&
-    typeof entry.date === "string" &&
-    typeof entry.receivedAt === "string" &&
-    typeof entry.tenant === "string" &&
-    typeof entry.unitId === "string" &&
-    typeof entry.unit === "string" &&
-    typeof entry.amount === "number" &&
+    typeof entry["id"] === "string" &&
+    typeof entry["date"] === "string" &&
+    typeof entry["receivedAt"] === "string" &&
+    typeof entry["tenant"] === "string" &&
+    typeof entry["unitId"] === "string" &&
+    typeof entry["unit"] === "string" &&
+    typeof entry["amount"] === "number" &&
     ["MTN Mobile Money", "Airtel Money", "Cash", "Bank transfer", "Visa", "Mastercard"].includes(
-      String(entry.method),
+      String(entry["method"]),
     ) &&
-    typeof entry.reference === "string" &&
-    ["Confirmed", "Pending", "Failed"].includes(String(entry.status)) &&
-    isRentPeriod(entry.rentPeriod) &&
-    Number.isInteger(entry.monthsCovered) &&
-    Number(entry.monthsCovered) > 0 &&
-    (entry.coverageAmounts === undefined ||
-      (Array.isArray(entry.coverageAmounts) &&
-        entry.coverageAmounts.length === entry.monthsCovered &&
-        entry.coverageAmounts.every(
+    typeof entry["reference"] === "string" &&
+    ["Confirmed", "Pending", "Failed"].includes(String(entry["status"])) &&
+    isRentPeriod(entry["rentPeriod"]) &&
+    Number.isInteger(entry["monthsCovered"]) &&
+    Number(entry["monthsCovered"]) > 0 &&
+    (entry["coverageAmounts"] === undefined ||
+      (Array.isArray(entry["coverageAmounts"]) &&
+        entry["coverageAmounts"].length === entry["monthsCovered"] &&
+        entry["coverageAmounts"].every(
           (amount) => typeof amount === "number" && Number.isFinite(amount) && amount >= 0,
         ) &&
-        entry.coverageAmounts.reduce((sum, amount) => sum + Number(amount), 0) === entry.amount))
+        entry["coverageAmounts"].reduce((sum, amount) => sum + Number(amount), 0) ===
+          entry["amount"]))
   );
 }
 
@@ -102,13 +103,13 @@ function isTenantNotification(value: unknown): value is TenantNotification {
   if (typeof value !== "object" || value === null) return false;
   const notification = value as Record<string, unknown>;
   return (
-    typeof notification.id === "string" &&
-    typeof notification.unit === "string" &&
-    ["rent", "payment", "advance", "update"].includes(String(notification.kind)) &&
-    typeof notification.title === "string" &&
-    typeof notification.message === "string" &&
-    typeof notification.createdAt === "string" &&
-    typeof notification.read === "boolean"
+    typeof notification["id"] === "string" &&
+    typeof notification["unit"] === "string" &&
+    ["rent", "payment", "advance", "update"].includes(String(notification["kind"])) &&
+    typeof notification["title"] === "string" &&
+    typeof notification["message"] === "string" &&
+    typeof notification["createdAt"] === "string" &&
+    typeof notification["read"] === "boolean"
   );
 }
 

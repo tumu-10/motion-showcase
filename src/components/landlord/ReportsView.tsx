@@ -24,6 +24,7 @@ import {
   summarizeRentPeriod,
 } from "@/lib/rent-accounting";
 import type { LedgerEntry, Unit } from "@/lib/sample-data";
+import type { RentCollectionSummary } from "@/lib/rent-accounting";
 
 type ReportType = "all" | "overdue" | "vacant" | "collection" | "advance";
 
@@ -97,6 +98,7 @@ export function ReportsView({ units, ledger }: { units: Unit[]; ledger: LedgerEn
             entry.status,
           ];
         }),
+        ...reportSummaryRows(summary, period),
       ]);
     } else {
       downloadCsv(`propatiz-${report}-units.csv`, [
@@ -126,6 +128,7 @@ export function ReportsView({ units, ledger }: { units: Unit[]; ledger: LedgerEn
           unit.occupants ?? "",
           unit.occupation ?? "",
         ]),
+        ...reportSummaryRows(summary, period),
       ]);
     }
     toast.success("Report downloaded", {
@@ -195,7 +198,10 @@ export function ReportsView({ units, ledger }: { units: Unit[]; ledger: LedgerEn
           label="Cash received this month"
           value={formatUGX(summary.collectedThisMonth)}
         />
-        <SummaryCard label="Occupied monthly rent" value={formatUGX(summary.grossExpected)} />
+        <SummaryCard
+          label="Expected rent · all occupied units"
+          value={formatUGX(summary.grossExpected)}
+        />
         <SummaryCard label="Advance-covered rent" value={formatUGX(summary.advanceCovered)} />
         <SummaryCard
           label="Future advance received"
@@ -207,7 +213,11 @@ export function ReportsView({ units, ledger }: { units: Unit[]; ledger: LedgerEn
         />
         <SummaryCard label="Remaining balance" value={formatUGX(summary.balanceRemaining)} />
         <SummaryCard
-          label="Tenants in advance"
+          label="Tenants expected to pay this month"
+          value={summary.expectedTenants.toLocaleString("en-UG")}
+        />
+        <SummaryCard
+          label="Tenants in advance · excluded above"
           value={summary.advanceTenants.toLocaleString("en-UG")}
         />
         <SummaryCard
@@ -303,6 +313,23 @@ function SummaryCard({ label, value }: { label: string; value: string }) {
       <p className="figure mt-2 text-xl font-bold text-primary-deep">{value}</p>
     </div>
   );
+}
+
+function reportSummaryRows(summary: RentCollectionSummary, period: string) {
+  return [
+    [],
+    ["Report summary", formatRentPeriod(period)],
+    ["Expected rent · all occupied units", summary.grossExpected],
+    ["Advance-covered rent", summary.advanceCovered],
+    ["Expected rent after advances", summary.expectedAfterAdvances],
+    ["Collected rent for this period", summary.collectedForPeriod],
+    ["Cash received this month", summary.collectedThisMonth],
+    ["Future advance received", summary.futureAdvanceReceived],
+    ["Remaining balance", summary.balanceRemaining],
+    ["Tenants expected to pay this month", summary.expectedTenants],
+    ["Tenants in advance · excluded from expected tenants", summary.advanceTenants],
+    ["Overdue tenants", summary.overdueTenants],
+  ];
 }
 
 function rentDueLabel(unit: Unit, ledger: LedgerEntry[], period: string) {

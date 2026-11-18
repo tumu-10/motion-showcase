@@ -59,7 +59,9 @@ export function DashShell<T extends string>({
                   transition={{ type: "spring", stiffness: 420, damping: 36 }}
                 />
               )}
-              <Icon className="relative size-5" aria-hidden />
+              <span className="relative grid size-8 shrink-0 place-items-center rounded-lg bg-on-deep/5">
+                <Icon className="size-[1.125rem]" strokeWidth={1.8} aria-hidden />
+              </span>
               <span className="relative flex-1 text-left">{item.label}</span>
               {item.badge ? (
                 <span
