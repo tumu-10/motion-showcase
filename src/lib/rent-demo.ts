@@ -143,7 +143,8 @@ function isLedgerEntry(value: unknown): value is LedgerEntry {
           (amount) => typeof amount === "number" && Number.isFinite(amount) && amount >= 0,
         ) &&
         entry["coverageAmounts"].reduce((sum, amount) => sum + Number(amount), 0) ===
-          entry["amount"]))
+          entry["amount"])) &&
+    (entry["bankProofDataUrl"] === undefined || typeof entry["bankProofDataUrl"] === "string")
   );
 }
 

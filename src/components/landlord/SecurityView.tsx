@@ -2,13 +2,14 @@ import { AlertTriangle, Minus, Plus, ShieldCheck } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { PageHeading } from "@/components/shared/DashShell";
+import { ReceiptActions } from "@/components/shared/ReceiptActions";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatUGX } from "@/lib/rent";
 import { currentRentPeriod, getUnitPeriodCredit } from "@/lib/rent-accounting";
-import { printPdf } from "@/lib/documents";
+import { issueDepositReceipt } from "@/lib/receipt-helpers";
 import {
   calculateRefundableDeposit,
   type DepositDeduction,
@@ -123,23 +124,14 @@ export function SecurityView({
 
   function acceptRefund(entry: DepositLedgerEntry) {
     try {
-      const deductions = entry.deductions.reduce((sum, item) => sum + item.amount, 0);
-      printPdf("Security deposit refund receipt", [
-        ["Tenant", entry.tenant],
-        ["Unit", entry.unit],
-        ["Deposit received", formatUGX(entry.amount)],
-        ["Date received", new Date(entry.receivedAt).toLocaleDateString("en-UG")],
-        ...entry.deductions.map(
-          (item, index) =>
-            [`Deduction ${index + 1}: ${item.description}`, formatUGX(item.amount)] as [
-              string,
-              string,
-            ],
-        ),
-        ["Arrears", formatUGX(entry.arrearsAtRefund)],
-        ["Refund paid", formatUGX(entry.refundAmount ?? entry.amount - deductions)],
-        ["Status", "Accepted by tenant"],
-      ]);
+      const property = units.find((unit) => unit.id === entry.unitId)?.property;
+      if (!property) throw new Error("The property for this deposit could not be found.");
+      const refundedEntry: DepositLedgerEntry = {
+        ...entry,
+        status: "Refunded",
+        resolvedAt: new Date().toISOString(),
+      };
+      issueDepositReceipt(refundedEntry, property);
       onTenantDecision(entry.id, "accept");
       toast.success("Refund accepted and receipt generated");
     } catch (reason) {
@@ -252,9 +244,24 @@ export function SecurityView({
                       </>
                     )}
                     {entry.status === "Refunded" && (
-                      <Button size="sm" variant="outline" onClick={() => acceptRefund(entry)}>
-                        Receipt
-                      </Button>
+                      <ReceiptActions
+                        getBundle={() => {
+                          const property = units.find((unit) => unit.id === entry.unitId)?.property;
+                          if (!property)
+                            throw new Error("The property for this deposit could not be found.");
+                          return issueDepositReceipt(entry, property);
+                        }}
+                      />
+                    )}
+                    {entry.status !== "Refunded" && (
+                      <ReceiptActions
+                        getBundle={() => {
+                          const property = units.find((unit) => unit.id === entry.unitId)?.property;
+                          if (!property)
+                            throw new Error("The property for this deposit could not be found.");
+                          return issueDepositReceipt(entry, property);
+                        }}
+                      />
                     )}
                   </div>
                 </li>

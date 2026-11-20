@@ -369,6 +369,7 @@ export type LedgerEntry = {
   rentPeriod: string;
   monthsCovered: number;
   coverageAmounts?: number[] | undefined;
+  bankProofDataUrl?: string | undefined;
 };
 
 export const ledger: LedgerEntry[] = [

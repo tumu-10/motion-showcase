@@ -6,8 +6,12 @@ import {
   CalendarDays,
   CalendarRange,
   ChevronRight,
-  FileText,
+  Droplets,
+  Eye,
+  Flame,
+  Heart,
   House,
+  Lightbulb,
   MessageSquare,
   MessageSquareText,
   MoreHorizontal,
@@ -15,6 +19,7 @@ import {
   Search,
   Settings,
   Sparkles,
+  Trash2,
   WalletCards,
   Wrench,
   type LucideIcon,
@@ -28,9 +33,18 @@ import { ReportFlow, type ReportInput } from "@/components/tenant/ReportFlow";
 import { SwipeDeck } from "@/components/tenant/SwipeDeck";
 import { OfflineBanner } from "@/components/shared/OfflineBanner";
 import { CalendarView, type CalendarEvent } from "@/components/shared/CalendarView";
+import { ReceiptActions } from "@/components/shared/ReceiptActions";
 import { RentRing } from "@/components/shared/RentRing";
 import { Pill, RentStatusPill } from "@/components/shared/StatusPill";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { formatUGX, getRentStatus } from "@/lib/rent";
@@ -44,7 +58,7 @@ import {
 } from "@/lib/rent-accounting";
 import { useRentDemoData } from "@/lib/useRentDemoData";
 import { ease } from "@/lib/motion";
-import { printPdf } from "@/lib/documents";
+import { issueRentReceipt } from "@/lib/receipt-helpers";
 import {
   listings,
   complaints as sampleComplaints,
@@ -58,6 +72,7 @@ import {
   type Complaint,
   type Payment,
   type TenantNotification,
+  type Unit,
 } from "@/lib/sample-data";
 import { readTenantActive, readTenantNotice, type EvictionNotice } from "@/lib/tenant-demo";
 import { cn } from "@/lib/utils";
@@ -201,6 +216,7 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
         rentPeriod: r.rentPeriod,
         monthsCovered: r.monthsCovered,
         coverageAmounts: r.coverageAmounts,
+        bankProofDataUrl: r.bankProofDataUrl,
       };
       const notification: TenantNotification = {
         id: `payment-${r.reference}`,
@@ -228,9 +244,29 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
         ledger: [entry, ...current.ledger.filter((existing) => existing.id !== entry.id)],
         notifications: [notification, ...current.notifications],
       }));
+      if (entry.status === "Confirmed") {
+        try {
+          const nextLedger = [
+            entry,
+            ...rentData.ledger.filter((existing) => existing.id !== entry.id),
+          ];
+          const balanceAfter = tenantUnit
+            ? Math.max(
+                0,
+                tenantUnit.rent - getUnitPeriodCredit(tenantUnit, nextLedger, entry.rentPeriod),
+              )
+            : Math.max(0, rentBalance - entry.amount);
+          issueRentReceipt(entry, tenantUnit?.property ?? tenantProfile.property, balanceAfter);
+        } catch (error) {
+          toast.error("Payment succeeded, but its receipt could not be generated", {
+            description:
+              error instanceof Error ? error.message : "Open payment history and try again.",
+          });
+        }
+      }
       onTaskDone?.("pay");
     },
-    [onTaskDone, setRentData, tenantUnit?.id, tenantUnitLabel],
+    [onTaskDone, rentData.ledger, rentBalance, setRentData, tenantUnit, tenantUnitLabel],
   );
 
   const handleReport = useCallback(
@@ -298,6 +334,8 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
                 paid={paid}
                 balance={rentBalance}
                 activeTenant={activeTenant}
+                ledger={rentData.ledger}
+                unit={tenantUnit}
                 onPay={() => setSheet("pay")}
               />
             )}
@@ -686,12 +724,54 @@ function HomeTab({
 }
 
 const homeServices = [
-  { name: "Plumbing", provider: "Kampala Home Fix", price: "UGX 20,000–80,000" },
-  { name: "Electrical", provider: "BrightWire Services", price: "UGX 25,000–100,000" },
-  { name: "Cleaning", provider: "FreshNest Cleaning", price: "UGX 30,000–90,000" },
-  { name: "Garbage collection", provider: "GreenLoop Kampala", price: "UGX 15,000–35,000" },
-  { name: "Water delivery", provider: "ClearDrop Water", price: "UGX 8,000–25,000" },
-  { name: "Cooking gas", provider: "QuickFlame Delivery", price: "UGX 10,000–40,000" },
+  {
+    name: "Plumbing",
+    provider: "Kampala Home Fix",
+    price: "UGX 20,000–80,000",
+    icon: Wrench,
+    surface: "border-primary/20 bg-primary-soft",
+    iconSurface: "bg-white/70 text-primary-deep",
+  },
+  {
+    name: "Electrical",
+    provider: "BrightWire Services",
+    price: "UGX 25,000–100,000",
+    icon: Lightbulb,
+    surface: "border-accent/30 bg-accent-soft",
+    iconSurface: "bg-white/70 text-primary-deep",
+  },
+  {
+    name: "Cleaning",
+    provider: "FreshNest Cleaning",
+    price: "UGX 30,000–90,000",
+    icon: Sparkles,
+    surface: "border-border bg-secondary",
+    iconSurface: "bg-white/70 text-primary-deep",
+  },
+  {
+    name: "Garbage collection",
+    provider: "GreenLoop Kampala",
+    price: "UGX 15,000–35,000",
+    icon: Trash2,
+    surface: "border-success/20 bg-success-soft",
+    iconSurface: "bg-white/70 text-success-ink",
+  },
+  {
+    name: "Water delivery",
+    provider: "ClearDrop Water",
+    price: "UGX 8,000–25,000",
+    icon: Droplets,
+    surface: "border-primary/20 bg-primary-soft",
+    iconSurface: "bg-white/70 text-primary-deep",
+  },
+  {
+    name: "Cooking gas",
+    provider: "QuickFlame Delivery",
+    price: "UGX 10,000–40,000",
+    icon: Flame,
+    surface: "border-warning/25 bg-warning-soft",
+    iconSurface: "bg-white/70 text-warning-ink",
+  },
 ];
 
 function ServicesTab() {
@@ -706,26 +786,44 @@ function ServicesTab() {
       </header>
       <ul className="space-y-3">
         {homeServices.map((service) => (
-          <li key={service.name} className="surface flex items-center gap-3 p-4">
-            <span className="grid size-10 shrink-0 place-items-center rounded-full bg-primary-soft text-primary-deep">
-              <Wrench className="size-5" aria-hidden />
+          <li
+            key={service.name}
+            className={cn(
+              "grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-3 rounded-xl border p-3 shadow-soft",
+              service.surface,
+            )}
+          >
+            <span
+              className={cn(
+                "grid size-10 shrink-0 place-items-center rounded-full",
+                service.iconSurface,
+              )}
+            >
+              <service.icon className="size-5" aria-hidden />
             </span>
             <div className="min-w-0 flex-1">
-              <h2 className="font-semibold">{service.name}</h2>
-              <p className="truncate text-xs text-muted-foreground">{service.provider} · Demo</p>
-              <p className="figure mt-1 text-xs font-medium text-primary-deep">{service.price}</p>
+              <h2 className="font-semibold leading-tight">{service.name}</h2>
+              <p className="mt-1 break-words text-xs text-muted-foreground">
+                {service.provider} · Demo
+              </p>
             </div>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() =>
-                toast.success("Quote request noted", {
-                  description: `${service.provider} is a demo provider. No request was sent.`,
-                })
-              }
-            >
-              Request
-            </Button>
+            <div className="col-span-2 flex min-w-0 items-center justify-between gap-2 border-t border-foreground/10 pt-2">
+              <p className="figure min-w-0 break-words text-xs font-semibold text-primary-deep">
+                {service.price}
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                className="shrink-0"
+                onClick={() =>
+                  toast.success("Quote request noted", {
+                    description: `${service.provider} is a demo provider. No request was sent.`,
+                  })
+                }
+              >
+                Request
+              </Button>
+            </div>
           </li>
         ))}
       </ul>
@@ -968,18 +1066,20 @@ function SectionHeader({
 
 function PaymentRow({ payment }: { payment: Payment }) {
   return (
-    <div className="surface flex items-center gap-3 p-4">
+    <div className="surface flex min-w-0 items-start gap-3 p-3 sm:p-4">
       <span className="grid size-10 shrink-0 place-items-center rounded-full bg-success-soft text-success-ink">
         <Receipt className="size-5" aria-hidden />
       </span>
       <div className="min-w-0 flex-1">
         <p className="font-semibold">{payment.month}</p>
-        <p className="text-sm text-muted-foreground">
+        <p className="mt-1 break-words text-sm text-muted-foreground">
           {payment.method} · {payment.date}
           {payment.status === "Pending" ? " · Pending confirmation" : ""}
         </p>
+        <p className="figure mt-2 break-words text-base font-bold text-primary-deep">
+          {formatUGX(payment.amount)}
+        </p>
       </div>
-      <p className="figure text-right font-bold">{formatUGX(payment.amount)}</p>
     </div>
   );
 }
@@ -988,7 +1088,7 @@ function StageTracker({ stage }: { stage: Complaint["stage"] }) {
   const idx = stageOrder.indexOf(stage);
   return (
     <div>
-      <div className="relative mt-4 flex justify-between">
+      <div className="relative mt-4 flex min-w-0 justify-between">
         <div className="absolute inset-x-2 top-1.5 h-0.5 bg-muted" aria-hidden />
         <motion.div
           className="absolute left-2 top-1.5 h-0.5 origin-left bg-primary"
@@ -999,7 +1099,7 @@ function StageTracker({ stage }: { stage: Complaint["stage"] }) {
           aria-hidden
         />
         {stageOrder.map((s, i) => (
-          <div key={s} className="relative flex flex-col items-center gap-2">
+          <div key={s} className="relative flex min-w-0 flex-1 flex-col items-center gap-2">
             <motion.span
               className={cn(
                 "size-3.5 rounded-full border-2",
@@ -1011,7 +1111,7 @@ function StageTracker({ stage }: { stage: Complaint["stage"] }) {
             />
             <span
               className={cn(
-                "text-[0.6875rem] font-medium",
+                "max-w-full break-words text-center text-[0.6875rem] leading-tight font-medium",
                 i <= idx ? "text-foreground" : "text-muted-foreground",
               )}
             >
@@ -1028,10 +1128,10 @@ function RequestCard({ request }: { request: Complaint }) {
   const tone =
     request.stage === "resolved" ? "success" : request.stage === "submitted" ? "neutral" : "info";
   return (
-    <div className="surface p-4">
-      <div className="flex items-start justify-between gap-3">
+    <div className="surface min-w-0 p-3 sm:p-4">
+      <div className="flex min-w-0 flex-col items-start gap-2">
         <div className="min-w-0">
-          <p className="font-semibold">{request.title}</p>
+          <p className="break-words font-semibold">{request.title}</p>
           <p className="text-sm text-muted-foreground">
             {request.category} · Reported {request.reported}
           </p>
@@ -1050,12 +1150,16 @@ function PaymentsTab({
   paid,
   balance,
   activeTenant,
+  ledger,
+  unit,
   onPay,
 }: {
   payments: Payment[];
   paid: boolean;
   balance: number;
   activeTenant: boolean;
+  ledger: LedgerEntry[];
+  unit: Unit | null;
   onPay: () => void;
 }) {
   const receiptColors = [
@@ -1146,32 +1250,43 @@ function PaymentsTab({
                     </p>
                   </div>
                 </div>
-                <Button
-                  size="default"
-                  variant="outline"
-                  className="mt-4 w-full border-primary/25 bg-card/80 sm:mt-5"
-                  onClick={() => {
-                    try {
-                      printPdf("Rent payment receipt", [
-                        ["Tenant", tenantProfile.name],
-                        ["Property / unit", `${tenantProfile.property} · ${tenantProfile.unit}`],
-                        ["Payment month", p.month],
-                        ["Date", p.date],
-                        ["Method", p.method],
-                        ["Reference", p.reference],
-                        ["Amount", formatUGX(p.amount)],
-                        ["Status", p.status ?? "Confirmed"],
-                      ]);
-                    } catch (error) {
-                      toast.error("Could not open the receipt", {
-                        description:
-                          error instanceof Error ? error.message : "Allow pop-ups and try again.",
-                      });
-                    }
-                  }}
-                >
-                  <FileText /> Download receipt
-                </Button>
+                {p.status !== "Pending" && p.status !== "Failed" && (
+                  <div className="mt-4 flex justify-end sm:mt-5">
+                    <ReceiptActions
+                      getBundle={() => {
+                        const entry =
+                          ledger.find((item) => item.reference === p.reference) ??
+                          ({
+                            id: p.id,
+                            date: p.date,
+                            receivedAt: p.receivedAt ?? localDateIso(),
+                            tenant: tenantProfile.name,
+                            unitId: unit?.id ?? "u3",
+                            unit: unit?.unit ?? tenantProfile.unit.replace("Unit ", ""),
+                            amount: p.amount,
+                            method: p.method,
+                            reference: p.reference,
+                            status: "Confirmed",
+                            rentPeriod:
+                              p.rentPeriod ??
+                              format(parse(p.month, "MMMM yyyy", new Date()), "yyyy-MM"),
+                            monthsCovered: p.monthsCovered ?? 1,
+                          } satisfies LedgerEntry);
+                        const balanceAfter = unit
+                          ? Math.max(
+                              0,
+                              unit.rent - getUnitPeriodCredit(unit, ledger, entry.rentPeriod),
+                            )
+                          : Math.max(0, tenantProfile.rent - p.amount);
+                        return issueRentReceipt(
+                          entry,
+                          unit?.property ?? tenantProfile.property,
+                          balanceAfter,
+                        );
+                      }}
+                    />
+                  </div>
+                )}
               </article>
             </motion.li>
           ))}
@@ -1194,9 +1309,9 @@ function ComplaintsTab({
 }) {
   return (
     <div className="px-5 pb-8 pt-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col items-start gap-3">
         <h1 className="text-2xl font-bold">Complaints</h1>
-        <Button size="sm" onClick={onReport} disabled={!activeTenant}>
+        <Button size="sm" className="w-full" onClick={onReport} disabled={!activeTenant}>
           <MessageSquare /> New complaint
         </Button>
       </div>
@@ -1315,122 +1430,325 @@ function paymentPeriod(month: string) {
 
 /* --------------------------------- Homes tab ------------------------------- */
 
-const areas = ["All areas", "Kololo", "Ntinda", "Kira", "Naalya"];
+const areas = [...new Set(listings.map((listing) => listing.area))];
 const budgets = [
-  { label: "Any budget", max: Infinity },
-  { label: "Up to 1M", max: 1_000_000 },
-  { label: "Up to 1.5M", max: 1_500_000 },
+  { value: "any", label: "Any budget", triggerLabel: "Any", max: Infinity },
+  { value: "1000000", label: "Up to UGX 1,000,000", triggerLabel: "≤ 1M", max: 1_000_000 },
+  { value: "1500000", label: "Up to UGX 1,500,000", triggerLabel: "≤ 1.5M", max: 1_500_000 },
+];
+const bedroomOptions = [
+  { value: "any", label: "Any bedrooms", triggerLabel: "Any", min: 0 },
+  { value: "1", label: "1+ bedroom", triggerLabel: "1+ bed", min: 1 },
+  { value: "2", label: "2+ bedrooms", triggerLabel: "2+ beds", min: 2 },
+  { value: "3", label: "3+ bedrooms", triggerLabel: "3+ beds", min: 3 },
 ];
 
 function HomesTab({ onInterested }: { onInterested: () => void }) {
-  const [area, setArea] = useState(areas[0]);
-  const [budget, setBudget] = useState(0);
+  const [area, setArea] = useState("all");
+  const [budget, setBudget] = useState("any");
+  const [bedrooms, setBedrooms] = useState("any");
   const [seen, setSeen] = useState<string[]>([]);
-  const [shortlist, setShortlist] = useState<{ item: Listing; requested: boolean }[]>([]);
+  const [favorites, setFavorites] = useState<{ item: Listing; requested: boolean }[]>([]);
+  const [showFavorites, setShowFavorites] = useState(false);
+  const [viewingListing, setViewingListing] = useState<Listing | null>(null);
 
+  const selectedBudget = budgets.find((option) => option.value === budget);
+  const selectedBedrooms = bedroomOptions.find((option) => option.value === bedrooms);
+  const currentFavorite = favorites.find((favorite) => favorite.item.id === viewingListing?.id);
   const matches = listings.filter(
     (l) =>
-      (area === areas[0] || l.area === area) &&
-      l.rent <= (budgets[budget]?.max ?? Infinity) &&
+      (area === "all" || l.area === area) &&
+      l.rent <= (selectedBudget?.max ?? Infinity) &&
+      l.bedrooms >= (selectedBedrooms?.min ?? 0) &&
       !seen.includes(l.id),
   );
+
+  const saveFavorite = (item: Listing) => {
+    setFavorites((current) =>
+      current.some((favorite) => favorite.item.id === item.id)
+        ? current
+        : [{ item, requested: false }, ...current],
+    );
+  };
+
+  const toggleFavorite = (item: Listing) => {
+    setFavorites((current) =>
+      current.some((favorite) => favorite.item.id === item.id)
+        ? current.filter((favorite) => favorite.item.id !== item.id)
+        : [{ item, requested: false }, ...current],
+    );
+  };
+
+  const requestViewing = (item: Listing) => {
+    setFavorites((current) =>
+      current.some((favorite) => favorite.item.id === item.id)
+        ? current.map((favorite) =>
+            favorite.item.id === item.id ? { ...favorite, requested: true } : favorite,
+          )
+        : [{ item, requested: true }, ...current],
+    );
+    onInterested();
+    toast.success("Viewing requested", {
+      description: `The landlord for ${item.title} in ${item.area} will contact you.`,
+    });
+  };
 
   return (
     <div className="px-5 pb-8 pt-6">
       <h1 className="text-2xl font-bold">Find a home</h1>
-      <div
-        className="scrollbar-hidden -mx-5 mt-4 flex gap-2 overflow-x-auto px-5 pb-1"
-        role="group"
-        aria-label="Area"
+      <div className="mt-4 grid grid-cols-2 gap-2" role="group" aria-label="Home views">
+        <Button
+          size="sm"
+          variant={showFavorites ? "outline" : "default"}
+          aria-pressed={!showFavorites}
+          className="w-full"
+          onClick={() => setShowFavorites(false)}
+        >
+          <Search className="size-4" aria-hidden />
+          Browse
+        </Button>
+        <Button
+          size="sm"
+          variant={showFavorites ? "default" : "outline"}
+          aria-pressed={showFavorites}
+          className="w-full"
+          onClick={() => setShowFavorites(true)}
+        >
+          <Heart className="size-4" aria-hidden />
+          Favorites {favorites.length}
+        </Button>
+      </div>
+
+      {showFavorites ? (
+        <motion.section
+          key="favorites"
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mt-5"
+          aria-label="Favorite homes"
+        >
+          {favorites.length === 0 ? (
+            <div className="surface flex min-h-48 flex-col items-center justify-center px-5 text-center">
+              <Heart className="size-8 text-primary" aria-hidden />
+              <h2 className="mt-3 font-semibold">No favorites yet</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Save homes with the heart button and they’ll be waiting here.
+              </p>
+              <Button size="sm" className="mt-4" onClick={() => setShowFavorites(false)}>
+                Browse homes
+              </Button>
+            </div>
+          ) : (
+            <>
+              <h2 className="mb-3 text-base font-bold">Your favorites</h2>
+              <ul className="space-y-3">
+                <AnimatePresence initial={false}>
+                  {favorites.map(({ item, requested }) => (
+                    <motion.li
+                      key={item.id}
+                      layout
+                      initial={{ opacity: 0, x: 30 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -20 }}
+                      transition={{ duration: 0.35, ease: ease.outExpo }}
+                      className="surface rounded-xl p-3"
+                    >
+                      <div className="flex min-w-0 items-start gap-3">
+                        <img
+                          src={item.image}
+                          alt=""
+                          className="size-16 shrink-0 rounded-lg object-cover"
+                          loading="lazy"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start justify-between gap-1">
+                            <p className="min-w-0 break-words text-sm leading-tight font-semibold">
+                              {item.title}
+                            </p>
+                            <button
+                              type="button"
+                              aria-label={`Remove ${item.title} from favorites`}
+                              onClick={() => toggleFavorite(item)}
+                              className="press -mr-1 -mt-1 grid size-8 shrink-0 place-items-center rounded-full text-primary"
+                            >
+                              <Heart className="size-4 fill-current" aria-hidden />
+                            </button>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            {item.area} · {item.bedrooms}{" "}
+                            {item.bedrooms === 1 ? "bedroom" : "bedrooms"}
+                          </p>
+                          <p className="figure mt-1 text-sm font-semibold text-primary-deep">
+                            {formatUGX(item.rent)} / month
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="w-full"
+                          onClick={() => setViewingListing(item)}
+                        >
+                          <Eye className="size-4" aria-hidden />
+                          View
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="w-full"
+                          disabled={requested}
+                          aria-label={`Request viewing for ${item.title}`}
+                          onClick={() => requestViewing(item)}
+                        >
+                          {requested ? "Requested" : "Request"}
+                        </Button>
+                      </div>
+                    </motion.li>
+                  ))}
+                </AnimatePresence>
+              </ul>
+            </>
+          )}
+        </motion.section>
+      ) : (
+        <>
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <div className="col-span-2 min-w-0">
+              <p className="mb-1 text-[11px] font-medium text-muted-foreground">Location</p>
+              <Select value={area} onValueChange={setArea}>
+                <SelectTrigger
+                  aria-label="Location"
+                  className="h-10 rounded-xl bg-card [&>svg]:transition-transform [&>svg]:duration-200 data-[state=open]:[&>svg]:rotate-180"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="rounded-xl shadow-lift duration-200">
+                  <SelectItem value="all">All locations</SelectItem>
+                  {areas.map((location) => (
+                    <SelectItem key={location} value={location}>
+                      {location}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="min-w-0">
+              <p className="mb-1 text-[11px] font-medium text-muted-foreground">Budget</p>
+              <Select value={budget} onValueChange={setBudget}>
+                <SelectTrigger
+                  aria-label="Budget"
+                  className="h-10 rounded-xl bg-card px-2 [&>svg]:transition-transform [&>svg]:duration-200 data-[state=open]:[&>svg]:rotate-180"
+                >
+                  <SelectValue>{selectedBudget?.triggerLabel}</SelectValue>
+                </SelectTrigger>
+                <SelectContent className="rounded-xl shadow-lift duration-200">
+                  {budgets.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="min-w-0">
+              <p className="mb-1 text-[11px] font-medium text-muted-foreground">Bedrooms</p>
+              <Select value={bedrooms} onValueChange={setBedrooms}>
+                <SelectTrigger
+                  aria-label="Bedrooms"
+                  className="h-10 rounded-xl bg-card px-2 [&>svg]:transition-transform [&>svg]:duration-200 data-[state=open]:[&>svg]:rotate-180"
+                >
+                  <SelectValue>{selectedBedrooms?.triggerLabel}</SelectValue>
+                </SelectTrigger>
+                <SelectContent className="rounded-xl shadow-lift duration-200">
+                  {bedroomOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="mt-5">
+            <SwipeDeck
+              items={matches}
+              onReset={() => {
+                setSeen([]);
+                setArea("all");
+                setBudget("any");
+                setBedrooms("any");
+              }}
+              onView={setViewingListing}
+              onDecide={(item, interested) => {
+                setSeen((current) => [...current, item.id]);
+                if (interested) saveFavorite(item);
+              }}
+            />
+          </div>
+        </>
+      )}
+
+      <Dialog
+        open={viewingListing !== null}
+        onOpenChange={(open) => {
+          if (!open) setViewingListing(null);
+        }}
       >
-        {areas.map((a) => (
-          <Chip key={a} active={area === a} onClick={() => setArea(a)}>
-            {a}
-          </Chip>
-        ))}
-      </div>
-      <div className="mt-2 flex gap-2" role="group" aria-label="Budget">
-        {budgets.map((b, i) => (
-          <Chip key={b.label} active={budget === i} onClick={() => setBudget(i)}>
-            {b.label}
-          </Chip>
-        ))}
-      </div>
-
-      <div className="mt-5">
-        <SwipeDeck
-          items={matches}
-          onReset={() => {
-            setSeen([]);
-            setArea(areas[0]);
-            setBudget(0);
-          }}
-          onDecide={(item, yes) => {
-            setSeen((s) => [...s, item.id]);
-            if (yes)
-              setShortlist((s) =>
-                s.some((x) => x.item.id === item.id) ? s : [{ item, requested: false }, ...s],
-              );
-          }}
-        />
-      </div>
-
-      <AnimatePresence>
-        {shortlist.length > 0 && (
-          <motion.section
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mt-8"
-          >
-            <h2 className="mb-3 text-base font-bold">Your shortlist</h2>
-            <ul className="space-y-3">
-              <AnimatePresence initial={false}>
-                {shortlist.map(({ item, requested }) => (
-                  <motion.li
-                    key={item.id}
-                    layout
-                    initial={{ opacity: 0, x: 30 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.4, ease: ease.outExpo }}
-                    className="surface flex items-center gap-3 p-3"
+        <DialogContent className="max-h-[calc(100dvh-2rem)] w-[calc(100%-1rem)] max-w-sm overflow-y-auto rounded-2xl bg-background p-4">
+          {viewingListing && (
+            <>
+              <img
+                src={viewingListing.image}
+                alt=""
+                className="aspect-[4/3] w-full rounded-xl object-cover"
+              />
+              <div>
+                <DialogTitle className="pr-6 text-xl">{viewingListing.title}</DialogTitle>
+                <DialogDescription className="mt-2">
+                  {viewingListing.area} · {viewingListing.bedrooms}{" "}
+                  {viewingListing.bedrooms === 1 ? "bedroom" : "bedrooms"}
+                </DialogDescription>
+                <p className="figure mt-2 text-lg font-bold text-primary-deep">
+                  {formatUGX(viewingListing.rent)} / month
+                </p>
+              </div>
+              <ul className="flex flex-wrap gap-2">
+                {viewingListing.features.map((feature) => (
+                  <li
+                    key={feature}
+                    className="rounded-full bg-secondary px-3 py-1 text-xs font-medium"
                   >
-                    <img
-                      src={item.image}
-                      alt=""
-                      className="size-16 shrink-0 rounded-sm object-cover"
-                      loading="lazy"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-semibold">{item.title}</p>
-                      <p className="figure text-sm text-muted-foreground">
-                        {item.area} · {formatUGX(item.rent)}
-                      </p>
-                    </div>
-                    {requested ? (
-                      <Pill tone="success" label="Requested" />
-                    ) : (
-                      <Button
-                        size="sm"
-                        onClick={() => {
-                          setShortlist((s) =>
-                            s.map((x) => (x.item.id === item.id ? { ...x, requested: true } : x)),
-                          );
-                          onInterested();
-                          toast.success("Viewing requested", {
-                            description: `The landlord for ${item.title} in ${item.area} will contact you.`,
-                          });
-                        }}
-                      >
-                        Request viewing
-                      </Button>
-                    )}
-                  </motion.li>
+                    {feature}
+                  </li>
                 ))}
-              </AnimatePresence>
-            </ul>
-          </motion.section>
-        )}
-      </AnimatePresence>
+              </ul>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => toggleFavorite(viewingListing)}
+                  className="w-full"
+                >
+                  <Heart
+                    className={cn("size-4", currentFavorite && "fill-current text-primary")}
+                    aria-hidden
+                  />
+                  {currentFavorite ? "Saved" : "Favorite"}
+                </Button>
+                <Button
+                  onClick={() => requestViewing(viewingListing)}
+                  disabled={currentFavorite?.requested}
+                  className="w-full"
+                >
+                  {currentFavorite?.requested ? "Requested" : "Request viewing"}
+                </Button>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

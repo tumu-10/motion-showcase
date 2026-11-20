@@ -21,6 +21,7 @@ import { MoveInWizard, type MoveInSubmission } from "@/components/landlord/MoveI
 import { Overview } from "@/components/landlord/Overview";
 import { PaymentsView } from "@/components/landlord/PaymentsView";
 import { ReportsView } from "@/components/landlord/ReportsView";
+import { ReceiptSettings } from "@/components/landlord/ReceiptSettings";
 import { SecurityView } from "@/components/landlord/SecurityView";
 import { UnitSheet } from "@/components/landlord/UnitSheet";
 import { UnitsView } from "@/components/landlord/UnitsView";
@@ -28,6 +29,7 @@ import { DashShell, type NavItem } from "@/components/shared/DashShell";
 import { CalendarView, type CalendarEvent } from "@/components/shared/CalendarView";
 import { formatUGX, getRentStatus } from "@/lib/rent";
 import { calculateMoveInTotal, formatCoveredUntil, recordMoveInPayment } from "@/lib/tenancy";
+import { issueDepositReceipt, issueRentReceipt } from "@/lib/receipt-helpers";
 import type { DepositDeduction, Tenancy } from "@/lib/tenancy";
 import {
   addRentPeriodMonths,
@@ -260,9 +262,12 @@ function LandlordPage() {
       moveInRequests: [request, ...rentData.moveInRequests],
       notifications: [notification, ...rentData.notifications],
     };
+    let moveInPayment: ReturnType<typeof recordMoveInPayment> | undefined;
+    let moveInPaymentId: string | undefined;
 
     try {
       if (initialPayment > 0) {
+        moveInPaymentId = `move-in-payment-${Date.now()}`;
         const payment = recordMoveInPayment({
           tenancy,
           request,
@@ -271,8 +276,9 @@ function LandlordPage() {
           rentLedger: rentData.ledger,
           depositLedger: rentData.depositLedger,
           receivedAt: localDateIso(now),
-          id: `move-in-payment-${Date.now()}`,
+          id: moveInPaymentId,
         });
+        moveInPayment = payment;
         nextState = {
           ...nextState,
           units: payment.units,
@@ -293,6 +299,16 @@ function LandlordPage() {
     }
 
     setRentData(nextState);
+    if (moveInPayment && moveInPaymentId) {
+      try {
+        issueMoveInReceipts(moveInPayment, moveInPaymentId, unit.property);
+      } catch (error) {
+        toast.error("Move-in payment recorded, but a receipt could not be generated", {
+          description:
+            error instanceof Error ? error.message : "Open Security or Payments and retry.",
+        });
+      }
+    }
     toast.success("Move-in payment request sent", {
       description: `${formatUGX(request.amountDue)} for ${tenancy.tenantName} · Unit ${unit.unit}.`,
     });
@@ -304,6 +320,7 @@ function LandlordPage() {
       return;
     }
     const now = new Date();
+    const paymentId = `move-in-payment-${Date.now()}`;
     try {
       const payment = recordMoveInPayment({
         tenancy: openTenancy,
@@ -313,7 +330,7 @@ function LandlordPage() {
         rentLedger: rentData.ledger,
         depositLedger: rentData.depositLedger,
         receivedAt: localDateIso(now),
-        id: `move-in-payment-${Date.now()}`,
+        id: paymentId,
       });
       const notification: TenantNotification = {
         id: `move-in-payment-notification-${Date.now()}`,
@@ -337,6 +354,14 @@ function LandlordPage() {
         ),
         notifications: [notification, ...current.notifications],
       }));
+      try {
+        issueMoveInReceipts(payment, paymentId, openUnit.property);
+      } catch (error) {
+        toast.error("Part payment recorded, but a receipt could not be generated", {
+          description:
+            error instanceof Error ? error.message : "Open Security or Payments and retry.",
+        });
+      }
       if (payment.tenancy.status === "Active" && openUnit.id === "u3") {
         setTenantActive(true, openUnit.unit);
       }
@@ -485,6 +510,15 @@ function LandlordPage() {
         ],
       };
     });
+    try {
+      const nextLedger = [entry, ...ledger];
+      const balanceAfter = Math.max(0, u.rent - getUnitPeriodCredit(u, nextLedger, rentPeriod));
+      issueRentReceipt(entry, u.property, balanceAfter);
+    } catch (error) {
+      toast.error("Payment recorded, but its receipt could not be generated", {
+        description: error instanceof Error ? error.message : "Open payment history and try again.",
+      });
+    }
     toast.success("Payment recorded", {
       description: `${formatUGX(entry.amount)} for ${u.tenant} · ${u.unit}.`,
     });
@@ -506,10 +540,10 @@ function LandlordPage() {
       createdAt: now.toISOString(),
       read: false,
     };
+    const confirmedEntry = { ...pending, status: "Confirmed" as const };
+    const nextLedgerForReceipt = ledger.map((entry) => (entry.id === id ? confirmedEntry : entry));
     setRentData((current) => {
-      const nextLedger = current.ledger.map((entry) =>
-        entry.id === id ? { ...entry, status: "Confirmed" as const } : entry,
-      );
+      const nextLedger = current.ledger.map((entry) => (entry.id === id ? confirmedEntry : entry));
       return {
         ...current,
         ledger: nextLedger,
@@ -527,6 +561,19 @@ function LandlordPage() {
         ],
       };
     });
+    try {
+      const unit = units.find((item) => item.id === pending.unitId);
+      if (!unit) throw new Error("The property for this payment could not be found.");
+      const balanceAfter = Math.max(
+        0,
+        unit.rent - getUnitPeriodCredit(unit, nextLedgerForReceipt, pending.rentPeriod),
+      );
+      issueRentReceipt(confirmedEntry, unit.property, balanceAfter);
+    } catch (error) {
+      toast.error("Payment confirmed, but its receipt could not be generated", {
+        description: error instanceof Error ? error.message : "Open payment history and try again.",
+      });
+    }
     toast.success("Payment confirmed", {
       description: `${formatUGX(pending.amount)} for ${pending.tenant} · ${pending.unit}.`,
     });
@@ -579,7 +626,9 @@ function LandlordPage() {
         />
       )}
       {view === "complaints" && <ComplaintsView requests={requests} onAdvance={advance} />}
-      {view === "payments" && <PaymentsView ledger={ledger} onConfirm={confirmPayment} />}
+      {view === "payments" && (
+        <PaymentsView ledger={ledger} units={units} onConfirm={confirmPayment} />
+      )}
       {view === "calendar" && (
         <CalendarView events={landlordCalendarEvents(units, requests)} audience="landlord" />
       )}
@@ -614,12 +663,7 @@ function LandlordPage() {
           description="Monitor mock fiscal receipt status and reconciliation. Nothing is sent to URA in the demo."
         />
       )}
-      {view === "settings" && (
-        <ComingSoonView
-          title="Settings"
-          description="Manage landlord profile, branding, notifications and property preferences."
-        />
-      )}
+      {view === "settings" && <ReceiptSettings />}
 
       <UnitSheet
         unit={openUnit}
@@ -718,6 +762,27 @@ function ComingSoonView({ title, description }: { title: string; description: st
       <p className="mt-3 max-w-xl text-muted-foreground">{description}</p>
     </section>
   );
+}
+
+function issueMoveInReceipts(
+  payment: ReturnType<typeof recordMoveInPayment>,
+  paymentId: string,
+  property: string,
+) {
+  const rentEntry = payment.rentLedger.find((entry) => entry.id === paymentId);
+  if (rentEntry) {
+    const unit = payment.units.find((item) => item.id === rentEntry.unitId);
+    if (!unit) throw new Error("The property for this move-in payment could not be found.");
+    const balanceAfter = Math.max(
+      0,
+      unit.rent - getUnitPeriodCredit(unit, payment.rentLedger, rentEntry.rentPeriod),
+    );
+    issueRentReceipt(rentEntry, property, balanceAfter);
+  }
+  const depositEntry = payment.depositLedger.find(
+    (entry) => entry.tenancyId === payment.tenancy.id,
+  );
+  if (depositEntry) issueDepositReceipt(depositEntry, property);
 }
 
 function landlordCalendarEvents(units: Unit[], complaints: Complaint[]): CalendarEvent[] {

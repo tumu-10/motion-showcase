@@ -1,14 +1,19 @@
-import { Download, FileText } from "lucide-react";
+import { Download } from "lucide-react";
 import { motion } from "motion/react";
 import { toast } from "sonner";
 import { PageHeading } from "@/components/shared/DashShell";
+import { ReceiptActions } from "@/components/shared/ReceiptActions";
 import { Pill, type Tone } from "@/components/shared/StatusPill";
 import { Button } from "@/components/ui/button";
 import { formatUGX } from "@/lib/rent";
-import { printPdf } from "@/lib/documents";
 import { ease } from "@/lib/motion";
-import { currentRentPeriod, formatRentPeriodRange } from "@/lib/rent-accounting";
-import type { LedgerEntry } from "@/lib/sample-data";
+import {
+  currentRentPeriod,
+  formatRentPeriodRange,
+  getUnitPeriodCredit,
+} from "@/lib/rent-accounting";
+import { issueRentReceipt } from "@/lib/receipt-helpers";
+import type { LedgerEntry, Unit } from "@/lib/sample-data";
 
 const statusTone: Record<LedgerEntry["status"], Tone> = {
   Confirmed: "success",
@@ -57,9 +62,11 @@ function exportCsv(rows: LedgerEntry[]) {
 
 export function PaymentsView({
   ledger,
+  units,
   onConfirm,
 }: {
   ledger: LedgerEntry[];
+  units: Unit[];
   onConfirm: (id: string) => void;
 }) {
   const confirmed = ledger
@@ -113,13 +120,21 @@ export function PaymentsView({
                   <p className="figure mt-0.5 break-all font-medium">{entry.reference}</p>
                 </div>
               </div>
-              <Button
-                variant="outline"
-                className="mt-4 w-full bg-card/80"
-                onClick={() => downloadReceipt(entry)}
-              >
-                <FileText /> Download receipt
-              </Button>
+              {entry.bankProofDataUrl && (
+                <a
+                  href={entry.bankProofDataUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-3 inline-flex text-sm font-semibold text-primary underline"
+                >
+                  View bank transfer proof
+                </a>
+              )}
+              {entry.status === "Confirmed" && (
+                <div className="mt-4">
+                  <ReceiptActions getBundle={() => receiptFor(entry, ledger, units)} />
+                </div>
+              )}
               {entry.status === "Pending" && (
                 <Button className="mt-2 w-full" onClick={() => onConfirm(entry.id)}>
                   Confirm payment
@@ -158,7 +173,19 @@ export function PaymentsView({
                   <span className="font-semibold">{l.tenant}</span>
                   <span className="block text-xs text-muted-foreground">Unit {l.unit}</span>
                 </td>
-                <td className="px-6 py-4">{l.method}</td>
+                <td className="px-6 py-4">
+                  {l.method}
+                  {l.bankProofDataUrl && (
+                    <a
+                      href={l.bankProofDataUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-1 block text-xs font-semibold text-primary underline"
+                    >
+                      View bank proof
+                    </a>
+                  )}
+                </td>
                 <td className="px-6 py-4">
                   {formatRentPeriodRange(l.rentPeriod, l.monthsCovered)}
                   {l.monthsCovered > 1 && (
@@ -177,14 +204,9 @@ export function PaymentsView({
                         Confirm
                       </Button>
                     )}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      aria-label={`Download receipt for ${l.tenant}, ${l.reference}`}
-                      onClick={() => downloadReceipt(l)}
-                    >
-                      <FileText /> PDF
-                    </Button>
+                    {l.status === "Confirmed" && (
+                      <ReceiptActions getBundle={() => receiptFor(l, ledger, units)} />
+                    )}
                   </div>
                 </td>
               </motion.tr>
@@ -196,21 +218,9 @@ export function PaymentsView({
   );
 }
 
-function downloadReceipt(entry: LedgerEntry) {
-  try {
-    printPdf("Rent payment receipt", [
-      ["Tenant", entry.tenant],
-      ["Unit", entry.unit],
-      ["Date", entry.date],
-      ["Method", entry.method],
-      ["Rent coverage", formatRentPeriodRange(entry.rentPeriod, entry.monthsCovered)],
-      ["Reference", entry.reference],
-      ["Amount", formatUGX(entry.amount)],
-      ["Status", entry.status],
-    ]);
-  } catch (error) {
-    toast.error("Could not open the receipt", {
-      description: error instanceof Error ? error.message : "Allow pop-ups and try again.",
-    });
-  }
+function receiptFor(entry: LedgerEntry, ledger: LedgerEntry[], units: Unit[]) {
+  const unit = units.find((item) => item.id === entry.unitId);
+  if (!unit) throw new Error("The property for this payment could not be found.");
+  const balanceAfter = Math.max(0, unit.rent - getUnitPeriodCredit(unit, ledger, entry.rentPeriod));
+  return issueRentReceipt(entry, unit.property, balanceAfter);
 }

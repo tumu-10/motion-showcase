@@ -1,6 +1,7 @@
 import { CreditCard, Landmark, Loader2, Smartphone } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { AnimatedCheck } from "@/components/shared/AnimatedCheck";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -25,6 +26,7 @@ import { makePaymentReference, needsAdvanceAgreement } from "@/lib/rent";
 import { formatRentPeriodRange } from "@/lib/rent-accounting";
 import { ease } from "@/lib/motion";
 import { cn } from "@/lib/utils";
+import { mockPaymentProviders } from "@/lib/payment-provider";
 import type { LucideIcon } from "lucide-react";
 
 type Step = "form" | "approve" | "success" | "failed";
@@ -34,10 +36,12 @@ export type PaymentResult = {
   rentPeriod: string;
   monthsCovered: number;
   coverageAmounts: number[];
-  method: "MTN Mobile Money" | "Airtel Money" | "Bank transfer" | "Visa";
+  method: "MTN Mobile Money" | "Airtel Money" | "Bank transfer" | "Visa" | "Mastercard";
   reference: string;
   phone: string;
   pending: boolean;
+  bankProofDataUrl?: string;
+  providerToken?: string;
   failed?: boolean | undefined;
 };
 type PaymentMethod = "mobile" | "bank" | "visa";
@@ -67,11 +71,20 @@ export function PayFlow({
   const [otherAmount, setOtherAmount] = useState("");
   const [network, setNetwork] = useState<MobileNetwork>(detectNetwork(defaultPhone) ?? "mtn");
   const [method, setMethod] = useState<PaymentMethod>("mobile");
+  const [cardBrand, setCardBrand] = useState<"Visa" | "Mastercard">("Visa");
+  const [cardNumber, setCardNumber] = useState("");
+  const [cardExpiry, setCardExpiry] = useState("");
+  const [cardCvc, setCardCvc] = useState("");
+  const [bankProofDataUrl, setBankProofDataUrl] = useState<string | undefined>();
+  const [submitting, setSubmitting] = useState(false);
   const [phone, setPhone] = useState(defaultPhone);
   const [simulateDecline, setSimulateDecline] = useState(false);
-  const [errors, setErrors] = useState<{ amount?: string | undefined; phone?: string | undefined }>(
-    {},
-  );
+  const [errors, setErrors] = useState<{
+    amount?: string;
+    phone?: string;
+    card?: string;
+    proof?: string;
+  }>({});
   const [agreed, setAgreed] = useState(false);
   const needsAgreement = amountMode === "full" && needsAdvanceAgreement(Number(monthsCovered));
   const [result, setResult] = useState<PaymentResult | null>(null);
@@ -102,7 +115,7 @@ export function PayFlow({
     }
   }, [method, paymentDetails.bankEnabled, paymentDetails.mobileMoneyEnabled]);
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
     const next: typeof errors = {};
     if (amountMode === "other") {
@@ -121,6 +134,20 @@ export function PayFlow({
       next.phone = `This is an ${detected === "mtn" ? "MTN" : "Airtel"} number. Switch to ${networkLabel[detected]} or use another number.`;
     if (needsAgreement && !agreed)
       next.amount = "Paying more than 3 months ahead needs a written agreement with your landlord.";
+    if (method === "visa") {
+      const digits = cardNumber.replace(/\D/g, "");
+      if (
+        digits.length < 12 ||
+        digits.length > 19 ||
+        !/^\d{2}\/\d{2}$/.test(cardExpiry) ||
+        !/^\d{3,4}$/.test(cardCvc)
+      ) {
+        next.card = "Enter a valid demo card number, expiry (MM/YY), and security code.";
+      }
+    }
+    if (method === "bank" && !bankProofDataUrl) {
+      next.proof = "Upload your transfer receipt or screenshot to continue.";
+    }
     setErrors(next);
     if (Object.keys(next).length) return;
     const paymentResult: PaymentResult = {
@@ -135,17 +162,103 @@ export function PayFlow({
             : "Airtel Money"
           : method === "bank"
             ? "Bank transfer"
-            : "Visa",
+            : cardBrand,
       phone: local ?? "",
       reference: makePaymentReference(),
       pending: method === "bank",
+      bankProofDataUrl: method === "bank" ? bankProofDataUrl : undefined,
     };
     setResult(paymentResult);
     if (method === "bank") {
-      setStep("success");
-      onPaid(paymentResult);
+      setSubmitting(true);
+      try {
+        const providerResult = await mockPaymentProviders.bank.process({
+          amount: paymentResult.amount,
+          reference: paymentResult.reference,
+          method: "bank",
+        });
+        const outcome = { ...paymentResult, pending: providerResult.status === "pending" };
+        setResult(outcome);
+        setStep("success");
+        onPaid(outcome);
+      } catch (error) {
+        setErrors((current) => ({
+          ...current,
+          proof:
+            error instanceof Error ? error.message : "Could not submit the bank transfer proof.",
+        }));
+      } finally {
+        setSubmitting(false);
+      }
     } else {
       setStep("approve");
+    }
+  }
+
+  async function completePayment(payment: PaymentResult) {
+    try {
+      const provider =
+        method === "mobile" ? mockPaymentProviders.mobile : mockPaymentProviders.card;
+      const providerResult = await provider.process({
+        amount: payment.amount,
+        reference: payment.reference,
+        method: method === "mobile" ? "mobile" : "card",
+        simulateFailure: simulateDecline,
+      });
+      const outcome: PaymentResult = {
+        ...payment,
+        pending: providerResult.status === "pending",
+        failed: providerResult.status === "failed",
+        providerToken: providerResult.token,
+      };
+      setResult(outcome);
+      setStep(outcome.failed ? "failed" : "success");
+      setCardNumber("");
+      setCardExpiry("");
+      setCardCvc("");
+      onPaid(outcome);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "The payment provider could not be reached.";
+      setStep("failed");
+      setCardNumber("");
+      setCardCvc("");
+      setErrors((current) => ({
+        ...current,
+        card: message,
+      }));
+      toast.error("Payment could not be completed", { description: message });
+    }
+  }
+
+  async function uploadBankProof(file: File | undefined) {
+    setErrors((current) => ({ ...current, proof: undefined }));
+    setBankProofDataUrl(undefined);
+    if (!file) return;
+    if (file.size > 1_500_000) {
+      setErrors((current) => ({ ...current, proof: "Proof files must be smaller than 1.5 MB." }));
+      return;
+    }
+    if (!["application/pdf", "image/jpeg", "image/png"].includes(file.type)) {
+      setErrors((current) => ({ ...current, proof: "Upload a PDF, JPG, or PNG transfer proof." }));
+      return;
+    }
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () =>
+          typeof reader.result === "string"
+            ? resolve(reader.result)
+            : reject(new Error("Could not read the selected transfer proof."));
+        reader.onerror = () => reject(new Error("Could not read the selected transfer proof."));
+        reader.readAsDataURL(file);
+      });
+      setBankProofDataUrl(dataUrl);
+    } catch (error) {
+      setErrors((current) => ({
+        ...current,
+        proof: error instanceof Error ? error.message : "Could not read the selected file.",
+      }));
     }
   }
 
@@ -155,7 +268,7 @@ export function PayFlow({
         {step === "form" && (
           <motion.form
             key="form"
-            onSubmit={submit}
+            onSubmit={(event) => void submit(event)}
             noValidate
             initial={{ opacity: 0, x: -24 }}
             animate={{ opacity: 1, x: 0 }}
@@ -213,8 +326,14 @@ export function PayFlow({
                   </Select>
                   {needsAgreement && (
                     <label className="mt-3 flex items-start gap-3 rounded-xl bg-warning-soft p-3 text-sm text-warning-ink">
-                      <Checkbox checked={agreed} onCheckedChange={(v) => setAgreed(v === true)} className="mt-0.5" />
-                      <span>I have a written agreement with my landlord to pay more than 3 months ahead.</span>
+                      <Checkbox
+                        checked={agreed}
+                        onCheckedChange={(v) => setAgreed(v === true)}
+                        className="mt-0.5"
+                      />
+                      <span>
+                        I have a written agreement with my landlord to pay more than 3 months ahead.
+                      </span>
                     </label>
                   )}
                   {errors.amount && needsAgreement && (
@@ -328,11 +447,83 @@ export function PayFlow({
                   Transfers are recorded as pending until the landlord confirms receipt. Use the
                   reference shown after submitting.
                 </p>
+                <Label htmlFor="bank-proof" className="mt-4 block">
+                  Transfer proof
+                </Label>
+                <Input
+                  id="bank-proof"
+                  type="file"
+                  accept="application/pdf,image/jpeg,image/png"
+                  className="mt-2"
+                  onChange={(event) => void uploadBankProof(event.target.files?.[0])}
+                  aria-invalid={!!errors.proof}
+                />
+                <FieldError id="bank-proof-error" message={errors.proof} />
+                {bankProofDataUrl && (
+                  <p className="mt-2 text-xs font-medium text-success-ink">Proof attached</p>
+                )}
               </div>
             ) : (
-              <div className="rounded-xl border border-border bg-secondary/60 p-4 text-sm text-muted-foreground">
-                Visa checkout is simulated for this demo. No card details are requested or
-                processed.
+              <div className="space-y-3 rounded-xl border border-border bg-secondary/60 p-4 text-sm">
+                <p className="text-muted-foreground">
+                  Mock card authorization only. Card numbers are never sent to or stored by the app.
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  {(["Visa", "Mastercard"] as const).map((brand) => (
+                    <button
+                      key={brand}
+                      type="button"
+                      aria-pressed={cardBrand === brand}
+                      onClick={() => setCardBrand(brand)}
+                      className={cn(
+                        "rounded-lg border px-3 py-2 font-semibold",
+                        cardBrand === brand
+                          ? "border-primary bg-primary-soft"
+                          : "border-border bg-card",
+                      )}
+                    >
+                      {brand}
+                    </button>
+                  ))}
+                </div>
+                <div>
+                  <Label htmlFor="mock-card-number">Card number</Label>
+                  <Input
+                    id="mock-card-number"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    value={cardNumber}
+                    onChange={(event) => setCardNumber(event.target.value)}
+                    className="mt-1"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="mock-card-expiry">Expiry (MM/YY)</Label>
+                    <Input
+                      id="mock-card-expiry"
+                      autoComplete="cc-exp"
+                      placeholder="MM/YY"
+                      value={cardExpiry}
+                      onChange={(event) => setCardExpiry(event.target.value)}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="mock-card-cvc">Security code</Label>
+                    <Input
+                      id="mock-card-cvc"
+                      inputMode="numeric"
+                      autoComplete="cc-csc"
+                      value={cardCvc}
+                      onChange={(event) =>
+                        setCardCvc(event.target.value.replace(/\D/g, "").slice(0, 4))
+                      }
+                      className="mt-1"
+                    />
+                  </div>
+                </div>
+                <FieldError id="card-error" message={errors.card} />
               </div>
             )}
 
@@ -359,8 +550,8 @@ export function PayFlow({
               </label>
             )}
 
-            <Button type="submit" size="lg" className="w-full">
-              Pay {amount ? formatUGX(amount) : ""}
+            <Button type="submit" size="lg" className="w-full" disabled={submitting}>
+              {submitting ? "Submitting…" : `Pay ${amount ? formatUGX(amount) : ""}`}
             </Button>
           </motion.form>
         )}
@@ -371,15 +562,7 @@ export function PayFlow({
             phone={result.phone}
             method={result.method}
             onCancel={() => setStep("form")}
-            onDone={() => {
-              if (simulateDecline) {
-                setStep("failed");
-                onPaid({ ...result, failed: true });
-              } else {
-                setStep("success");
-                onPaid(result);
-              }
-            }}
+            onDone={() => void completePayment(result)}
           />
         )}
 
@@ -410,6 +593,9 @@ export function PayFlow({
                   ["Paid with", result.method],
                   ...(result.phone ? [["Number", result.phone] as [string, string]] : []),
                   ["Receipt", result.reference],
+                  ...(result.providerToken
+                    ? [["Mock authorization token", result.providerToken] as [string, string]]
+                    : []),
                 ].map(([k, v]) => (
                   <div key={k} className="flex justify-between gap-4 px-4 py-3">
                     <dt className="text-muted-foreground">{k}</dt>
@@ -491,7 +677,7 @@ function Approve({
       </div>
       <h3 className="mt-6 text-xl font-bold">Check your phone</h3>
       <p className="mt-2 max-w-xs text-muted-foreground">
-        {method === "Visa" ? (
+        {method === "Visa" || method === "Mastercard" ? (
           "This is a demo card authorization. No real card will be charged."
         ) : (
           <>
