@@ -1,10 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 import {
+  BadgeDollarSign,
   Building2,
   CalendarRange,
   ChartNoAxesCombined,
   LayoutGrid,
+  Landmark,
   MessageSquareText,
+  BellRing,
+  Settings,
+  ShieldCheck,
   WalletCards,
 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -62,7 +67,19 @@ export const Route = createFileRoute("/landlord")({
   component: LandlordPage,
 });
 
-type View = "overview" | "units" | "complaints" | "payments" | "calendar" | "reports";
+type View =
+  | "overview"
+  | "units"
+  | "complaints"
+  | "payments"
+  | "calendar"
+  | "reports"
+  | "advance"
+  | "security"
+  | "notices"
+  | "ura"
+  | "efris"
+  | "settings";
 
 function LandlordPage() {
   const [view, setView] = useState<View>("overview");
@@ -96,17 +113,24 @@ function LandlordPage() {
     { id: "units", label: "Units", icon: Building2, badge: overdueCount },
     { id: "complaints", label: "Repairs", icon: MessageSquareText, badge: openComplaints },
     { id: "payments", label: "Payments", icon: WalletCards },
-    { id: "calendar", label: "Calendar", icon: CalendarRange },
     { id: "reports", label: "Reports", icon: ChartNoAxesCombined },
+    { id: "advance", label: "Advance", icon: BadgeDollarSign, mobileMore: true },
+    { id: "security", label: "Security", icon: ShieldCheck, mobileMore: true },
+    { id: "notices", label: "Notices", icon: BellRing, mobileMore: true },
+    { id: "ura", label: "URA", icon: Landmark, mobileMore: true },
+    { id: "efris", label: "EFRIS", icon: ChartNoAxesCombined, mobileMore: true },
+    { id: "calendar", label: "Calendar", icon: CalendarRange, mobileMore: true },
+    { id: "settings", label: "Settings", icon: Settings, mobileMore: true },
   ];
 
   const remind = (id: string) => {
     const u = units.find((x) => x.id === id);
+    const reminderId = u ? `reminder-${u.id}-${Date.now()}` : null;
     setReminded((r) => [...r, id]);
     if (u) {
       const now = new Date();
       const notification: TenantNotification = {
-        id: `reminder-${Date.now()}`,
+        id: reminderId!,
         unit: u.unit,
         kind: "rent",
         title: "Rent reminder from your landlord",
@@ -124,6 +148,19 @@ function LandlordPage() {
     }
     toast.success("Tenant reminder added", {
       description: `${u?.tenant} will see a rent reminder for ${formatUGX(u?.rent ?? 0)}.`,
+      action: u
+        ? {
+            label: "Undo",
+            onClick: () => {
+              setReminded((r) => r.filter((unitId) => unitId !== u.id));
+              setRentData((current) => ({
+                ...current,
+                notifications: current.notifications.filter((item) => item.id !== reminderId),
+              }));
+              toast.success("Reminder removed");
+            },
+          }
+        : undefined,
     });
   };
 
@@ -282,6 +319,42 @@ function LandlordPage() {
         <CalendarView events={landlordCalendarEvents(units, requests)} audience="landlord" />
       )}
       {view === "reports" && <ReportsView units={units} ledger={ledger} />}
+      {view === "advance" && (
+        <ComingSoonView
+          title="Advance rent"
+          description="Track tenants paying 2 or more months ahead and coverage running out soon."
+        />
+      )}
+      {view === "security" && (
+        <ComingSoonView
+          title="Security deposits"
+          description="Manage held deposits, deductions and refundable balances in a separate ledger."
+        />
+      )}
+      {view === "notices" && (
+        <ComingSoonView
+          title="Notices"
+          description="Prepare reminders, demands, rent-increase notices and lawful move-out notices."
+        />
+      )}
+      {view === "ura" && (
+        <ComingSoonView
+          title="URA tax pack"
+          description="Review rental-income estimates and quarterly reminders. Guidance only."
+        />
+      )}
+      {view === "efris" && (
+        <ComingSoonView
+          title="EFRIS"
+          description="Monitor mock fiscal receipt status and reconciliation. Nothing is sent to URA in the demo."
+        />
+      )}
+      {view === "settings" && (
+        <ComingSoonView
+          title="Settings"
+          description="Manage landlord profile, branding, notifications and property preferences."
+        />
+      )}
 
       <UnitSheet
         unit={openUnit}
@@ -383,6 +456,16 @@ function LandlordPage() {
         }}
       />
     </DashShell>
+  );
+}
+
+function ComingSoonView({ title, description }: { title: string; description: string }) {
+  return (
+    <section className="surface min-h-[18rem] p-6 sm:p-8">
+      <p className="text-eyebrow text-primary">Coming in the next phase</p>
+      <h1 className="mt-3 text-3xl font-bold text-primary-deep">{title}</h1>
+      <p className="mt-3 max-w-xl text-muted-foreground">{description}</p>
+    </section>
   );
 }
 

@@ -80,12 +80,21 @@ function TenantPage() {
         </aside>
 
         <motion.div
-          className="relative h-dvh w-full overflow-hidden lg:h-[min(860px,calc(100dvh-5rem))] lg:w-[400px] lg:rounded-[2.75rem] lg:border-[10px] lg:border-foreground lg:bg-foreground lg:shadow-device"
+          className="relative flex h-dvh w-full flex-col overflow-hidden bg-foreground lg:h-[min(860px,calc(100dvh-5rem))] lg:w-[400px] lg:rounded-[3rem] lg:border-[10px] lg:border-foreground lg:shadow-device"
           initial={{ opacity: 0, y: 40 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.9, ease: ease.outExpo, delay: 0.25 }}
         >
-          <div className="flex h-12 items-center justify-between gap-3 bg-primary-deep px-4 lg:hidden">
+          <div
+            className="hidden h-7 shrink-0 items-center justify-center bg-foreground lg:flex"
+            aria-hidden="true"
+          >
+            <div className="flex h-[18px] w-[5.25rem] items-center justify-end gap-2 rounded-full bg-[#07090c] px-2">
+              <span className="h-1 w-7 rounded-full bg-[#252b31]" />
+              <span className="size-2 rounded-full bg-[#263849] shadow-[inset_0_0_0_1px_#101318]" />
+            </div>
+          </div>
+          <div className="flex h-12 shrink-0 items-center justify-between gap-3 bg-primary-deep px-4 lg:hidden">
             <TransitionLink
               to="/"
               className="flex min-h-11 items-center gap-1.5 text-sm font-semibold text-on-deep"
@@ -107,7 +116,7 @@ function TenantPage() {
               </TransitionLink>
             </div>
           </div>
-          <div className="h-[calc(100%-3rem)] overflow-hidden lg:h-full lg:rounded-[2.1rem]">
+          <div className="min-h-0 flex-1 overflow-hidden lg:rounded-[2.1rem]">
             <TenantApp onTaskDone={onTaskDone} />
           </div>
         </motion.div>

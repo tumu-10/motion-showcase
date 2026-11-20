@@ -10,9 +10,13 @@ import {
   House,
   MessageSquare,
   MessageSquareText,
+  MoreHorizontal,
   Receipt,
   Search,
+  Settings,
+  Sparkles,
   WalletCards,
+  Wrench,
   type LucideIcon,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
@@ -28,6 +32,7 @@ import { RentRing } from "@/components/shared/RentRing";
 import { Pill, RentStatusPill } from "@/components/shared/StatusPill";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { formatUGX, getRentStatus } from "@/lib/rent";
 import {
   currentRentPeriod,
@@ -58,15 +63,37 @@ import { readTenantActive, readTenantNotice, type EvictionNotice } from "@/lib/t
 import { cn } from "@/lib/utils";
 
 export type TenantTask = "pay" | "report" | "home";
-type Tab = "home" | "payments" | "complaints" | "homes" | "calendar" | "notifications";
+type Tab =
+  | "home"
+  | "payments"
+  | "complaints"
+  | "homes"
+  | "calendar"
+  | "notifications"
+  | "services"
+  | "settings";
 
-const tabOrder: Tab[] = ["home", "payments", "complaints", "homes", "calendar", "notifications"];
+const tabOrder: Tab[] = [
+  "home",
+  "payments",
+  "complaints",
+  "homes",
+  "calendar",
+  "notifications",
+  "services",
+  "settings",
+];
 const tabs: { id: Tab; label: string; icon: LucideIcon }[] = [
   { id: "home", label: "Home", icon: House },
   { id: "payments", label: "Payments", icon: WalletCards },
   { id: "complaints", label: "Repairs", icon: MessageSquareText },
   { id: "homes", label: "Homes", icon: Search },
+];
+const moreTabs: { id: Tab; label: string; icon: LucideIcon }[] = [
   { id: "calendar", label: "Calendar", icon: CalendarRange },
+  { id: "notifications", label: "Notifications", icon: BellRing },
+  { id: "services", label: "Services", icon: Sparkles },
+  { id: "settings", label: "Settings", icon: Settings },
 ];
 
 // Simulates the first network request so the loading state is visible.
@@ -78,6 +105,7 @@ async function fetchTenantHome() {
 export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void }) {
   const { data: rentData, setData: setRentData, loaded: rentDataLoaded } = useRentDemoData();
   const [tab, setTab] = useState<Tab>("home");
+  const moreActive = moreTabs.some((item) => item.id === tab);
   const [dir, setDir] = useState(1);
   const [paid, setPaid] = useState(false);
   const [requests, setRequests] = useState<Complaint[]>(
@@ -85,7 +113,7 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
   );
   const [activeTenant, setActiveTenant] = useState(true);
   const [notice, setNotice] = useState<EvictionNotice | null>(null);
-  const [sheet, setSheet] = useState<"pay" | "report" | null>(null);
+  const [sheet, setSheet] = useState<"pay" | "report" | "more" | null>(null);
   const tenantUnitLabel = tenantProfile.unit.replace("Unit ", "");
   const tenantUnit = useMemo(
     () => rentData.units.find((unit) => unit.unit === tenantUnitLabel) ?? null,
@@ -244,7 +272,7 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
             animate="center"
             exit="exit"
             transition={{ duration: 0.38, ease: ease.outExpo }}
-            className="absolute inset-0 overflow-y-auto overscroll-contain"
+            className="scrollbar-hidden absolute inset-0 overflow-y-auto overscroll-contain pb-[calc(5.25rem+env(safe-area-inset-bottom))]"
           >
             {tab === "home" && (
               <HomeTab
@@ -311,12 +339,14 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
                 audience="tenant"
               />
             )}
+            {tab === "services" && <ServicesTab />}
+            {tab === "settings" && <TenantSettingsTab />}
           </motion.div>
         </AnimatePresence>
       </div>
 
       <nav
-        className="relative z-20 grid grid-cols-5 border-t border-border bg-card px-1 pb-[max(env(safe-area-inset-bottom),0.5rem)] pt-1.5"
+        className="absolute bottom-[calc(0.5rem+env(safe-area-inset-bottom))] left-2 right-2 z-20 mx-auto grid h-[4.25rem] max-w-[34rem] grid-cols-5 rounded-2xl border border-sidebar-border bg-primary-deep px-1 shadow-lift"
         aria-label="Tenant app"
       >
         {tabs.map((t) => {
@@ -328,22 +358,70 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
               onClick={() => go(t.id)}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "relative flex min-h-14 flex-col items-center justify-center gap-1 rounded-lg text-[0.625rem] font-semibold transition-colors",
-                active ? "text-primary-deep" : "text-muted-foreground hover:text-foreground",
+                "group relative flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-lg text-[0.625rem] font-semibold transition-colors",
+                active ? "text-accent-foreground" : "text-on-deep-muted hover:text-accent",
               )}
             >
-              {active && (
-                <motion.span
-                  layoutId="tenant-tab"
-                  className="absolute inset-x-3 top-0.5 h-8 rounded-full bg-primary-soft"
-                  transition={{ type: "spring", stiffness: 420, damping: 34 }}
+              <span className="relative mt-1 grid size-9 place-items-center rounded-full transition-colors duration-200 group-hover:bg-accent/15">
+                {active && (
+                  <motion.span
+                    layoutId="tenant-tab"
+                    className="absolute inset-0 rounded-full bg-accent shadow-soft ring-2 ring-accent/25"
+                    initial={false}
+                    transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                  />
+                )}
+                <Icon
+                  className={cn(
+                    "relative size-5 transition-transform duration-200 group-hover:-translate-y-0.5",
+                    active
+                      ? "text-accent-foreground"
+                      : "text-on-deep-muted group-hover:text-accent",
+                  )}
+                  strokeWidth={1.8}
+                  aria-hidden
                 />
-              )}
-              <Icon className="relative mt-1 size-5" strokeWidth={1.8} aria-hidden />
+              </span>
               <span className="relative">{t.label}</span>
             </button>
           );
         })}
+        <button
+          onClick={() => setSheet("more")}
+          aria-expanded={sheet === "more"}
+          aria-label="More tenant options"
+          className={cn(
+            "group relative flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-lg text-[0.625rem] font-semibold transition-colors",
+            moreActive ? "text-accent-foreground" : "text-on-deep-muted hover:text-accent",
+          )}
+        >
+          <span className="relative mt-1 grid size-9 place-items-center rounded-full transition-colors duration-200 group-hover:bg-accent/15">
+            {moreActive && (
+              <motion.span
+                layoutId="tenant-tab"
+                className="absolute inset-0 rounded-full bg-accent shadow-soft ring-2 ring-accent/25"
+                initial={false}
+                transition={{ type: "spring", stiffness: 420, damping: 34 }}
+              />
+            )}
+            <MoreHorizontal
+              className={cn(
+                "relative size-5 transition-transform duration-200 group-hover:-translate-y-0.5",
+                moreActive
+                  ? "text-accent-foreground"
+                  : "text-on-deep-muted group-hover:text-accent",
+              )}
+              strokeWidth={1.8}
+              aria-hidden
+            />
+            {unreadNotifications > 0 && (
+              <span className="figure absolute -right-1 -top-1 z-10 grid h-4 min-w-4 place-items-center rounded-full border-2 border-primary-deep bg-destructive px-1 text-[0.5625rem] font-bold leading-none text-destructive-foreground">
+                {unreadNotifications > 99 ? "99+" : unreadNotifications}
+              </span>
+            )}
+          </span>
+          <span className="relative">More</span>
+        </button>
       </nav>
 
       <AppSheet
@@ -363,6 +441,49 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
       </AppSheet>
       <AppSheet open={sheet === "report"} onClose={() => setSheet(null)} title="Send a complaint">
         <ReportFlow onSubmitted={handleReport} onClose={() => setSheet(null)} />
+      </AppSheet>
+      <AppSheet open={sheet === "more"} onClose={() => setSheet(null)} title="More" tone="onDeep">
+        <div className="space-y-2">
+          {moreTabs.map((item) => {
+            const Icon = item.icon;
+            const active = item.id === tab;
+            return (
+              <motion.button
+                key={item.id}
+                onClick={() => {
+                  go(item.id);
+                  setSheet(null);
+                }}
+                whileHover={{ x: 3, scale: 1.01 }}
+                whileTap={{ scale: 0.98 }}
+                transition={{ duration: 0.18, ease: ease.outExpo }}
+                className={cn(
+                  "group flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold transition-colors",
+                  active
+                    ? "bg-accent text-accent-foreground"
+                    : "text-on-deep-muted hover:bg-accent hover:text-accent-foreground",
+                )}
+              >
+                <span
+                  className={cn(
+                    "grid size-9 place-items-center rounded-full transition-transform duration-200 group-hover:scale-110 group-hover:-rotate-6",
+                    active
+                      ? "bg-primary-deep/10 text-accent-foreground"
+                      : "bg-on-deep/5 text-on-deep-muted group-hover:bg-accent/15 group-hover:text-accent",
+                  )}
+                >
+                  <Icon className="size-4" aria-hidden />
+                </span>
+                <span className="flex-1">{item.label}</span>
+                {item.id === "notifications" && unreadNotifications > 0 && (
+                  <span className="figure grid h-6 min-w-6 place-items-center rounded-full bg-destructive px-1.5 text-xs text-destructive-foreground">
+                    {unreadNotifications}
+                  </span>
+                )}
+              </motion.button>
+            );
+          })}
+        </div>
       </AppSheet>
     </div>
   );
@@ -561,6 +682,93 @@ function HomeTab({
         {lastPayment && <PaymentRow payment={lastPayment} />}
       </motion.section>
     </div>
+  );
+}
+
+const homeServices = [
+  { name: "Plumbing", provider: "Kampala Home Fix", price: "UGX 20,000–80,000" },
+  { name: "Electrical", provider: "BrightWire Services", price: "UGX 25,000–100,000" },
+  { name: "Cleaning", provider: "FreshNest Cleaning", price: "UGX 30,000–90,000" },
+  { name: "Garbage collection", provider: "GreenLoop Kampala", price: "UGX 15,000–35,000" },
+  { name: "Water delivery", provider: "ClearDrop Water", price: "UGX 8,000–25,000" },
+  { name: "Cooking gas", provider: "QuickFlame Delivery", price: "UGX 10,000–40,000" },
+];
+
+function ServicesTab() {
+  return (
+    <section className="space-y-5 p-5 pb-8">
+      <header>
+        <p className="text-sm font-medium text-muted-foreground">Demo providers · Kampala</p>
+        <h1 className="mt-1 text-2xl font-bold text-primary-deep">Services for your home</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Request a quote from a local home-service provider.
+        </p>
+      </header>
+      <ul className="space-y-3">
+        {homeServices.map((service) => (
+          <li key={service.name} className="surface flex items-center gap-3 p-4">
+            <span className="grid size-10 shrink-0 place-items-center rounded-full bg-primary-soft text-primary-deep">
+              <Wrench className="size-5" aria-hidden />
+            </span>
+            <div className="min-w-0 flex-1">
+              <h2 className="font-semibold">{service.name}</h2>
+              <p className="truncate text-xs text-muted-foreground">{service.provider} · Demo</p>
+              <p className="figure mt-1 text-xs font-medium text-primary-deep">{service.price}</p>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() =>
+                toast.success("Quote request noted", {
+                  description: `${service.provider} is a demo provider. No request was sent.`,
+                })
+              }
+            >
+              Request
+            </Button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function TenantSettingsTab() {
+  const [paymentUpdates, setPaymentUpdates] = useState(true);
+  const [repairUpdates, setRepairUpdates] = useState(true);
+
+  return (
+    <section className="space-y-5 p-5 pb-8">
+      <header>
+        <p className="text-sm font-medium text-muted-foreground">Your account</p>
+        <h1 className="mt-1 text-2xl font-bold text-primary-deep">Settings</h1>
+      </header>
+      <div className="surface p-4">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Tenancy
+        </p>
+        <p className="mt-2 font-semibold">{tenantProfile.name}</p>
+        <p className="text-sm text-muted-foreground">
+          {tenantProfile.unit} · {tenantProfile.property}
+        </p>
+      </div>
+      <div className="surface divide-y divide-border p-4">
+        <p className="pb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Notifications
+        </p>
+        <label className="flex min-h-14 items-center justify-between gap-4 py-2 text-sm">
+          Payment and rent updates
+          <Switch checked={paymentUpdates} onCheckedChange={setPaymentUpdates} />
+        </label>
+        <label className="flex min-h-14 items-center justify-between gap-4 py-2 text-sm">
+          Repair updates
+          <Switch checked={repairUpdates} onCheckedChange={setRepairUpdates} />
+        </label>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Settings shown here are saved for this demo session only.
+      </p>
+    </section>
   );
 }
 
@@ -1131,7 +1339,7 @@ function HomesTab({ onInterested }: { onInterested: () => void }) {
     <div className="px-5 pb-8 pt-6">
       <h1 className="text-2xl font-bold">Find a home</h1>
       <div
-        className="-mx-5 mt-4 flex gap-2 overflow-x-auto px-5 pb-1"
+        className="scrollbar-hidden -mx-5 mt-4 flex gap-2 overflow-x-auto px-5 pb-1"
         role="group"
         aria-label="Area"
       >

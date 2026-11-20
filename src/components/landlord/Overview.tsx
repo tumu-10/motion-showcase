@@ -1,22 +1,39 @@
 import {
   ArrowRight,
+  BadgeDollarSign,
   BellRing,
   CalendarClock,
   ChartNoAxesCombined,
   Check,
+  CircleAlert,
+  ShieldCheck,
   UserPlus,
-  UsersRound,
   WalletCards,
+  Wrench,
 } from "lucide-react";
 import { motion } from "motion/react";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip as ChartTooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { CountUp } from "@/components/shared/CountUp";
 import { PageHeading } from "@/components/shared/DashShell";
 import { Pill, SampleTag } from "@/components/shared/StatusPill";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { DUE_SOON_DAYS, formatCompactUGX, formatUGX } from "@/lib/rent";
 import { ease } from "@/lib/motion";
-import { currentRentPeriod, getUnitRentStatus, summarizeRentPeriod } from "@/lib/rent-accounting";
+import {
+  currentRentPeriod,
+  getUnitAdvanceMonths,
+  getUnitRentStatus,
+  summarizeRentPeriod,
+} from "@/lib/rent-accounting";
 import {
   monthlyCollection,
   stageLabel,
@@ -111,6 +128,61 @@ export function Overview({
     expected,
     collected: m.month === "Nov" ? collected : m.collected,
   }));
+  const dueWithinThreeDays = occupied
+    .filter((u) => {
+      const status = statusFor(u);
+      return (
+        ["Due", "Partially paid"].includes(status) && u.daysUntilDue >= 0 && u.daysUntilDue <= 3
+      );
+    })
+    .sort((a, b) => a.daysUntilDue - b.daysUntilDue);
+  const advanceRunningOut = occupied
+    .filter((u) => {
+      const months = getUnitAdvanceMonths(u, ledger, period);
+      return months > 0 && months <= 1;
+    })
+    .sort(
+      (a, b) => getUnitAdvanceMonths(a, ledger, period) - getUnitAdvanceMonths(b, ledger, period),
+    );
+  const urgentRepairs = openRequests.filter((r) => r.urgency === "Urgent");
+  const attentionItems = [
+    ...overdue.slice(0, 2).map((u) => ({
+      id: `overdue-${u.id}`,
+      icon: CircleAlert,
+      title: `${u.tenant} is overdue`,
+      detail: `${formatUGX(u.rent)} · ${Math.abs(u.daysUntilDue)} days late`,
+      action: "View balance",
+      onAction: () => onOpenUnit(u),
+      tone: "overdue" as const,
+    })),
+    ...dueWithinThreeDays.slice(0, 2).map((u) => ({
+      id: `due-${u.id}`,
+      icon: CalendarClock,
+      title: `${u.tenant}'s rent is due soon`,
+      detail: `${formatUGX(u.rent)} · due in ${u.daysUntilDue} ${u.daysUntilDue === 1 ? "day" : "days"}`,
+      action: "Send reminder",
+      onAction: () => onRemind(u.id),
+      tone: "due" as const,
+    })),
+    ...advanceRunningOut.slice(0, 2).map((u) => ({
+      id: `advance-${u.id}`,
+      icon: BadgeDollarSign,
+      title: `${u.tenant}'s advance is running out`,
+      detail: `${u.unit} · ${getUnitAdvanceMonths(u, ledger, period)} month covered`,
+      action: "Remind tenant",
+      onAction: () => onRemind(u.id),
+      tone: "advance" as const,
+    })),
+    ...urgentRepairs.slice(0, 2).map((r) => ({
+      id: `repair-${r.id}`,
+      icon: Wrench,
+      title: r.title,
+      detail: `${r.unit} · ${r.property}`,
+      action: "Review repair",
+      onAction: onOpenComplaints,
+      tone: "repair" as const,
+    })),
+  ].slice(0, 5);
 
   return (
     <>
@@ -121,27 +193,95 @@ export function Overview({
         </Button>
       </PageHeading>
 
-      <section className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Rent position">
+      <section className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3" aria-label="Rent position">
         <OverviewMetric
           icon={WalletCards}
-          label="Cash received this month"
-          value={formatUGX(summary.collectedThisMonth)}
+          label="Collected"
+          value={summary.collectedForPeriod}
+          explanation="Confirmed rent for this period"
+          tone="collected"
+          tooltip="Payments confirmed against the current rent period. It is not annual income."
         />
         <OverviewMetric
           icon={ChartNoAxesCombined}
-          label="Expected after advances"
-          value={formatUGX(summary.expectedAfterAdvances)}
+          label="Expected"
+          value={summary.grossExpected}
+          explanation="Rent due across occupied units"
+          tone="expected"
+          tooltip="Gross monthly rent for occupied units, before part payments and advances."
         />
         <OverviewMetric
-          icon={UsersRound}
-          label="Tenants expected to pay"
-          value={`${summary.expectedTenants} of ${occupied.length}`}
+          icon={ShieldCheck}
+          label="Deposits held"
+          value={0}
+          explanation="Separate from rent income"
+          tone="deposits"
+          tooltip="Refundable security deposits are held separately and are never counted as rental income."
         />
-        <OverviewMetric
-          icon={CalendarClock}
-          label="Rent covered by advances"
-          value={formatUGX(summary.advanceCovered)}
-        />
+      </section>
+
+      <section className="surface mb-6 overflow-hidden" aria-labelledby="attention-heading">
+        <div className="flex items-center justify-between border-b border-border px-5 py-4 sm:px-6">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
+              Today
+            </p>
+            <h2 id="attention-heading" className="mt-1 font-bold">
+              Needs attention
+            </h2>
+          </div>
+          <span className="figure rounded-full bg-destructive-soft px-3 py-1 text-sm font-bold text-destructive-ink">
+            {attentionItems.length}
+          </span>
+        </div>
+        {attentionItems.length === 0 ? (
+          <div className="px-6 py-10 text-center">
+            <Check className="mx-auto size-7 text-success-ink" aria-hidden />
+            <p className="mt-2 font-semibold">Nothing needs attention today</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Rent, repairs and notices are under control.
+            </p>
+          </div>
+        ) : (
+          <ul className="divide-y divide-border">
+            {attentionItems.map((item) => {
+              const Icon = item.icon;
+              return (
+                <motion.li
+                  key={item.id}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.18, ease: ease.outExpo }}
+                  className="flex items-center gap-3 px-5 py-3 sm:px-6"
+                >
+                  <span
+                    className={cn(
+                      "grid size-10 shrink-0 place-items-center rounded-full",
+                      item.tone === "overdue" && "bg-destructive-soft text-destructive-ink",
+                      item.tone === "due" && "bg-warning-soft text-warning-ink",
+                      item.tone === "advance" && "bg-[#ccfbf1] text-[#0f766e]",
+                      item.tone === "repair" && "bg-[#ffe4e6] text-[#be123c]",
+                    )}
+                  >
+                    <Icon className="size-5" aria-hidden />
+                  </span>
+                  <button onClick={item.onAction} className="min-w-0 flex-1 text-left">
+                    <p className="truncate text-sm font-semibold">{item.title}</p>
+                    <p className="mt-0.5 truncate text-xs text-muted-foreground">{item.detail}</p>
+                  </button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={item.onAction}
+                    className="hidden sm:inline-flex"
+                  >
+                    {item.action}
+                  </Button>
+                </motion.li>
+              );
+            })}
+          </ul>
+        )}
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[1.25fr_1fr]">
@@ -220,7 +360,7 @@ export function Overview({
                   tick={{ fill: "var(--muted-foreground)", fontSize: 10 }}
                   tickFormatter={(v) => `${v / 1_000_000}M`}
                 />
-                <Tooltip
+                <ChartTooltip
                   cursor={{ fill: "var(--muted)" }}
                   contentStyle={{
                     background: "var(--card)",
@@ -377,20 +517,65 @@ function OverviewMetric({
   icon: Icon,
   label,
   value,
+  explanation,
+  tone,
+  tooltip,
 }: {
   icon: typeof WalletCards;
   label: string;
-  value: string;
+  value: number;
+  explanation: string;
+  tone: "collected" | "expected" | "deposits";
+  tooltip: string;
 }) {
+  const styles = {
+    collected: {
+      card: "border-transparent bg-[#dbeafe]",
+      icon: "bg-white/70 text-[#1d4ed8]",
+      number: "text-[#1d4ed8]",
+    },
+    expected: {
+      card: "border-transparent bg-[#e0e7ff]",
+      icon: "bg-white/70 text-[#4338ca]",
+      number: "text-[#4338ca]",
+    },
+    deposits: {
+      card: "border-transparent bg-[#ede9fe]",
+      icon: "bg-white/70 text-[#6d28d9]",
+      number: "text-[#6d28d9]",
+    },
+  }[tone];
+
   return (
-    <div className="surface flex items-center gap-3 p-4">
-      <span className="grid size-11 shrink-0 place-items-center rounded-full bg-primary-soft text-primary-deep">
-        <Icon className="size-5" strokeWidth={1.8} aria-hidden />
-      </span>
-      <div className="min-w-0">
-        <p className="text-xs font-medium text-muted-foreground">{label}</p>
-        <p className="figure mt-0.5 truncate text-lg font-bold text-primary-deep">{value}</p>
-      </div>
-    </div>
+    <TooltipProvider delayDuration={250}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <article
+            className={cn(
+              "rounded-lg p-4 shadow-soft transition-transform duration-200 hover:-translate-y-0.5",
+              styles.card,
+            )}
+          >
+            <div className="flex items-start gap-3">
+              <span
+                className={cn("grid size-11 shrink-0 place-items-center rounded-full", styles.icon)}
+              >
+                <Icon className="size-5" strokeWidth={1.8} aria-hidden />
+              </span>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-foreground">{label}</p>
+                <p className={cn("figure mt-1 truncate text-xl font-bold", styles.number)}>
+                  <CountUp value={value} format={(n) => formatUGX(n)} />
+                </p>
+              </div>
+            </div>
+            <p className="mt-3 text-xs font-medium text-foreground/75">{explanation}</p>
+          </article>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-72 bg-primary-deep text-on-deep">
+          {tooltip}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }

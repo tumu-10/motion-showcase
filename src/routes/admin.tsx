@@ -8,6 +8,7 @@ import {
   LayoutGrid,
   Link2,
   Loader2,
+  Settings,
   ShieldCheck,
   Smartphone,
   Users,
@@ -85,7 +86,7 @@ export const Route = createFileRoute("/admin")({
   component: AdminPage,
 });
 
-type View = "overview" | "operations" | "payments" | "landlords";
+type View = "overview" | "operations" | "payments" | "landlords" | "settings";
 
 const verificationTone: Record<Landlord["verification"], Tone> = {
   Verified: "success",
@@ -117,6 +118,7 @@ function AdminPage() {
     { id: "operations", label: "Payment operations", icon: ClipboardCheck },
     { id: "payments", label: "Match payments", icon: Link2, badge: txns.length },
     { id: "landlords", label: "Landlords", icon: Building2, badge: pending },
+    { id: "settings", label: "Settings", icon: Settings, mobileMore: true },
   ];
 
   useEffect(() => {
@@ -207,6 +209,15 @@ function AdminPage() {
           onPlanChange={updateSubscriptionPlan}
           onRecordPayment={recordSubscriptionPayment}
         />
+      )}
+      {view === "settings" && (
+        <section className="surface min-h-[18rem] p-6 sm:p-8">
+          <p className="text-eyebrow text-primary">Platform</p>
+          <h1 className="mt-3 text-3xl font-bold text-primary-deep">Admin settings</h1>
+          <p className="mt-3 max-w-xl text-muted-foreground">
+            Platform preferences, access controls and notification settings will be managed here.
+          </p>
+        </section>
       )}
       <CreateLandlordDialog
         open={createOpen}

@@ -1,6 +1,7 @@
 import { X } from "lucide-react";
 import { AnimatePresence, motion, useDragControls } from "motion/react";
 import { useEffect, type ReactNode } from "react";
+import { cn } from "@/lib/utils";
 
 /** Bottom sheet that stays inside the app frame. Drag the handle down or press Escape to close. */
 export function AppSheet({
@@ -8,15 +9,18 @@ export function AppSheet({
   onClose,
   title,
   children,
+  tone = "default",
   dismissible = true,
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
   children: ReactNode;
+  tone?: "default" | "onDeep";
   dismissible?: boolean;
 }) {
   const controls = useDragControls();
+  const onDeep = tone === "onDeep";
 
   useEffect(() => {
     if (!open || !dismissible) return;
@@ -43,7 +47,10 @@ export function AppSheet({
             role="dialog"
             aria-modal="true"
             aria-label={title}
-            className="absolute inset-x-0 bottom-0 z-40 flex max-h-[94%] flex-col rounded-t-2xl bg-card shadow-lift"
+            className={cn(
+              "absolute inset-x-0 bottom-0 z-40 flex max-h-[94%] flex-col rounded-t-2xl shadow-lift",
+              onDeep ? "deep-panel text-on-deep" : "bg-card",
+            )}
             initial={{ y: "100%" }}
             animate={{ y: 0 }}
             exit={{ y: "100%" }}
@@ -61,21 +68,29 @@ export function AppSheet({
               className="flex cursor-grab touch-none justify-center pb-1 pt-3 active:cursor-grabbing"
               onPointerDown={(e) => dismissible && controls.start(e)}
             >
-              <span className="h-1.5 w-10 rounded-full bg-input" aria-hidden />
+              <span
+                className={cn("h-1.5 w-10 rounded-full", onDeep ? "bg-on-deep/40" : "bg-input")}
+                aria-hidden
+              />
             </div>
             <div className="flex items-center justify-between px-5 pb-2">
-              <h2 className="text-lg font-bold">{title}</h2>
+              <h2 className={cn("text-lg font-bold", onDeep && "text-on-deep")}>{title}</h2>
               {dismissible && (
                 <button
                   onClick={onClose}
-                  className="grid size-11 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                  className={cn(
+                    "grid size-11 place-items-center rounded-full transition-colors",
+                    onDeep
+                      ? "text-on-deep-muted hover:bg-sidebar-accent hover:text-on-deep"
+                      : "text-muted-foreground hover:bg-secondary hover:text-foreground",
+                  )}
                   aria-label="Close"
                 >
                   <X className="size-5" />
                 </button>
               )}
             </div>
-            <div className="overflow-y-auto px-5 pb-6">{children}</div>
+            <div className="scrollbar-hidden overflow-y-auto px-5 pb-6">{children}</div>
           </motion.div>
         </>
       )}

@@ -207,6 +207,13 @@
   font-feature-settings: "tnum", "lnum";
   letter-spacing: -0.02em;
 }
+@utility scrollbar-hidden {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
 
 /* Surfaces */
 @utility surface {
