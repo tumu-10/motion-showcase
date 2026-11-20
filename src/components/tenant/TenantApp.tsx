@@ -592,13 +592,13 @@ function HomeTab({
             className="deep-panel overflow-hidden rounded-2xl p-5"
             aria-label={`${periodLabel} rent`}
           >
-            <div className="flex items-center gap-5">
+            <div className="flex items-center gap-3">
               <RentRing
                 daysLeft={tenantProfile.daysUntilDue}
                 cycleDays={tenantProfile.cycleDays}
                 status={status}
-                size={100}
-                stroke={10}
+                size={88}
+                stroke={9}
                 trackClassName="stroke-on-deep/15"
                 immediate
               >
@@ -630,7 +630,7 @@ function HomeTab({
                       ? "Balance due"
                       : `${periodLabel} rent`}
                 </p>
-                <p className="figure mt-0.5 whitespace-nowrap text-xl font-bold text-on-deep">
+                <p className="figure mt-0.5 break-words text-lg font-bold leading-tight text-on-deep sm:text-xl">
                   {formatUGX(paid ? tenantProfile.rent : balance)}
                 </p>
                 <p className="mt-1 text-sm text-on-deep-muted">

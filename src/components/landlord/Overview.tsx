@@ -41,11 +41,13 @@ import {
   type LedgerEntry,
   type Unit,
 } from "@/lib/sample-data";
+import type { DepositLedgerEntry } from "@/lib/tenancy";
 import { cn } from "@/lib/utils";
 
 export function Overview({
   units,
   ledger,
+  depositLedger,
   requests,
   reminded,
   onRemind,
@@ -56,6 +58,7 @@ export function Overview({
 }: {
   units: Unit[];
   ledger: LedgerEntry[];
+  depositLedger: DepositLedgerEntry[];
   requests: Complaint[];
   reminded: string[];
   onRemind: (id: string) => void;
@@ -213,10 +216,12 @@ export function Overview({
         <OverviewMetric
           icon={ShieldCheck}
           label="Deposits held"
-          value={0}
-          explanation="Separate from rent income"
+          value={depositLedger
+            .filter((entry) => entry.status !== "Refunded")
+            .reduce((sum, entry) => sum + entry.amount, 0)}
+          explanation="Held in the separate deposit ledger"
           tone="deposits"
-          tooltip="Refundable security deposits are held separately and are never counted as rental income."
+          tooltip="Security deposits are held separately from the rent ledger and are never counted as rental income."
         />
       </section>
 

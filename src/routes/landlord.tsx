@@ -14,17 +14,21 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { AddTenantDialog } from "@/components/landlord/AddTenantDialog";
+import { AdvanceView } from "@/components/landlord/AdvanceView";
 import { ComplaintsView } from "@/components/landlord/ComplaintsView";
 import { EvictionNoticeDialog } from "@/components/landlord/EvictionNoticeDialog";
+import { MoveInWizard, type MoveInSubmission } from "@/components/landlord/MoveInWizard";
 import { Overview } from "@/components/landlord/Overview";
 import { PaymentsView } from "@/components/landlord/PaymentsView";
 import { ReportsView } from "@/components/landlord/ReportsView";
+import { SecurityView } from "@/components/landlord/SecurityView";
 import { UnitSheet } from "@/components/landlord/UnitSheet";
 import { UnitsView } from "@/components/landlord/UnitsView";
 import { DashShell, type NavItem } from "@/components/shared/DashShell";
 import { CalendarView, type CalendarEvent } from "@/components/shared/CalendarView";
 import { formatUGX, getRentStatus } from "@/lib/rent";
+import { calculateMoveInTotal, formatCoveredUntil, recordMoveInPayment } from "@/lib/tenancy";
+import type { DepositDeduction, Tenancy } from "@/lib/tenancy";
 import {
   addRentPeriodMonths,
   currentRentPeriod,
@@ -87,11 +91,18 @@ function LandlordPage() {
   const period = currentRentPeriod();
   const units = useMemo(
     () =>
-      rentData.units.map((unit) => ({
-        ...unit,
-        paid: !!unit.tenant && getUnitPeriodCredit(unit, rentData.ledger, period) >= unit.rent,
-      })),
-    [period, rentData.ledger, rentData.units],
+      rentData.units.map((unit) => {
+        const pending = rentData.tenancies.find(
+          (tenancy) => tenancy.unitId === unit.id && tenancy.status === "Pending move-in",
+        );
+        return {
+          ...unit,
+          pendingMoveIn: !!pending,
+          pendingTenant: pending?.tenantName,
+          paid: !!unit.tenant && getUnitPeriodCredit(unit, rentData.ledger, period) >= unit.rent,
+        };
+      }),
+    [period, rentData.ledger, rentData.tenancies, rentData.units],
   );
   const ledger = rentData.ledger;
   const [requests, setRequests] = useState<Complaint[]>(complaints);
@@ -102,7 +113,18 @@ function LandlordPage() {
   const [noticeUnit, setNoticeUnit] = useState<Unit | null>(null);
 
   const openUnit = units.find((u) => u.id === openUnitId) ?? null;
-  const vacant = useMemo(() => units.filter((u) => !u.tenant), [units]);
+  const openTenancy = openUnit
+    ? (rentData.tenancies.find(
+        (tenancy) => tenancy.unitId === openUnit.id && tenancy.status !== "Ended",
+      ) ?? null)
+    : null;
+  const openMoveInRequest = openTenancy
+    ? (rentData.moveInRequests.find((request) => request.tenancyId === openTenancy.id) ?? null)
+    : null;
+  const vacant = useMemo(
+    () => units.filter((unit) => !unit.tenant && !unit.pendingMoveIn),
+    [units],
+  );
   const overdueCount = units.filter(
     (u) => u.tenant && getRentStatus(u.daysUntilDue, u.paid) === "overdue",
   ).length;
@@ -162,6 +184,248 @@ function LandlordPage() {
           }
         : undefined,
     });
+  };
+
+  const remindAdvance = (unit: Unit, coveredUntil: string) => {
+    const now = new Date();
+    const notification: TenantNotification = {
+      id: `advance-reminder-${unit.id}-${Date.now()}`,
+      unit: unit.unit,
+      kind: "advance",
+      title: "Your rent advance is running out",
+      message: `Your rent is covered through ${formatCoveredUntil(coveredUntil)}. Please plan for your next rent payment.`,
+      createdAt: now.toISOString(),
+      read: false,
+    };
+    setReminded((current) => [...current, unit.id]);
+    setRentData((current) => ({
+      ...current,
+      notifications: [notification, ...current.notifications],
+    }));
+    toast.success("Advance reminder sent", {
+      description: `${unit.tenant} has been reminded that rent coverage ends ${formatCoveredUntil(coveredUntil)}.`,
+    });
+  };
+
+  const createMoveIn = (input: MoveInSubmission) => {
+    const now = new Date();
+    const { initialPayment, ...moveInFields } = input;
+    const tenancy: Tenancy = {
+      ...moveInFields,
+      id: `tenancy-${Date.now()}`,
+      status: "Pending move-in",
+    };
+    const request = {
+      id: `move-in-request-${Date.now()}`,
+      tenancyId: tenancy.id,
+      unitId: tenancy.unitId,
+      tenantName: tenancy.tenantName,
+      amountDue: calculateMoveInTotal(
+        tenancy.monthlyRent,
+        tenancy.advanceMonths,
+        tenancy.depositMonths,
+      ),
+      amountPaid: 0,
+      rentPaid: 0,
+      depositPaid: 0,
+      status: "Pending" as const,
+      createdAt: now.toISOString(),
+    };
+    const unit = rentData.units.find((item) => item.id === tenancy.unitId);
+    if (!unit) {
+      toast.error("Could not start the move-in", {
+        description: "The selected unit is no longer available.",
+      });
+      return;
+    }
+
+    const pendingUnits = rentData.units.map((item) =>
+      item.id === unit.id
+        ? { ...item, pendingMoveIn: true, pendingTenant: tenancy.tenantName }
+        : item,
+    );
+    const notification: TenantNotification = {
+      id: `move-in-notification-${request.id}`,
+      unit: unit.unit,
+      kind: "rent",
+      title: "Move-in payment request",
+      message: `${formatUGX(request.amountDue)} is due to start your tenancy at ${unit.unit}. Part payments are allowed.`,
+      createdAt: now.toISOString(),
+      read: false,
+    };
+    let nextState = {
+      ...rentData,
+      units: pendingUnits,
+      tenancies: [tenancy, ...rentData.tenancies],
+      moveInRequests: [request, ...rentData.moveInRequests],
+      notifications: [notification, ...rentData.notifications],
+    };
+
+    try {
+      if (initialPayment > 0) {
+        const payment = recordMoveInPayment({
+          tenancy,
+          request,
+          amount: initialPayment,
+          units: pendingUnits,
+          rentLedger: rentData.ledger,
+          depositLedger: rentData.depositLedger,
+          receivedAt: localDateIso(now),
+          id: `move-in-payment-${Date.now()}`,
+        });
+        nextState = {
+          ...nextState,
+          units: payment.units,
+          ledger: payment.rentLedger,
+          depositLedger: payment.depositLedger,
+          tenancies: [payment.tenancy, ...rentData.tenancies],
+          moveInRequests: [payment.request, ...rentData.moveInRequests],
+        };
+        if (payment.tenancy.status === "Active" && unit.id === "u3") {
+          setTenantActive(true, unit.unit);
+        }
+      }
+    } catch (error) {
+      toast.error("The initial part payment could not be recorded", {
+        description: error instanceof Error ? error.message : "Check the payment amount and retry.",
+      });
+      return;
+    }
+
+    setRentData(nextState);
+    toast.success("Move-in payment request sent", {
+      description: `${formatUGX(request.amountDue)} for ${tenancy.tenantName} · Unit ${unit.unit}.`,
+    });
+  };
+
+  const recordMoveInPartPayment = (amount: number) => {
+    if (!openTenancy || !openMoveInRequest || !openUnit) {
+      toast.error("This move-in payment request is no longer available.");
+      return;
+    }
+    const now = new Date();
+    try {
+      const payment = recordMoveInPayment({
+        tenancy: openTenancy,
+        request: openMoveInRequest,
+        amount,
+        units: rentData.units,
+        rentLedger: rentData.ledger,
+        depositLedger: rentData.depositLedger,
+        receivedAt: localDateIso(now),
+        id: `move-in-payment-${Date.now()}`,
+      });
+      const notification: TenantNotification = {
+        id: `move-in-payment-notification-${Date.now()}`,
+        unit: openUnit.unit,
+        kind: "payment",
+        title: "Move-in payment received",
+        message: `${formatUGX(amount)} was received. ${payment.request.status === "Paid" ? "Your tenancy is active." : `${formatUGX(payment.request.amountDue - payment.request.amountPaid)} remains due.`}`,
+        createdAt: now.toISOString(),
+        read: false,
+      };
+      setRentData((current) => ({
+        ...current,
+        units: payment.units,
+        ledger: payment.rentLedger,
+        depositLedger: payment.depositLedger,
+        tenancies: current.tenancies.map((tenancy) =>
+          tenancy.id === payment.tenancy.id ? payment.tenancy : tenancy,
+        ),
+        moveInRequests: current.moveInRequests.map((request) =>
+          request.id === payment.request.id ? payment.request : request,
+        ),
+        notifications: [notification, ...current.notifications],
+      }));
+      if (payment.tenancy.status === "Active" && openUnit.id === "u3") {
+        setTenantActive(true, openUnit.unit);
+      }
+      toast.success(
+        payment.tenancy.status === "Active" ? "Tenancy is now active" : "Part payment recorded",
+        {
+          description:
+            payment.tenancy.status === "Active"
+              ? `${openTenancy.tenantName} has paid the move-in minimum.`
+              : `${formatUGX(payment.request.amountDue - payment.request.amountPaid)} remains before activation.`,
+        },
+      );
+    } catch (error) {
+      toast.error("Could not record the part payment", {
+        description: error instanceof Error ? error.message : "Check the amount and try again.",
+      });
+    }
+  };
+
+  const proposeDepositRefund = (
+    entryId: string,
+    deductions: DepositDeduction[],
+    arrears: number,
+    refundAmount: number,
+  ) => {
+    const entry = rentData.depositLedger.find((item) => item.id === entryId);
+    if (!entry || entry.status === "Refunded") {
+      toast.error("This deposit can no longer be refunded from this request.");
+      return;
+    }
+    const now = new Date();
+    const notification: TenantNotification = {
+      id: `deposit-refund-${entry.id}-${Date.now()}`,
+      unit: entry.unit,
+      kind: "update",
+      title: "Security deposit refund proposed",
+      message: `${formatUGX(refundAmount)} is proposed after ${formatUGX(arrears)} in arrears and ${formatUGX(deductions.reduce((sum, item) => sum + item.amount, 0))} in itemised deductions. You can accept or dispute.`,
+      createdAt: now.toISOString(),
+      read: false,
+    };
+    setRentData((current) => ({
+      ...current,
+      depositLedger: current.depositLedger.map((item) =>
+        item.id === entryId
+          ? {
+              ...item,
+              status: "Refund pending",
+              deductions,
+              arrearsAtRefund: arrears,
+              refundAmount,
+              refundRequestedAt: now.toISOString(),
+              resolvedAt: null,
+            }
+          : item,
+      ),
+      notifications: [notification, ...current.notifications],
+    }));
+    toast.success("Refund proposal sent to the tenant");
+  };
+
+  const recordTenantDepositDecision = (entryId: string, decision: "accept" | "dispute") => {
+    const entry = rentData.depositLedger.find((item) => item.id === entryId);
+    if (!entry || entry.status !== "Refund pending") {
+      toast.error("This refund is no longer waiting for a tenant response.");
+      return;
+    }
+    const resolvedAt = new Date().toISOString();
+    const status = decision === "accept" ? "Refunded" : "Disputed";
+    const notification: TenantNotification = {
+      id: `deposit-decision-${entry.id}-${Date.now()}`,
+      unit: entry.unit,
+      kind: "update",
+      title: decision === "accept" ? "Deposit refund accepted" : "Deposit refund disputed",
+      message:
+        decision === "accept"
+          ? `The proposed refund of ${formatUGX(entry.refundAmount ?? 0)} was accepted.`
+          : "The tenant disputed the proposed deposit deductions. Please contact them to resolve it.",
+      createdAt: resolvedAt,
+      read: false,
+    };
+    setRentData((current) => ({
+      ...current,
+      depositLedger: current.depositLedger.map((item) =>
+        item.id === entryId
+          ? { ...item, status, resolvedAt: decision === "accept" ? resolvedAt : null }
+          : item,
+      ),
+      notifications: [notification, ...current.notifications],
+    }));
   };
 
   const recordRentPayment = (id: string, monthsCovered: number) => {
@@ -290,6 +554,7 @@ function LandlordPage() {
         <Overview
           units={units}
           ledger={ledger}
+          depositLedger={rentData.depositLedger}
           requests={requests}
           reminded={reminded}
           onRemind={remind}
@@ -320,15 +585,15 @@ function LandlordPage() {
       )}
       {view === "reports" && <ReportsView units={units} ledger={ledger} />}
       {view === "advance" && (
-        <ComingSoonView
-          title="Advance rent"
-          description="Track tenants paying 2 or more months ahead and coverage running out soon."
-        />
+        <AdvanceView units={units} ledger={ledger} reminded={reminded} onRemind={remindAdvance} />
       )}
       {view === "security" && (
-        <ComingSoonView
-          title="Security deposits"
-          description="Manage held deposits, deductions and refundable balances in a separate ledger."
+        <SecurityView
+          units={units}
+          rentLedger={ledger}
+          depositLedger={rentData.depositLedger}
+          onRequestRefund={proposeDepositRefund}
+          onTenantDecision={recordTenantDepositDecision}
         />
       )}
       {view === "notices" && (
@@ -358,12 +623,15 @@ function LandlordPage() {
 
       <UnitSheet
         unit={openUnit}
+        tenancy={openTenancy}
+        moveInRequest={openMoveInRequest}
         onClose={() => setOpenUnitId(null)}
         reminded={!!openUnit && reminded.includes(openUnit.id)}
         onRemind={() => openUnit && remind(openUnit.id)}
         onRecordPayment={(monthsCovered) =>
           openUnit && recordRentPayment(openUnit.id, monthsCovered)
         }
+        onRecordMoveInPayment={recordMoveInPartPayment}
         amountForMonths={(monthsCovered) =>
           openUnit ? getUnitRentChargeForMonths(openUnit, ledger, period, monthsCovered) : 0
         }
@@ -387,6 +655,11 @@ function LandlordPage() {
                   }
                 : unit,
             ),
+            tenancies: current.tenancies.map((tenancy) =>
+              tenancy.unitId === openUnit.id && tenancy.status !== "Ended"
+                ? { ...tenancy, status: "Ended" }
+                : tenancy,
+            ),
           }));
           setTenantActive(false, openUnit.unit);
           setOpenUnitId(null);
@@ -404,34 +677,12 @@ function LandlordPage() {
           setAddOpen(true);
         }}
       />
-      <AddTenantDialog
+      <MoveInWizard
         open={addOpen}
         onOpenChange={setAddOpen}
         vacantUnits={vacant}
         presetUnitId={presetUnit}
-        onCreate={(t) => {
-          setRentData((current) => ({
-            ...current,
-            units: current.units.map((u) =>
-              u.id === t.unitId
-                ? {
-                    ...u,
-                    tenant: t.name,
-                    phone: t.phone,
-                    email: t.email,
-                    occupants: t.occupants,
-                    occupation: t.occupation,
-                    sex: t.sex,
-                    rent: t.rent,
-                    daysUntilDue: 15,
-                    paid: false,
-                    leaseEnds: "Nov 2027",
-                  }
-                : u,
-            ),
-          }));
-          if (t.unitId === "u3") setTenantActive(true, "B4");
-        }}
+        onCreate={createMoveIn}
       />
       <EvictionNoticeDialog
         unit={noticeUnit}

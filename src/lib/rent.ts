@@ -1,3 +1,6 @@
+import { MAX_ADVANCE_MONTHS_WITHOUT_AGREEMENT } from "@/lib/legal";
+import type { Unit } from "@/lib/sample-data";
+
 /** Rent status rules shared by every role. */
 export type RentStatus = "paid" | "due-soon" | "upcoming" | "overdue";
 
@@ -17,6 +20,13 @@ export const rentStatusLabel: Record<RentStatus, string> = {
   upcoming: "Upcoming",
   overdue: "Overdue",
 };
+
+export type UnitListStatus = RentStatus | "vacant" | "pending";
+
+export function getUnitListStatus(unit: Unit): UnitListStatus {
+  if (unit.pendingMoveIn) return "pending";
+  return unit.tenant ? getRentStatus(unit.daysUntilDue, unit.paid) : "vacant";
+}
 
 export function formatUGX(amount: number) {
   return `UGX ${Math.round(amount).toLocaleString("en-UG")}`;
@@ -58,8 +68,8 @@ export const networkLabel: Record<MobileNetwork, string> = {
   airtel: "Airtel Money",
 };
 
-/** Months of advance rent allowed without a written mutual agreement. */
-export const MAX_ADVANCE_MONTHS_WITHOUT_AGREEMENT = 3;
+export { MAX_ADVANCE_MONTHS_WITHOUT_AGREEMENT } from "@/lib/legal";
+
 /** Minimum days between a notice to vacate and the move-out date. */
 export const NOTICE_MIN_DAYS = 30;
 

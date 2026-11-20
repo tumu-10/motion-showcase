@@ -201,6 +201,8 @@ export type Unit = {
   occupation?: string | undefined;
   sex?: string | undefined;
   block?: string | undefined;
+  pendingMoveIn?: boolean | undefined;
+  pendingTenant?: string | undefined;
 };
 
 export const properties = ["Kololo Heights", "Ntinda Court", "Kira Gardens"] as const;

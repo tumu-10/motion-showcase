@@ -74,24 +74,36 @@ function TenantPage() {
               Everything a tenant needs, within three taps.
             </h1>
             <p className="mt-4 max-w-sm text-muted-foreground">
-              Designed for phones first. On a phone, this view fills the screen.
+              Designed for phones first, with a modern phone frame on larger screens.
             </p>
           </Reveal>
         </aside>
 
         <motion.div
-          className="relative flex h-dvh w-full flex-col overflow-hidden bg-foreground lg:h-[min(860px,calc(100dvh-5rem))] lg:w-[400px] lg:rounded-[3rem] lg:border-[10px] lg:border-foreground lg:shadow-device"
+          className="relative flex h-dvh w-full flex-col overflow-hidden bg-foreground lg:h-[min(860px,calc(100dvh-5rem))] lg:w-[min(400px,calc(46dvh-2.3rem))] lg:rounded-[3rem] lg:border-[8px] lg:border-[#1b2b30] lg:shadow-device lg:ring-1 lg:ring-inset lg:ring-white/10"
           initial={{ opacity: 0, y: 40 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.9, ease: ease.outExpo, delay: 0.25 }}
         >
+          <span
+            className="pointer-events-none absolute left-0 top-[24%] z-10 hidden h-10 w-[5px] rounded-l-sm bg-[#526166] shadow-[inset_1px_0_1px_#aab4b6] lg:block"
+            aria-hidden="true"
+          />
+          <span
+            className="pointer-events-none absolute left-0 top-[32%] z-10 hidden h-8 w-[5px] rounded-l-sm bg-[#526166] shadow-[inset_1px_0_1px_#aab4b6] lg:block"
+            aria-hidden="true"
+          />
+          <span
+            className="pointer-events-none absolute right-0 top-[28%] z-10 hidden h-14 w-[5px] rounded-r-sm bg-[#526166] shadow-[inset_-1px_0_1px_#aab4b6] lg:block"
+            aria-hidden="true"
+          />
           <div
-            className="hidden h-7 shrink-0 items-center justify-center bg-foreground lg:flex"
+            className="hidden h-8 shrink-0 items-center justify-center bg-foreground lg:flex"
             aria-hidden="true"
           >
-            <div className="flex h-[18px] w-[5.25rem] items-center justify-end gap-2 rounded-full bg-[#07090c] px-2">
+            <div className="flex h-6 w-28 items-center justify-center gap-2 rounded-full bg-[#07090c] px-3 shadow-[inset_0_1px_2px_#000]">
               <span className="h-1 w-7 rounded-full bg-[#252b31]" />
-              <span className="size-2 rounded-full bg-[#263849] shadow-[inset_0_0_0_1px_#101318]" />
+              <span className="size-2 rounded-full bg-[#263849] shadow-[inset_0_0_0_1px_#101318,0_0_4px_#17354c]" />
             </div>
           </div>
           <div className="flex h-12 shrink-0 items-center justify-between gap-3 bg-primary-deep px-4 lg:hidden">
@@ -116,7 +128,7 @@ function TenantPage() {
               </TransitionLink>
             </div>
           </div>
-          <div className="min-h-0 flex-1 overflow-hidden lg:rounded-[2.1rem]">
+          <div className="min-h-0 flex-1 overflow-hidden lg:rounded-[2.45rem]">
             <TenantApp onTaskDone={onTaskDone} />
           </div>
         </motion.div>

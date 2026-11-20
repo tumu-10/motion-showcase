@@ -1,7 +1,9 @@
 import { Bell, Banknote, Check, DoorOpen, FileText, Loader2, Phone } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pill, RentStatusPill } from "@/components/shared/StatusPill";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,26 +28,32 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { formatUGX } from "@/lib/rent";
+import { formatUGX, getUnitListStatus } from "@/lib/rent";
 import type { Unit } from "@/lib/sample-data";
-import { unitStatus } from "@/components/landlord/UnitsView";
+import type { MoveInPaymentRequest, Tenancy } from "@/lib/tenancy";
 
 export function UnitSheet({
   unit,
+  tenancy,
+  moveInRequest,
   onClose,
   reminded,
   onRemind,
   onRecordPayment,
+  onRecordMoveInPayment,
   amountForMonths,
   onAddTenant,
   onMoveOut,
   onEvictionNotice,
 }: {
   unit: Unit | null;
+  tenancy: Tenancy | null;
+  moveInRequest: MoveInPaymentRequest | null;
   onClose: () => void;
   reminded: boolean;
   onRemind: () => void;
   onRecordPayment: (monthsCovered: number) => void;
+  onRecordMoveInPayment: (amount: number) => void;
   amountForMonths: (monthsCovered: number) => number;
   onAddTenant: () => void;
   onMoveOut: () => void;
@@ -53,8 +61,19 @@ export function UnitSheet({
 }) {
   const [saving, setSaving] = useState(false);
   const [monthsCovered, setMonthsCovered] = useState("1");
+  const [moveInPaymentAmount, setMoveInPaymentAmount] = useState("");
   const [confirmMoveOut, setConfirmMoveOut] = useState(false);
-  const st = unit ? unitStatus(unit) : "vacant";
+  const st = unit ? getUnitListStatus(unit) : "vacant";
+  const pendingTenancy = tenancy?.status === "Pending move-in" ? tenancy : null;
+  const moveInBalance = moveInRequest
+    ? Math.max(0, moveInRequest.amountDue - moveInRequest.amountPaid)
+    : 0;
+  const moveInPayment = Number(moveInPaymentAmount.replace(/[^\d]/g, ""));
+
+  useEffect(() => {
+    if (moveInRequest) setMoveInPaymentAmount(String(moveInBalance));
+  }, [moveInRequest, moveInBalance]);
+
   return (
     <Sheet open={!!unit} onOpenChange={(o) => !o && onClose()}>
       <SheetContent
@@ -68,7 +87,9 @@ export function UnitSheet({
               <SheetTitle className="text-2xl">Unit {unit.unit}</SheetTitle>
               <SheetDescription className="sr-only">Unit details and actions</SheetDescription>
               <div className="pt-2">
-                {st === "vacant" ? (
+                {st === "pending" ? (
+                  <Pill tone="info" label="Pending move-in" />
+                ) : st === "vacant" ? (
                   <Pill tone="neutral" label="Vacant" />
                 ) : (
                   <RentStatusPill status={st} />
@@ -78,13 +99,24 @@ export function UnitSheet({
             <div className="flex-1 space-y-6 overflow-y-auto p-6">
               <dl className="divide-y divide-border rounded-lg border border-border bg-card text-sm">
                 {[
-                  ["Tenant", unit.tenant ?? "No tenant"],
-                  ["Phone", unit.phone || "-"],
-                  ["Email", unit.email || "-"],
+                  ["Tenant", pendingTenancy?.tenantName ?? unit.tenant ?? "No tenant"],
+                  ["Phone", pendingTenancy?.phone ?? (unit.phone || "-")],
+                  ["Email", pendingTenancy?.email ?? (unit.email || "-")],
                   ["Occupants", unit.tenant ? String(unit.occupants ?? "-") : "-"],
                   ["Occupation", unit.occupation || "-"],
                   ["Sex", unit.sex || "-"],
-                  ["Monthly rent", formatUGX(unit.rent)],
+                  ["Monthly rent", formatUGX(pendingTenancy?.monthlyRent ?? unit.rent)],
+                  ...(pendingTenancy
+                    ? [
+                        ["Start date", pendingTenancy.startDate],
+                        ["Move-in", pendingTenancy.status],
+                        ["Agreement file", pendingTenancy.agreementFile ?? "Not attached"],
+                        [
+                          "Tenant ID",
+                          `${pendingTenancy.tenantIdType} · ${pendingTenancy.tenantIdNumber}`,
+                        ],
+                      ]
+                    : []),
                   ["Lease ends", unit.leaseEnds],
                   [
                     "This month",
@@ -103,7 +135,43 @@ export function UnitSheet({
                   </div>
                 ))}
               </dl>
-              {unit.tenant ? (
+              {pendingTenancy ? (
+                <section className="space-y-4 rounded-xl border border-warning/40 bg-warning-soft p-4">
+                  <div>
+                    <p className="font-semibold">Move-in payment request</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {formatUGX(moveInRequest?.amountPaid ?? 0)} paid of{" "}
+                      {formatUGX(moveInRequest?.amountDue ?? 0)}. The tenancy activates when the
+                      full move-in minimum is received.
+                    </p>
+                  </div>
+                  <div>
+                    <Label htmlFor="move-in-part-payment">Record a part payment (UGX)</Label>
+                    <Input
+                      id="move-in-part-payment"
+                      inputMode="numeric"
+                      className="figure mt-2"
+                      value={moveInPaymentAmount}
+                      onChange={(event) =>
+                        setMoveInPaymentAmount(event.target.value.replace(/[^\d]/g, ""))
+                      }
+                      max={moveInBalance}
+                    />
+                  </div>
+                  <Button
+                    className="w-full"
+                    disabled={
+                      !moveInRequest ||
+                      !Number.isFinite(moveInPayment) ||
+                      moveInPayment <= 0 ||
+                      moveInPayment > moveInBalance
+                    }
+                    onClick={() => onRecordMoveInPayment(moveInPayment)}
+                  >
+                    <Banknote /> Record {formatUGX(moveInPayment || 0)}
+                  </Button>
+                </section>
+              ) : unit.tenant ? (
                 <div className="space-y-2">
                   <Select value={monthsCovered} onValueChange={setMonthsCovered}>
                     <SelectTrigger aria-label="Rent months to record" className="h-12 bg-card">

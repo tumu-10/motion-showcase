@@ -12,23 +12,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { formatUGX, getRentStatus, type RentStatus } from "@/lib/rent";
+import { formatUGX, getUnitListStatus, type UnitListStatus } from "@/lib/rent";
 import { ease } from "@/lib/motion";
 import { properties, type Unit } from "@/lib/sample-data";
 import { cn } from "@/lib/utils";
 
-type Filter = "all" | RentStatus | "vacant";
+type Filter = "all" | UnitListStatus;
 const filters: { id: Filter; label: string }[] = [
   { id: "all", label: "All" },
   { id: "paid", label: "Paid" },
   { id: "due-soon", label: "Due soon" },
   { id: "overdue", label: "Overdue" },
+  { id: "pending", label: "Pending move-in" },
   { id: "vacant", label: "Vacant" },
 ];
-
-export function unitStatus(u: Unit): RentStatus | "vacant" {
-  return u.tenant ? getRentStatus(u.daysUntilDue, u.paid) : "vacant";
-}
 
 export function UnitsView({
   units,
@@ -48,12 +45,15 @@ export function UnitsView({
   const scoped = units.filter((u) => property === "all" || u.property === property);
   const counts = useMemo(() => {
     const c: Record<string, number> = { all: scoped.length };
-    for (const u of scoped) c[unitStatus(u)] = (c[unitStatus(u)] ?? 0) + 1;
+    for (const u of scoped) {
+      const status = getUnitListStatus(u);
+      c[status] = (c[status] ?? 0) + 1;
+    }
     return c;
   }, [scoped]);
 
   const rows = scoped.filter((u) => {
-    if (filter !== "all" && unitStatus(u) !== filter) return false;
+    if (filter !== "all" && getUnitListStatus(u) !== filter) return false;
     const term = q.trim().toLowerCase();
     if (!term) return true;
     return [u.unit, u.tenant ?? "", u.property].some((v) => v.toLowerCase().includes(term));
@@ -162,7 +162,7 @@ export function UnitsView({
           <ul className="divide-y divide-border">
             <AnimatePresence initial={false}>
               {rows.map((u, i) => {
-                const st = unitStatus(u);
+                const st = getUnitListStatus(u);
                 return (
                   <motion.li
                     key={u.id}
@@ -192,7 +192,8 @@ export function UnitsView({
                           !u.tenant && "text-muted-foreground",
                         )}
                       >
-                        {u.tenant ?? "No tenant"}
+                        {u.tenant ??
+                          (u.pendingTenant ? `${u.pendingTenant} · pending move-in` : "No tenant")}
                       </span>
                       <span className="figure hidden text-right font-semibold md:block">
                         {formatUGX(u.rent)}
@@ -209,7 +210,9 @@ export function UnitsView({
                                 : `In ${u.daysUntilDue} days`}
                       </span>
                       <span className="justify-self-end md:justify-self-start">
-                        {st === "vacant" ? (
+                        {st === "pending" ? (
+                          <Pill tone="info" label="Pending move-in" />
+                        ) : st === "vacant" ? (
                           <Pill tone="neutral" label="Vacant" />
                         ) : (
                           <RentStatusPill status={st} />
