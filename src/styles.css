@@ -235,6 +235,68 @@
   }
 }
 
+.spotlight-card {
+  --spot-x: 50%;
+  --spot-y: 50%;
+  position: relative;
+  isolation: isolate;
+  transition:
+    transform 220ms var(--ease-out-expo),
+    box-shadow 220ms var(--ease-out-expo);
+}
+.spotlight-card::before {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(
+    240px circle at var(--spot-x) var(--spot-y),
+    oklch(0.54 0.105 210 / 0.14),
+    transparent 72%
+  );
+  content: "";
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 220ms ease;
+}
+.spotlight-card:hover,
+.spotlight-card:focus-within {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lift);
+}
+.spotlight-card:hover::before,
+.spotlight-card:focus-within::before {
+  opacity: 1;
+}
+.spotlight-card-dark::before {
+  background: radial-gradient(
+    240px circle at var(--spot-x) var(--spot-y),
+    rgb(255 255 255 / 0.2),
+    transparent 72%
+  );
+}
+.spotlight-card__image {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+.spotlight-card__scrim {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  background: linear-gradient(115deg, rgb(9 28 36 / 0.88), rgb(9 28 36 / 0.62));
+  pointer-events: none;
+}
+.spotlight-card__content {
+  position: relative;
+  z-index: 3;
+  height: 100%;
+}
+
 /* Subtle paper texture for deep green sections */
 @utility deep-panel {
   background-color: var(--primary-deep);
@@ -273,5 +335,11 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+
+  .spotlight-card:hover,
+  .spotlight-card:focus-within {
+    transform: none;
+    box-shadow: var(--shadow-soft);
   }
 }

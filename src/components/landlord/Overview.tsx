@@ -22,7 +22,9 @@ import {
   YAxis,
 } from "recharts";
 import { CountUp } from "@/components/shared/CountUp";
+import { Reveal } from "@/components/motion/Reveal";
 import { PageHeading } from "@/components/shared/DashShell";
+import { SpotlightCard } from "@/components/shared/SpotlightCard";
 import { Pill, SampleTag } from "@/components/shared/StatusPill";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -43,6 +45,8 @@ import {
 } from "@/lib/sample-data";
 import type { DepositLedgerEntry } from "@/lib/tenancy";
 import { cn } from "@/lib/utils";
+import heroKampala from "@/assets/hero-kampala.jpg";
+import listingHome from "@/assets/listing-1.jpg";
 
 export function Overview({
   units,
@@ -535,52 +539,77 @@ function OverviewMetric({
 }) {
   const styles = {
     collected: {
-      card: "border-transparent bg-[#dbeafe]",
-      icon: "bg-white/70 text-[#1d4ed8]",
-      number: "text-[#1d4ed8]",
+      card: "border-transparent text-on-deep",
+      icon: "bg-white/15 text-on-deep",
+      number: "text-on-deep",
+      image: heroKampala,
     },
     expected: {
-      card: "border-transparent bg-[#e0e7ff]",
-      icon: "bg-white/70 text-[#4338ca]",
-      number: "text-[#4338ca]",
+      card: "border-transparent bg-accent-soft",
+      icon: "bg-white/70 text-primary-deep",
+      number: "text-primary-deep",
+      image: undefined,
     },
     deposits: {
-      card: "border-transparent bg-[#ede9fe]",
-      icon: "bg-white/70 text-[#6d28d9]",
-      number: "text-[#6d28d9]",
+      card: "border-transparent text-on-deep",
+      icon: "bg-white/15 text-on-deep",
+      number: "text-on-deep",
+      image: listingHome,
     },
   }[tone];
 
   return (
-    <TooltipProvider delayDuration={250}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <article
-            className={cn(
-              "rounded-lg p-4 shadow-soft transition-transform duration-200 hover:-translate-y-0.5",
-              styles.card,
-            )}
-          >
-            <div className="flex items-start gap-3">
-              <span
-                className={cn("grid size-11 shrink-0 place-items-center rounded-full", styles.icon)}
-              >
-                <Icon className="size-5" strokeWidth={1.8} aria-hidden />
-              </span>
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-foreground">{label}</p>
-                <p className={cn("figure mt-1 truncate text-xl font-bold", styles.number)}>
-                  <CountUp value={value} format={(n) => formatUGX(n)} />
-                </p>
+    <Reveal>
+      <TooltipProvider delayDuration={250}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <SpotlightCard
+              image={styles.image}
+              dark={!!styles.image}
+              className={cn(
+                "border p-4 shadow-soft",
+                styles.image ? "rounded-2xl" : "rounded-lg",
+                styles.card,
+              )}
+            >
+              <div className="flex items-start gap-3">
+                <span
+                  className={cn(
+                    "grid size-11 shrink-0 place-items-center rounded-full",
+                    styles.icon,
+                  )}
+                >
+                  <Icon className="size-5" strokeWidth={1.8} aria-hidden />
+                </span>
+                <div className="min-w-0">
+                  <p
+                    className={cn(
+                      "text-sm font-semibold",
+                      styles.image ? "text-on-deep" : "text-foreground",
+                    )}
+                  >
+                    {label}
+                  </p>
+                  <p className={cn("figure mt-1 truncate text-xl font-bold", styles.number)}>
+                    <CountUp value={value} format={(n) => formatUGX(n)} />
+                  </p>
+                </div>
               </div>
-            </div>
-            <p className="mt-3 text-xs font-medium text-foreground/75">{explanation}</p>
-          </article>
-        </TooltipTrigger>
-        <TooltipContent side="top" className="max-w-72 bg-primary-deep text-on-deep">
-          {tooltip}
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+              <p
+                className={cn(
+                  "mt-3 text-xs font-medium",
+                  styles.image ? "text-on-deep-muted" : "text-foreground/75",
+                )}
+              >
+                {explanation}
+              </p>
+            </SpotlightCard>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-72 bg-primary-deep text-on-deep">
+            {tooltip}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    </Reveal>
   );
 }

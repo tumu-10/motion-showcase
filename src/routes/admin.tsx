@@ -16,9 +16,13 @@ import {
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import heroKampala from "@/assets/hero-kampala.jpg";
+import listingHomes from "@/assets/listing-2.jpg";
 import { CountUp } from "@/components/shared/CountUp";
 import { CreateLandlordDialog } from "@/components/admin/CreateLandlordDialog";
+import { Reveal } from "@/components/motion/Reveal";
 import { DashShell, PageHeading, type NavItem } from "@/components/shared/DashShell";
+import { SpotlightCard } from "@/components/shared/SpotlightCard";
 import { Pill, SampleTag, type Tone } from "@/components/shared/StatusPill";
 import {
   AlertDialog,
@@ -355,52 +359,72 @@ function AdminOverview({
     (total, landlord) => total + (landlord.subscriptionPaidAmount ?? 0),
     0,
   );
-  const metrics = [
+  const metrics: {
+    label: string;
+    value: number;
+    sub: string;
+    format?: boolean;
+    image?: string;
+    surface?: string;
+  }[] = [
     {
       label: "Landlord accounts",
       value: landlords.length,
       sub: `${landlords.filter((l) => l.verification === "Verified").length} verified`,
+      surface: "bg-primary-soft",
     },
     {
       label: "Rental spaces on platform",
       value: totalUnits,
       sub: `Across ${landlords.reduce((s, l) => s + l.properties, 0)} properties`,
+      image: listingHomes,
     },
-    { label: "Active tenants", value: totalTenants, sub: "Across registered portfolios" },
+    {
+      label: "Active tenants",
+      value: totalTenants,
+      sub: "Across registered portfolios",
+      surface: "bg-accent-soft",
+    },
     {
       label: "Subscription run rate / month",
       value: totalTenants * SUBSCRIPTION_RATE_PER_TENANT_MONTH,
       sub: `${formatUGX(SUBSCRIPTION_RATE_PER_TENANT_MONTH)} per tenant`,
       format: true,
+      surface: "bg-secondary",
     },
     {
       label: "Subscriptions paid",
       value: totalSubscriptionPaid,
       sub: "Total payments recorded",
       format: true,
+      surface: "bg-success-soft",
     },
     {
       label: "Cash received this month",
       value: totalCollected,
       sub: formatUGX(totalCollected),
       format: true,
+      image: heroKampala,
     },
     {
       label: "Rent expected after advances",
       value: rentSummary.expectedAfterAdvances,
       sub: `${rentSummary.advanceTenants} tenants paying ahead · demo portfolio`,
       format: true,
+      surface: "bg-primary-soft",
     },
     {
       label: "Rent already covered",
       value: rentSummary.advanceCovered,
       sub: `${formatUGX(rentSummary.advanceCovered)} covered by advance rent`,
       format: true,
+      image: listingHomes,
     },
     {
       label: "Unmatched payments",
       value: txns.length,
       sub: txns.length ? formatUGX(txns.reduce((s, t) => s + t.amount, 0)) : "All matched",
+      surface: "bg-warning-soft",
     },
   ];
   return (
@@ -412,24 +436,47 @@ function AdminOverview({
         Private operations view · illustrative demo figures. Real tenant and collection data
         requires server-side administrator access controls.
       </p>
-      <section className="grid gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {metrics.map((m, i) => (
-          <motion.div
-            key={m.label}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.08 * i, duration: 0.5, ease: ease.outExpo }}
-            className="bg-card p-6"
-          >
-            <p className="text-sm font-semibold text-muted-foreground">{m.label}</p>
-            <p className="figure mt-2 text-3xl font-bold text-primary-deep">
-              <CountUp
-                value={m.value}
-                {...(m.format ? { format: (value: number) => formatUGX(value) } : {})}
-              />
-            </p>
-            <p className="mt-1 text-sm text-muted-foreground">{m.sub}</p>
-          </motion.div>
+          <Reveal key={m.label} delay={0.08 * i} className="min-h-32">
+            <SpotlightCard
+              image={m.image}
+              dark={!!m.image}
+              className={cn(
+                "h-full border p-6 shadow-soft",
+                m.image ? "rounded-2xl border-border bg-card" : "rounded-xl",
+                m.surface,
+              )}
+            >
+              <p
+                className={cn(
+                  "text-sm font-semibold",
+                  m.image ? "text-on-deep-muted" : "text-muted-foreground",
+                )}
+              >
+                {m.label}
+              </p>
+              <p
+                className={cn(
+                  "figure mt-2 text-3xl font-bold",
+                  m.image ? "text-on-deep" : "text-primary-deep",
+                )}
+              >
+                <CountUp
+                  value={m.value}
+                  {...(m.format ? { format: (value: number) => formatUGX(value) } : {})}
+                />
+              </p>
+              <p
+                className={cn(
+                  "mt-1 text-sm",
+                  m.image ? "text-on-deep-muted" : "text-muted-foreground",
+                )}
+              >
+                {m.sub}
+              </p>
+            </SpotlightCard>
+          </Reveal>
         ))}
       </section>
 
