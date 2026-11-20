@@ -21,6 +21,7 @@ import {
   type MobileNetwork,
 } from "@/lib/rent";
 import type { LandlordPaymentDetails } from "@/lib/sample-data";
+import { makePaymentReference, needsAdvanceAgreement } from "@/lib/rent";
 import { formatRentPeriodRange } from "@/lib/rent-accounting";
 import { ease } from "@/lib/motion";
 import { cn } from "@/lib/utils";
@@ -71,6 +72,8 @@ export function PayFlow({
   const [errors, setErrors] = useState<{ amount?: string | undefined; phone?: string | undefined }>(
     {},
   );
+  const [agreed, setAgreed] = useState(false);
+  const needsAgreement = amountMode === "full" && needsAdvanceAgreement(Number(monthsCovered));
   const [result, setResult] = useState<PaymentResult | null>(null);
 
   const amount =
@@ -116,6 +119,8 @@ export function PayFlow({
       next.phone = "This number is not an MTN or Airtel line.";
     else if (method === "mobile" && detected && detected !== network)
       next.phone = `This is an ${detected === "mtn" ? "MTN" : "Airtel"} number. Switch to ${networkLabel[detected]} or use another number.`;
+    if (needsAgreement && !agreed)
+      next.amount = "Paying more than 3 months ahead needs a written agreement with your landlord.";
     setErrors(next);
     if (Object.keys(next).length) return;
     const paymentResult: PaymentResult = {
@@ -132,7 +137,7 @@ export function PayFlow({
             ? "Bank transfer"
             : "Visa",
       phone: local ?? "",
-      reference: `PTZ-${Math.floor(49200 + Math.random() * 700)}`,
+      reference: makePaymentReference(),
       pending: method === "bank",
     };
     setResult(paymentResult);
@@ -206,6 +211,15 @@ export function PayFlow({
                       ))}
                     </SelectContent>
                   </Select>
+                  {needsAgreement && (
+                    <label className="mt-3 flex items-start gap-3 rounded-xl bg-warning-soft p-3 text-sm text-warning-ink">
+                      <Checkbox checked={agreed} onCheckedChange={(v) => setAgreed(v === true)} className="mt-0.5" />
+                      <span>I have a written agreement with my landlord to pay more than 3 months ahead.</span>
+                    </label>
+                  )}
+                  {errors.amount && needsAgreement && (
+                    <p className="mt-2 text-sm text-destructive">{errors.amount}</p>
+                  )}
                 </div>
               )}
               <AnimatePresence initial={false}>

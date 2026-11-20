@@ -57,3 +57,32 @@ export const networkLabel: Record<MobileNetwork, string> = {
   mtn: "MTN Mobile Money",
   airtel: "Airtel Money",
 };
+
+/** Months of advance rent allowed without a written mutual agreement. */
+export const MAX_ADVANCE_MONTHS_WITHOUT_AGREEMENT = 3;
+/** Minimum days between a notice to vacate and the move-out date. */
+export const NOTICE_MIN_DAYS = 30;
+
+export function needsAdvanceAgreement(months: number): boolean {
+  return months > MAX_ADVANCE_MONTHS_WITHOUT_AGREEMENT;
+}
+
+/** Returns an error message, or null when the notice can be issued. */
+export function validateNotice(issuedOn: string, vacateBy: string, reason: string): string | null {
+  if (!reason.trim()) return "Add the reason for the notice.";
+  const start = Date.parse(issuedOn);
+  const end = Date.parse(vacateBy);
+  if (Number.isNaN(start) || Number.isNaN(end)) return "Choose both dates.";
+  const days = Math.round((end - start) / 86_400_000);
+  if (days < NOTICE_MIN_DAYS)
+    return `The move-out date must be at least ${NOTICE_MIN_DAYS} days after the notice date.`;
+  return null;
+}
+
+/** Collision-resistant payment reference, e.g. PTZ-8F3K2Q9A. */
+export function makePaymentReference(): string {
+  const bytes = new Uint8Array(6);
+  crypto.getRandomValues(bytes);
+  const alphabet = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+  return `PTZ-${Array.from(bytes, (b) => alphabet[b % alphabet.length]).join("")}${Date.now().toString(36).slice(-2).toUpperCase()}`;
+}

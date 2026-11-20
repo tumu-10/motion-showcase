@@ -14,7 +14,7 @@ import { CountUp } from "@/components/shared/CountUp";
 import { PageHeading } from "@/components/shared/DashShell";
 import { Pill, SampleTag } from "@/components/shared/StatusPill";
 import { Button } from "@/components/ui/button";
-import { formatCompactUGX, formatUGX } from "@/lib/rent";
+import { DUE_SOON_DAYS, formatCompactUGX, formatUGX } from "@/lib/rent";
 import { ease } from "@/lib/motion";
 import { currentRentPeriod, getUnitRentStatus, summarizeRentPeriod } from "@/lib/rent-accounting";
 import {
@@ -57,10 +57,10 @@ export function Overview({
     paid: occupied.filter((u) => statusFor(u) === "Paid"),
     advance: occupied.filter((u) => statusFor(u) === "Advance"),
     "due-soon": occupied.filter(
-      (u) => ["Due", "Partially paid"].includes(statusFor(u)) && u.daysUntilDue <= 5,
+      (u) => ["Due", "Partially paid"].includes(statusFor(u)) && u.daysUntilDue <= DUE_SOON_DAYS,
     ),
     upcoming: occupied.filter(
-      (u) => ["Due", "Partially paid"].includes(statusFor(u)) && u.daysUntilDue > 5,
+      (u) => ["Due", "Partially paid"].includes(statusFor(u)) && u.daysUntilDue > DUE_SOON_DAYS,
     ),
     overdue: occupied.filter((u) => statusFor(u) === "Overdue"),
   };

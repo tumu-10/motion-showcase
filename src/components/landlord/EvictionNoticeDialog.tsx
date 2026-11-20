@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { printPdf } from "@/lib/documents";
+import { NOTICE_MIN_DAYS, validateNotice } from "@/lib/rent";
 import type { Unit } from "@/lib/sample-data";
 import type { EvictionNotice } from "@/lib/tenant-demo";
 
@@ -41,6 +42,7 @@ export function EvictionNoticeDialog({
     vacateBy,
     reason: reason.trim(),
   };
+  const noticeError = validateNotice(issuedOn, vacateBy, reason);
   const rows: [string, string][] = [
     ["Tenant", notice.tenant],
     ["Property and unit", `${notice.property} · ${notice.unit}`],
@@ -97,6 +99,9 @@ export function EvictionNoticeDialog({
             />
           </div>
 
+          <p className={noticeError ? "text-sm font-medium text-destructive" : "text-sm text-muted-foreground"}>
+            {noticeError ?? `Meets the ${NOTICE_MIN_DAYS}-day minimum.`} Guidance only. Confirm with an advocate.
+          </p>
           <div className="rounded-xl border border-warning/25 bg-warning-soft p-4 text-sm leading-relaxed text-warning-ink">
             This demo prepares the notice and opens your email or WhatsApp app. Attach the saved PDF
             yourself; messages are not delivered by Propatiz.
@@ -105,6 +110,7 @@ export function EvictionNoticeDialog({
             <Button
               className="min-h-12 w-full bg-card"
               variant="outline"
+              disabled={!!noticeError}
               onClick={() => {
                 try {
                   printPdf("Notice to vacate", rows, message);
@@ -121,6 +127,7 @@ export function EvictionNoticeDialog({
             <Button
               className="min-h-12 w-full bg-card"
               variant="outline"
+              disabled={!!noticeError}
               onClick={() => {
                 onSendToApp(notice);
                 toast.success("Notice added to the tenant app");
@@ -131,7 +138,7 @@ export function EvictionNoticeDialog({
             <Button
               className="min-h-12 w-full bg-card"
               variant="outline"
-              disabled={!notice.email}
+              disabled={!notice.email || !!noticeError}
               onClick={() => {
                 if (!notice.email) return;
                 window.location.href = `mailto:${encodeURIComponent(notice.email)}?subject=${encodeURIComponent("Notice to vacate")}&body=${encodeURIComponent(message)}`;
@@ -142,7 +149,7 @@ export function EvictionNoticeDialog({
             <Button
               className="min-h-12 w-full bg-card"
               variant="outline"
-              disabled={!whatsappPhone}
+              disabled={!whatsappPhone || !!noticeError}
               onClick={() =>
                 window.open(
                   `https://wa.me/${whatsappPhone}?text=${encodeURIComponent(message)}`,
