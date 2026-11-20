@@ -1,12 +1,11 @@
 import { motion } from "motion/react";
-import logoMark from "@/assets/propatiz-mark.png.asset.json";
 import { cn } from "@/lib/utils";
 
 type LogoMarkProps = { className?: string; animate?: boolean; delay?: number };
 
 export function LogoMark({ className, animate = false, delay = 0 }: LogoMarkProps) {
   const image = (
-    <img src={logoMark.url} alt="" className="size-full object-cover" draggable={false} />
+    <img src="/favicon.png" alt="" className="size-full object-cover" draggable={false} />
   );
 
   if (!animate) {

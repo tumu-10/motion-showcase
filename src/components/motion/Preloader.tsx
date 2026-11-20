@@ -1,6 +1,5 @@
 import { animate, motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
-import logo from "@/assets/propatiz-logo.jpg.asset.json";
 import { ease, PRELOADER_MS, setRevealAt } from "@/lib/motion";
 
 /** Full-screen brand loader shown once per full page load. */
@@ -57,7 +56,7 @@ export function Preloader() {
           transition={{ duration: 1, delay: 0.15, ease: ease.outExpo }}
         >
           <img
-            src={logo.url}
+            src="/favicon.png"
             alt="Propatiz — Buy and rent now"
             className="size-40 object-cover sm:size-48"
             draggable={false}
