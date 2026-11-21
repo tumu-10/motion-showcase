@@ -1,4 +1,4 @@
-import { MoreHorizontal, type LucideIcon } from "lucide-react";
+import { BellRing, MoreHorizontal, type LucideIcon } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useState, type ReactNode } from "react";
 import { Logo } from "@/components/brand/Logo";
@@ -23,6 +23,8 @@ export function DashShell<T extends string>({
   nav,
   view,
   onView,
+  notificationCount = 0,
+  onOpenNotifications,
   account,
   children,
 }: {
@@ -30,6 +32,8 @@ export function DashShell<T extends string>({
   nav: NavItem<T>[];
   view: T;
   onView: (v: T) => void;
+  notificationCount?: number;
+  onOpenNotifications?: () => void;
   account: { name: string; role: string };
   children: ReactNode;
 }) {
@@ -132,6 +136,9 @@ export function DashShell<T extends string>({
         <OfflineBanner />
         <div className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-background px-4 lg:hidden">
           <Logo />
+          {onOpenNotifications && (
+            <NotificationBell count={notificationCount} onClick={onOpenNotifications} />
+          )}
         </div>
         <Sheet open={open} onOpenChange={setOpen}>
           <SheetContent
@@ -217,6 +224,12 @@ export function DashShell<T extends string>({
             </div>
           </SheetContent>
         </Sheet>
+
+        {onOpenNotifications && (
+          <div className="sticky top-0 z-30 hidden h-14 justify-end border-b border-border bg-background px-8 lg:flex">
+            <NotificationBell count={notificationCount} onClick={onOpenNotifications} />
+          </div>
+        )}
 
         {bottomNav.length > 0 && (
           <nav
@@ -377,6 +390,25 @@ export function DashShell<T extends string>({
         </main>
       </div>
     </div>
+  );
+}
+
+function NotificationBell({ count, onClick }: { count: number; onClick: () => void }) {
+  const label = count > 0 ? `Notifications, ${count} unread` : "Notifications";
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      className="relative grid size-11 shrink-0 place-items-center rounded-full text-primary-deep transition-colors hover:bg-primary-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+    >
+      <BellRing className="size-5" aria-hidden />
+      {count > 0 && (
+        <span className="figure absolute right-0 top-0 grid h-5 min-w-5 place-items-center rounded-full bg-destructive px-1 text-[0.625rem] font-bold leading-none text-destructive-foreground">
+          {count > 99 ? "99+" : count}
+        </span>
+      )}
+    </button>
   );
 }
 

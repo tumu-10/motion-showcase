@@ -57,12 +57,14 @@ export function MoveInWizard({
   onOpenChange,
   vacantUnits,
   presetUnitId,
+  defaultRentDueDay,
   onCreate,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   vacantUnits: Unit[];
   presetUnitId?: string;
+  defaultRentDueDay: number;
   onCreate: (tenancy: MoveInSubmission) => void;
 }) {
   const [step, setStep] = useState(0);
@@ -103,7 +105,7 @@ export function MoveInWizard({
     setAgreementFile(null);
     setMonthlyRent(unit ? unit.rent.toLocaleString("en-UG") : "");
     setStartDate(new Date().toISOString().slice(0, 10));
-    setDueDay("1");
+    setDueDay(String(defaultRentDueDay));
     setAdvanceMonths(String(DEFAULT_ADVANCE_MONTHS));
     setDepositMonths(String(DEFAULT_DEPOSIT_MONTHS));
     setAdvanceAgreedByBoth(false);
@@ -112,7 +114,7 @@ export function MoveInWizard({
     setInitialPayment("0");
     setErrors({});
     setSaving(false);
-  }, [open, presetUnitId, vacantUnits]);
+  }, [defaultRentDueDay, open, presetUnitId, vacantUnits]);
 
   useEffect(() => {
     contentRef.current?.scrollTo({ top: 0, behavior: "smooth" });

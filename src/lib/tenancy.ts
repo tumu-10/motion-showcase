@@ -232,6 +232,7 @@ export function recordMoveInPayment({
                 phone: tenancy.phone,
                 email: tenancy.email || undefined,
                 rent: tenancy.monthlyRent,
+                dueDay: tenancy.dueDay,
                 paid: true,
                 leaseEnds: new Intl.DateTimeFormat("en-UG", {
                   month: "short",
@@ -243,6 +244,7 @@ export function recordMoveInPayment({
                 ),
                 pendingMoveIn: false,
                 pendingTenant: undefined,
+                vacantSince: undefined,
               }
             : item,
         )

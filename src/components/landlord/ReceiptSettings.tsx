@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { saveLandlordDemoSettings } from "@/lib/demo-settings";
 import {
   defaultReceiptBranding,
   getReceiptBranding,
@@ -13,10 +14,21 @@ import {
   type ReceiptBranding,
 } from "@/lib/receipt-branding";
 
-export function ReceiptSettings() {
+export function ReceiptSettings({
+  defaultRentDueDay,
+  onDefaultRentDueDayChange,
+}: {
+  defaultRentDueDay: number;
+  onDefaultRentDueDayChange: (day: number) => void;
+}) {
   const [branding, setBranding] = useState<ReceiptBranding>(defaultReceiptBranding);
+  const [dueDayDraft, setDueDayDraft] = useState(String(defaultRentDueDay));
   const [loaded, setLoaded] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setDueDayDraft(String(defaultRentDueDay));
+  }, [defaultRentDueDay]);
 
   useEffect(() => {
     try {
@@ -64,9 +76,53 @@ export function ReceiptSettings() {
     }
   }
 
+  function savePortfolioDefaults() {
+    try {
+      const saved = saveLandlordDemoSettings({ defaultRentDueDay: Number(dueDayDraft) });
+      setDueDayDraft(String(saved.defaultRentDueDay));
+      onDefaultRentDueDayChange(saved.defaultRentDueDay);
+      toast.success("Portfolio defaults saved", {
+        description: "New move-ins will start with this rent due day.",
+      });
+    } catch (error) {
+      toast.error("Could not save portfolio defaults", {
+        description: error instanceof Error ? error.message : "Check the due day and retry.",
+      });
+    }
+  }
+
   return (
     <div className="space-y-6">
-      <PageHeading eyebrow="Receipt identity" title="Brand & receipt settings" />
+      <PageHeading eyebrow="Landlord workspace" title="Settings" />
+      <section className="surface grid gap-4 p-5 sm:grid-cols-[minmax(0,1fr)_12rem_auto] sm:items-end sm:p-6">
+        <div>
+          <h2 className="text-lg font-bold text-primary-deep">Portfolio defaults</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Set the starting rent due day for new tenancies. Existing agreements are not changed.
+          </p>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="default-rent-due-day">Rent due day</Label>
+          <Input
+            id="default-rent-due-day"
+            type="number"
+            min="1"
+            max="31"
+            inputMode="numeric"
+            className="min-h-11"
+            value={dueDayDraft}
+            onChange={(event) => setDueDayDraft(event.target.value)}
+          />
+        </div>
+        <Button
+          type="button"
+          className="min-h-11"
+          onClick={savePortfolioDefaults}
+          disabled={!loaded}
+        >
+          Save default
+        </Button>
+      </section>
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(20rem,0.8fr)]">
         <section className="surface space-y-5 p-5 sm:p-7">
           <div>
@@ -221,7 +277,7 @@ export function ReceiptSettings() {
                 value="One million two hundred thousand Ugandan shillings only"
               />
               <PreviewRow label="Method" value="Mobile money" />
-              <PreviewRow label="EFRIS" value="Pending integration" />
+              <PreviewRow label="EFRIS" value="Pending · mock only" />
             </div>
             <div className="relative mt-5 flex justify-between text-xs text-muted-foreground">
               <span>Computer-generated receipt</span>

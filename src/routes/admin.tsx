@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import {
   Ban,
   BadgeCheck,
+  BellRing,
   Building2,
   ClipboardCheck,
   Download,
@@ -36,6 +37,14 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -43,6 +52,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { downloadCsv } from "@/lib/documents";
+import { createNotification } from "@/lib/notifications";
 import { formatUGX } from "@/lib/rent";
 import {
   currentRentPeriod,
@@ -52,6 +62,7 @@ import {
   summarizeRentPeriod,
 } from "@/lib/rent-accounting";
 import { useRentDemoData } from "@/lib/useRentDemoData";
+import { runReminderJob } from "@/lib/notifications";
 import { ease } from "@/lib/motion";
 import {
   landlords as initialLandlords,
@@ -60,12 +71,17 @@ import {
   unmatchedTransactions,
   type Landlord,
   type LedgerEntry,
-  type TenantNotification,
   type Unit,
   type PropertyType,
   type SubscriptionPlan,
   type UnmatchedTxn,
 } from "@/lib/sample-data";
+import {
+  defaultAdminDemoSettings,
+  readAdminDemoSettings,
+  saveAdminDemoSettings,
+  type AdminDemoSettings,
+} from "@/lib/demo-settings";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/admin")({
@@ -105,6 +121,8 @@ const subscriptionMonths: Record<SubscriptionPlan, number> = {
 
 function AdminPage() {
   const [view, setView] = useState<View>("overview");
+  const [adminSettings, setAdminSettings] = useState(defaultAdminDemoSettings);
+  const [adminSettingsLoaded, setAdminSettingsLoaded] = useState(false);
   const { data: rentData, setData: setRentData } = useRentDemoData();
   const [landlords, setLandlords] = useState(initialLandlords);
   const [txns, setTxns] = useState(unmatchedTransactions);
@@ -124,6 +142,18 @@ function AdminPage() {
     { id: "landlords", label: "Landlords", icon: Building2, badge: pending },
     { id: "settings", label: "Settings", icon: Settings, mobileMore: true },
   ];
+
+  useEffect(() => {
+    try {
+      setAdminSettings(readAdminDemoSettings());
+    } catch (error) {
+      toast.error("Admin settings could not be loaded.", {
+        description: error instanceof Error ? error.message : "Check browser storage and retry.",
+      });
+    } finally {
+      setAdminSettingsLoaded(true);
+    }
+  }, []);
 
   useEffect(() => {
     setTxns((current) =>
@@ -185,6 +215,22 @@ function AdminPage() {
     });
   };
 
+  const runRemindersNow = () => {
+    try {
+      const result = runReminderJob(new Date(), rentData);
+      setRentData(result.state);
+      toast.success("Demo reminder job finished", {
+        description: `${result.created.length} notifications added; ${result.duplicatesSkipped} duplicates skipped. No SMS or WhatsApp messages were sent.`,
+      });
+    } catch (error) {
+      console.error("Could not run demo reminders.", error);
+      toast.error("Demo reminders could not be run.", {
+        description:
+          error instanceof Error ? error.message : "Check the saved demo data and retry.",
+      });
+    }
+  };
+
   return (
     <DashShell
       current="/admin"
@@ -199,6 +245,7 @@ function AdminPage() {
           txns={txns}
           rentSummary={rentSummary}
           onOpen={setView}
+          onRunReminders={runRemindersNow}
         />
       )}
       {view === "operations" && (
@@ -215,24 +262,34 @@ function AdminPage() {
         />
       )}
       {view === "settings" && (
-        <section className="surface min-h-[18rem] p-6 sm:p-8">
-          <p className="text-eyebrow text-primary">Platform</p>
-          <h1 className="mt-3 text-3xl font-bold text-primary-deep">Admin settings</h1>
-          <p className="mt-3 max-w-xl text-muted-foreground">
-            Platform preferences, access controls and notification settings will be managed here.
-          </p>
-        </section>
+        <AdminSettingsPanel
+          settings={adminSettings}
+          settingsLoaded={adminSettingsLoaded}
+          onSave={(settings) => {
+            try {
+              const saved = saveAdminDemoSettings(settings);
+              setAdminSettings(saved);
+              toast.success("Admin defaults saved for this demo");
+            } catch (error) {
+              toast.error("Admin defaults could not be saved.", {
+                description:
+                  error instanceof Error ? error.message : "Check browser storage and retry.",
+              });
+            }
+          }}
+        />
       )}
       <CreateLandlordDialog
         open={createOpen}
         onClose={() => setCreateOpen(false)}
+        defaultPlan={adminSettings.defaultSubscriptionPlan}
         onCreate={(account) => {
           setLandlords((list) => [
             {
               ...account,
               id: `ll-${Date.now()}`,
               joined: "Nov 2026",
-              verification: "Pending review",
+              verification: adminSettings.requireLandlordReview ? "Pending review" : "Verified",
             },
             ...list,
           ]);
@@ -271,19 +328,34 @@ function AdminPage() {
                 ? Array.from({ length: monthsCovered }, () => unit.rent)
                 : undefined,
           };
-          const notification: TenantNotification = {
+          const notification = createNotification({
             id: `payment-${entry.id}`,
+            unitId: unit.id,
             unit: unit.unit,
+            audience: "tenant",
+            eventType: monthsCovered > 1 ? "advance-received" : "payment-received",
             kind: monthsCovered > 1 ? "advance" : "payment",
             title: monthsCovered > 1 ? "Advance rent payment matched" : "Rent payment matched",
             message: `${formatUGX(entry.amount)} was matched to ${unit.property}, ${unit.unit} for ${formatRentPeriodRange(rentPeriod, monthsCovered)}.`,
             createdAt: now.toISOString(),
             read: false,
-          };
+          });
+          const landlordNotification = createNotification({
+            id: `payment-received:landlord:${entry.id}`,
+            unitId: unit.id,
+            unit: unit.unit,
+            audience: "landlord",
+            eventType: monthsCovered > 1 ? "advance-received" : "payment-received",
+            kind: monthsCovered > 1 ? "advance" : "payment",
+            title: monthsCovered > 1 ? "Advance rent payment received" : "Rent payment received",
+            message: `${formatUGX(entry.amount)} was matched for ${unit.tenant ?? transaction.sender} · ${unit.property} · Unit ${unit.unit}.`,
+            createdAt: now.toISOString(),
+            read: false,
+          });
           setRentData((current) => ({
             ...current,
             ledger: [entry, ...current.ledger.filter((item) => item.reference !== entry.reference)],
-            notifications: [notification, ...current.notifications],
+            notifications: [notification, landlordNotification, ...current.notifications],
           }));
           setTxns((list) => list.filter((x) => x.id !== transaction.id));
           setMatching(null);
@@ -325,6 +397,128 @@ function AdminPage() {
   );
 }
 
+function AdminSettingsPanel({
+  settings,
+  settingsLoaded,
+  onSave,
+}: {
+  settings: AdminDemoSettings;
+  settingsLoaded: boolean;
+  onSave: (settings: AdminDemoSettings) => void;
+}) {
+  const [draft, setDraft] = useState(settings);
+
+  useEffect(() => {
+    setDraft(settings);
+  }, [settings]);
+
+  return (
+    <div className="space-y-6">
+      <PageHeading eyebrow="Platform controls · demo only" title="Admin settings" />
+      <div className="grid gap-5 xl:grid-cols-2">
+        <section className="surface space-y-4 p-5 sm:p-6">
+          <div>
+            <h2 className="text-lg font-bold text-primary-deep">Landlord onboarding</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Applies only to landlord accounts created in this browser demo.
+            </p>
+          </div>
+          <label className="flex min-h-14 items-center justify-between gap-4 rounded-lg border p-3">
+            <span>
+              <span className="block text-sm font-semibold">Require admin review</span>
+              <span className="mt-1 block text-xs text-muted-foreground">
+                New landlords stay pending until approved.
+              </span>
+            </span>
+            <Switch
+              checked={draft.requireLandlordReview}
+              onCheckedChange={(requireLandlordReview) =>
+                setDraft((current) => ({ ...current, requireLandlordReview }))
+              }
+              disabled={!settingsLoaded}
+              aria-label="Require admin review for new landlords"
+            />
+          </label>
+        </section>
+
+        <section className="surface space-y-4 p-5 sm:p-6">
+          <div>
+            <h2 className="text-lg font-bold text-primary-deep">Subscription defaults</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Prefills the plan when you add a landlord. Existing plans are not changed.
+            </p>
+          </div>
+          <Select
+            value={draft.defaultSubscriptionPlan}
+            onValueChange={(defaultSubscriptionPlan) => {
+              if (
+                defaultSubscriptionPlan === "monthly" ||
+                defaultSubscriptionPlan === "quarterly" ||
+                defaultSubscriptionPlan === "yearly"
+              ) {
+                setDraft((current) => ({ ...current, defaultSubscriptionPlan }));
+              }
+            }}
+            disabled={!settingsLoaded}
+          >
+            <SelectTrigger className="min-h-11" aria-label="Default subscription plan">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="monthly">Monthly</SelectItem>
+              <SelectItem value="quarterly">Quarterly</SelectItem>
+              <SelectItem value="yearly">Yearly</SelectItem>
+            </SelectContent>
+          </Select>
+        </section>
+      </div>
+
+      <section className="surface space-y-4 p-5 sm:p-6">
+        <div>
+          <h2 className="text-lg font-bold text-primary-deep">Region and integrations</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Uganda · UGX · English (Uganda). These demo connections do not contact providers.
+          </p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {[
+            ["MTN Mobile Money", "Mock payment adapter"],
+            ["Airtel Money", "Mock payment adapter"],
+            ["SMS and WhatsApp", "No messages sent"],
+            ["URA / EFRIS", "No URA submission"],
+          ].map(([name, description]) => (
+            <div
+              key={name}
+              className="flex min-h-16 items-start justify-between gap-3 rounded-lg border p-3"
+            >
+              <div>
+                <p className="text-sm font-semibold">{name}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+              </div>
+              <Pill tone="warning" label="Demo" />
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="max-w-2xl text-xs leading-relaxed text-muted-foreground">
+          These controls are stored in browser storage, not enforced by authentication or a server.
+          Treat them as product-flow previews, not production access controls.
+        </p>
+        <Button
+          type="button"
+          className="min-h-11"
+          disabled={!settingsLoaded}
+          onClick={() => onSave(draft)}
+        >
+          Save admin defaults
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 const providers: { name: string; status: "Operational" | "Slow"; tone: Tone; note: string }[] = [
   {
     name: "MTN Mobile Money",
@@ -346,11 +540,13 @@ function AdminOverview({
   txns,
   rentSummary,
   onOpen,
+  onRunReminders,
 }: {
   landlords: Landlord[];
   txns: UnmatchedTxn[];
   rentSummary: ReturnType<typeof summarizeRentPeriod>;
   onOpen: (v: View) => void;
+  onRunReminders: () => void;
 }) {
   const totalUnits = landlords.reduce((s, l) => s + l.units, 0);
   const totalTenants = landlords.reduce((s, l) => s + (l.tenants ?? 0), 0);
@@ -431,6 +627,15 @@ function AdminOverview({
     <>
       <PageHeading eyebrow="Monday, 16 November 2026" title="Platform overview">
         <SampleTag className="self-center" />
+        <Button
+          type="button"
+          variant="outline"
+          className="min-h-11 w-full sm:w-auto"
+          onClick={onRunReminders}
+        >
+          <BellRing className="size-4" aria-hidden />
+          Run reminders now (demo)
+        </Button>
       </PageHeading>
       <p className="mb-4 rounded-lg border border-warning/40 bg-warning-soft px-4 py-3 text-sm text-warning-ink">
         Private operations view · illustrative demo figures. Real tenant and collection data

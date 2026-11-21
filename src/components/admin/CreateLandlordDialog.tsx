@@ -1,5 +1,5 @@
 import { Building2, Plus, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -89,10 +89,12 @@ function isResidential(type: PropertyType) {
 export function CreateLandlordDialog({
   open,
   onClose,
+  defaultPlan,
   onCreate,
 }: {
   open: boolean;
   onClose: () => void;
+  defaultPlan: SubscriptionPlan;
   onCreate: (landlord: NewLandlord) => void;
 }) {
   const [name, setName] = useState("");
@@ -109,7 +111,7 @@ export function CreateLandlordDialog({
   const [bankName, setBankName] = useState("");
   const [bankAccountName, setBankAccountName] = useState("");
   const [bankAccountNumber, setBankAccountNumber] = useState("");
-  const [subscriptionPlan, setSubscriptionPlan] = useState<SubscriptionPlan>("monthly");
+  const [subscriptionPlan, setSubscriptionPlan] = useState<SubscriptionPlan>(defaultPlan);
 
   function reset() {
     setName("");
@@ -126,8 +128,12 @@ export function CreateLandlordDialog({
     setBankName("");
     setBankAccountName("");
     setBankAccountNumber("");
-    setSubscriptionPlan("monthly");
+    setSubscriptionPlan(defaultPlan);
   }
+
+  useEffect(() => {
+    if (open) setSubscriptionPlan(defaultPlan);
+  }, [defaultPlan, open]);
 
   function updateBlock(blockId: string, value: string) {
     setBlocks((current) =>

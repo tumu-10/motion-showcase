@@ -1,26 +1,35 @@
 import { useQuery } from "@tanstack/react-query";
 import { format, getDaysInMonth, parse } from "date-fns";
 import {
-  ArrowLeft,
+  Bug,
+  BadgeCheck,
   BellRing,
-  CalendarDays,
   CalendarRange,
+  CircleCheck,
+  Clock3,
   ChevronRight,
   Droplets,
   Eye,
   Flame,
+  Hammer,
   Heart,
   House,
   Lightbulb,
+  MessageCircle,
   MessageSquare,
   MessageSquareText,
   MoreHorizontal,
+  Paintbrush,
+  Phone,
   Receipt,
   Search,
   Settings,
+  Shield,
   Sparkles,
   Trash2,
+  Truck,
   WalletCards,
+  Wifi,
   Wrench,
   type LucideIcon,
 } from "lucide-react";
@@ -33,11 +42,13 @@ import { ReportFlow, type ReportInput } from "@/components/tenant/ReportFlow";
 import { SwipeDeck } from "@/components/tenant/SwipeDeck";
 import { OfflineBanner } from "@/components/shared/OfflineBanner";
 import { CalendarView, type CalendarEvent } from "@/components/shared/CalendarView";
+import { NotificationCenter } from "@/components/shared/NotificationCenter";
 import { ReceiptActions } from "@/components/shared/ReceiptActions";
 import { RentRing } from "@/components/shared/RentRing";
 import { Pill, RentStatusPill } from "@/components/shared/StatusPill";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -46,7 +57,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Switch } from "@/components/ui/switch";
 import { formatUGX, getRentStatus } from "@/lib/rent";
 import {
   currentRentPeriod,
@@ -57,6 +67,20 @@ import {
   localDateIso,
 } from "@/lib/rent-accounting";
 import { useRentDemoData } from "@/lib/useRentDemoData";
+import { createNotification } from "@/lib/notifications";
+import {
+  defaultTenantDemoSettings,
+  readTenantDemoSettings,
+  saveTenantDemoSettings,
+  type TenantPaymentPreference,
+} from "@/lib/demo-settings";
+import {
+  demoHomeServiceProviders,
+  homeServiceCategories,
+  type HomeServiceId,
+  type HomeServiceRequest,
+  type MonthlyServiceCharge,
+} from "@/lib/home-services";
 import { ease } from "@/lib/motion";
 import { issueRentReceipt } from "@/lib/receipt-helpers";
 import {
@@ -74,7 +98,12 @@ import {
   type TenantNotification,
   type Unit,
 } from "@/lib/sample-data";
-import { readTenantActive, readTenantNotice, type EvictionNotice } from "@/lib/tenant-demo";
+import {
+  readTenantActive,
+  readTenantNotices,
+  updateTenantNoticeResponse,
+  type TenantNotice,
+} from "@/lib/tenant-demo";
 import { cn } from "@/lib/utils";
 
 export type TenantTask = "pay" | "report" | "home";
@@ -111,6 +140,21 @@ const moreTabs: { id: Tab; label: string; icon: LucideIcon }[] = [
   { id: "settings", label: "Settings", icon: Settings },
 ];
 
+const serviceIconById: Record<HomeServiceId, LucideIcon> = {
+  "garbage-collection": Trash2,
+  plumber: Wrench,
+  electrician: Lightbulb,
+  cleaning: Sparkles,
+  "cooking-gas": Flame,
+  "water-delivery": Droplets,
+  internet: Wifi,
+  painter: Paintbrush,
+  carpenter: Hammer,
+  security: Shield,
+  "pest-control": Bug,
+  movers: Truck,
+};
+
 // Simulates the first network request so the loading state is visible.
 async function fetchTenantHome() {
   await new Promise((r) => setTimeout(r, 1100));
@@ -120,6 +164,8 @@ async function fetchTenantHome() {
 export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void }) {
   const { data: rentData, setData: setRentData, loaded: rentDataLoaded } = useRentDemoData();
   const [tab, setTab] = useState<Tab>("home");
+  const [tenantSettings, setTenantSettings] = useState(defaultTenantDemoSettings);
+  const [tenantSettingsLoaded, setTenantSettingsLoaded] = useState(false);
   const moreActive = moreTabs.some((item) => item.id === tab);
   const [dir, setDir] = useState(1);
   const [paid, setPaid] = useState(false);
@@ -127,13 +173,28 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
     sampleComplaints.filter((m) => m.unit === "B4"),
   );
   const [activeTenant, setActiveTenant] = useState(true);
-  const [notice, setNotice] = useState<EvictionNotice | null>(null);
+  const [notices, setNotices] = useState<TenantNotice[]>([]);
   const [sheet, setSheet] = useState<"pay" | "report" | "more" | null>(null);
   const tenantUnitLabel = tenantProfile.unit.replace("Unit ", "");
   const tenantUnit = useMemo(
-    () => rentData.units.find((unit) => unit.unit === tenantUnitLabel) ?? null,
+    () =>
+      rentData.units.find(
+        (unit) => unit.unit === tenantUnitLabel && unit.property === tenantProfile.property,
+      ) ?? null,
     [rentData.units, tenantUnitLabel],
   );
+  const tenantServiceSettings = rentData.propertyHomeServiceSettings.find(
+    (settings) => settings.property === tenantProfile.property,
+  );
+  const monthlyServiceCharge = tenantServiceSettings?.monthlyServiceCharge;
+  const tenantServiceRequests = rentData.homeServiceRequests
+    .filter(
+      (request) =>
+        request.unitId === tenantUnit?.id &&
+        request.tenant === tenantProfile.name &&
+        request.property === tenantProfile.property,
+    )
+    .sort((a, b) => b.requestedAt.localeCompare(a.requestedAt));
   const period = currentRentPeriod();
   const nextRentPeriod = tenantUnit
     ? getNextUncoveredRentPeriod(tenantUnit, rentData.ledger, period)
@@ -169,7 +230,10 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
     );
   }, [rentData.ledger, tenantUnit?.id]);
   const notifications = rentData.notifications
-    .filter((notification) => notification.unit === tenantUnitLabel)
+    .filter(
+      (notification) =>
+        notification.unit === tenantUnitLabel && (notification.audience ?? "tenant") === "tenant",
+    )
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const unreadNotifications = notifications.filter((notification) => !notification.read).length;
   const rentBalance = Math.max(
@@ -185,18 +249,105 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
 
   useEffect(() => {
     try {
+      setTenantSettings(readTenantDemoSettings());
+    } catch (error) {
+      console.error("Could not load tenant settings.", error);
+      toast.error("Tenant settings could not be loaded.", {
+        description: error instanceof Error ? error.message : "Check browser storage and retry.",
+      });
+    } finally {
+      setTenantSettingsLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
       setActiveTenant(readTenantActive());
-      const savedNotice = readTenantNotice();
-      setNotice(savedNotice?.unit === tenantProfile.unit.replace("Unit ", "") ? savedNotice : null);
+      const tenantUnit = tenantProfile.unit.replace("Unit ", "");
+      setNotices(
+        readTenantNotices().filter(
+          (savedNotice) =>
+            savedNotice.unit === tenantUnit &&
+            savedNotice.property === tenantProfile.property &&
+            savedNotice.tenant === tenantProfile.name,
+        ),
+      );
     } catch (error) {
       console.error("Could not load tenant demo updates.", error);
       toast.error("Some tenant updates could not be loaded.");
     }
   }, []);
 
+  const respondToNotice = (
+    id: string,
+    status: NonNullable<TenantNotice["response"]>["status"],
+    message?: string,
+  ) => {
+    try {
+      const updated = updateTenantNoticeResponse(id, {
+        status,
+        ...(message ? { message: message.trim() } : {}),
+        updatedAt: new Date().toISOString(),
+      });
+      const tenantUnit = tenantProfile.unit.replace("Unit ", "");
+      setNotices(
+        updated.filter(
+          (savedNotice) =>
+            savedNotice.unit === tenantUnit &&
+            savedNotice.property === tenantProfile.property &&
+            savedNotice.tenant === tenantProfile.name,
+        ),
+      );
+      if (status === "acknowledged" || status === "disputed") {
+        const notice = updated.find((item) => item.id === id);
+        if (notice) {
+          const notification = createNotification({
+            id: `notice-response:${id}:${status}`,
+            dedupeKey: `notice-response:${id}:${status}`,
+            audience: "landlord",
+            eventType: "notice-response",
+            unit: notice.unit,
+            kind: "update",
+            title:
+              status === "acknowledged"
+                ? "Tenant acknowledged a notice"
+                : "Tenant disputed a notice",
+            message: `${notice.tenant} · ${notice.property} · Unit ${notice.unit}${
+              message?.trim() ? `: ${message.trim()}` : ""
+            }`,
+            createdAt: new Date().toISOString(),
+            read: false,
+          });
+          setRentData((current) => ({
+            ...current,
+            notifications: [notification, ...current.notifications],
+          }));
+        }
+      }
+      if (status === "payment-started") setSheet("pay");
+      else toast.success(status === "acknowledged" ? "Notice acknowledged" : "Response sent");
+    } catch (error) {
+      console.error("Could not save your notice response.", error);
+      toast.error("Your response could not be saved.", {
+        description: error instanceof Error ? error.message : "Try again.",
+      });
+    }
+  };
+
   const go = (next: Tab) => {
     setDir(tabOrder.indexOf(next) > tabOrder.indexOf(tab) ? 1 : -1);
     setTab(next);
+  };
+
+  const updateTenantPaymentPreference = (preferredPaymentMethod: TenantPaymentPreference) => {
+    try {
+      setTenantSettings(saveTenantDemoSettings({ preferredPaymentMethod }));
+      toast.success("Payment preference saved for this demo");
+    } catch (error) {
+      toast.error("Payment preference could not be saved.", {
+        description: error instanceof Error ? error.message : "Check browser storage and retry.",
+      });
+    }
   };
 
   const handlePaid = useCallback(
@@ -218,10 +369,13 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
         coverageAmounts: r.coverageAmounts,
         bankProofDataUrl: r.bankProofDataUrl,
       };
-      const notification: TenantNotification = {
+      const notification = createNotification({
         id: `payment-${r.reference}`,
+        unitId: tenantUnit?.id,
         unit: tenantUnitLabel,
         kind: r.pending || r.failed ? "payment" : r.monthsCovered > 1 ? "advance" : "payment",
+        audience: "tenant",
+        ...(entry.status === "Confirmed" ? { eventType: "receipt" as const } : {}),
         title: r.failed
           ? "Payment failed"
           : r.pending
@@ -238,11 +392,30 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
         }`,
         createdAt: now.toISOString(),
         read: false,
-      };
+      });
+      const landlordNotification =
+        entry.status === "Confirmed"
+          ? createNotification({
+              id: `payment-received:landlord:${r.reference}`,
+              audience: "landlord",
+              eventType: r.monthsCovered > 1 ? "advance-received" : "payment-received",
+              unitId: tenantUnit?.id,
+              unit: tenantUnitLabel,
+              kind: r.monthsCovered > 1 ? "advance" : "payment",
+              title: r.monthsCovered > 1 ? "Advance rent received" : "Rent payment received",
+              message: `${tenantProfile.name} paid ${formatUGX(r.amount)} for ${tenantProfile.property} · Unit ${tenantUnitLabel}.`,
+              createdAt: now.toISOString(),
+              read: false,
+            })
+          : null;
       setRentData((current) => ({
         ...current,
         ledger: [entry, ...current.ledger.filter((existing) => existing.id !== entry.id)],
-        notifications: [notification, ...current.notifications],
+        notifications: [
+          notification,
+          ...(landlordNotification ? [landlordNotification] : []),
+          ...current.notifications,
+        ],
       }));
       if (entry.status === "Confirmed") {
         try {
@@ -271,24 +444,74 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
 
   const handleReport = useCallback(
     (r: ReportInput) => {
-      setRequests((list) => [
-        {
-          id: `m-${Date.now()}`,
-          title: r.description.length > 42 ? r.description.slice(0, 40) + "…" : r.description,
-          category: r.category,
-          unit: tenantProfile.unit.replace("Unit ", ""),
-          property: tenantProfile.property,
-          tenant: tenantProfile.name,
-          urgency: r.urgency,
-          stage: "submitted",
-          reported: "Today",
-          description: r.description,
-        },
-        ...list,
-      ]);
+      const now = new Date();
+      const id = `m-${Date.now()}`;
+      const complaint = {
+        id,
+        title: r.description.length > 42 ? r.description.slice(0, 40) + "…" : r.description,
+        category: r.category,
+        unit: tenantProfile.unit.replace("Unit ", ""),
+        property: tenantProfile.property,
+        tenant: tenantProfile.name,
+        urgency: r.urgency,
+        stage: "submitted" as const,
+        reported: "Today",
+        description: r.description,
+      };
+      setRequests((list) => [complaint, ...list]);
+      const notification = createNotification({
+        id: `new-complaint:${id}`,
+        audience: "landlord",
+        eventType: "new-complaint",
+        unitId: tenantUnit?.id,
+        unit: complaint.unit,
+        kind: "update",
+        title: "New tenant complaint",
+        message: `${tenantProfile.name} reported ${complaint.category.toLowerCase()} at ${complaint.property} · Unit ${complaint.unit}: ${complaint.description}`,
+        createdAt: now.toISOString(),
+        read: false,
+      });
+      setRentData((current) => ({
+        ...current,
+        notifications: [notification, ...current.notifications],
+      }));
       onTaskDone?.("report");
     },
-    [onTaskDone],
+    [onTaskDone, setRentData, tenantUnit?.id],
+  );
+
+  const requestHomeService = useCallback(
+    (providerId: string) => {
+      const provider = demoHomeServiceProviders.find((item) => item.id === providerId);
+      const service = provider
+        ? homeServiceCategories.find((item) => item.id === provider.serviceId)
+        : undefined;
+      if (!provider || !service || !tenantUnit) {
+        toast.error("This demo service request could not be created.");
+        return;
+      }
+      const request: HomeServiceRequest = {
+        id: `home-service-${Date.now()}`,
+        property: tenantProfile.property,
+        unitId: tenantUnit.id,
+        unit: tenantUnit.unit,
+        tenant: tenantProfile.name,
+        serviceId: provider.serviceId,
+        serviceLabel: service.label,
+        providerId: provider.id,
+        providerName: provider.name,
+        requestedAt: new Date().toISOString(),
+        status: "Requested",
+      };
+      setRentData((current) => ({
+        ...current,
+        homeServiceRequests: [request, ...current.homeServiceRequests],
+      }));
+      toast.success("Demo quote request recorded", {
+        description: `${provider.name} is a demo provider. No external request was sent.`,
+      });
+    },
+    [setRentData, tenantUnit],
   );
 
   return (
@@ -316,7 +539,10 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
                 activeTenant={activeTenant}
                 lastPayment={payments[0]}
                 request={requests[0]}
-                notice={notice}
+                notices={notices}
+                onNoticeAcknowledge={(id) => respondToNotice(id, "acknowledged")}
+                onNoticePay={(id) => respondToNotice(id, "payment-started")}
+                onNoticeDispute={(id, message) => respondToNotice(id, "disputed", message)}
                 notificationCount={unreadNotifications}
                 periodLabel={formatRentPeriod(period)}
                 balance={rentBalance}
@@ -326,6 +552,10 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
                 onOpenPayments={() => go("payments")}
                 onOpenComplaints={() => go("complaints")}
                 onOpenNotifications={() => go("notifications")}
+                onOpenServices={() => go("services")}
+                monthlyServiceCharge={
+                  monthlyServiceCharge?.enabled ? monthlyServiceCharge : undefined
+                }
               />
             )}
             {tab === "payments" && (
@@ -363,7 +593,8 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
                   setRentData((current) => ({
                     ...current,
                     notifications: current.notifications.map((notification) =>
-                      notification.unit === tenantUnitLabel
+                      notification.unit === tenantUnitLabel &&
+                      (notification.audience ?? "tenant") === "tenant"
                         ? { ...notification, read: true }
                         : notification,
                     ),
@@ -373,12 +604,30 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
             )}
             {tab === "calendar" && (
               <CalendarView
-                events={tenantCalendarEvents(payments, requests, notice, activeTenant)}
+                events={tenantCalendarEvents(payments, requests, notices, activeTenant)}
                 audience="tenant"
               />
             )}
-            {tab === "services" && <ServicesTab />}
-            {tab === "settings" && <TenantSettingsTab />}
+            {tab === "services" && (
+              <ServicesTab
+                serviceRequests={tenantServiceRequests}
+                preferredProviderIds={tenantServiceSettings?.preferredProviderIds ?? []}
+                onRequestQuote={requestHomeService}
+                onContactProvider={(providerName, channel) =>
+                  toast.info(`${channel} is demo-only`, {
+                    description: `${providerName} is a demo provider. No call or message was sent.`,
+                  })
+                }
+              />
+            )}
+            {tab === "settings" && (
+              <TenantSettingsTab
+                settings={tenantSettings}
+                settingsLoaded={tenantSettingsLoaded}
+                onPaymentPreferenceChange={updateTenantPaymentPreference}
+                onOpenNotifications={() => go("notifications")}
+              />
+            )}
           </motion.div>
         </AnimatePresence>
       </div>
@@ -473,7 +722,12 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
           rentPeriod={nextRentPeriod}
           defaultPhone={tenantProfile.phone}
           paymentDetails={tenantProfile.paymentDetails}
+          preferredPaymentMethod={tenantSettings.preferredPaymentMethod}
           onPaid={handlePaid}
+          onOpenServices={() => {
+            setSheet(null);
+            go("services");
+          }}
           onClose={() => setSheet(null)}
         />
       </AppSheet>
@@ -534,7 +788,10 @@ function HomeTab({
   activeTenant,
   lastPayment,
   request,
-  notice,
+  notices,
+  onNoticeAcknowledge,
+  onNoticePay,
+  onNoticeDispute,
   notificationCount,
   periodLabel,
   balance,
@@ -544,12 +801,17 @@ function HomeTab({
   onOpenPayments,
   onOpenComplaints,
   onOpenNotifications,
+  onOpenServices,
+  monthlyServiceCharge,
 }: {
   paid: boolean;
   activeTenant: boolean;
   lastPayment?: Payment | undefined;
   request?: Complaint | undefined;
-  notice: EvictionNotice | null;
+  notices: TenantNotice[];
+  onNoticeAcknowledge: (id: string) => void;
+  onNoticePay: (id: string) => void;
+  onNoticeDispute: (id: string, message: string) => void;
   notificationCount: number;
   periodLabel: string;
   balance: number;
@@ -559,6 +821,8 @@ function HomeTab({
   onOpenPayments: () => void;
   onOpenComplaints: () => void;
   onOpenNotifications: () => void;
+  onOpenServices: () => void;
+  monthlyServiceCharge: MonthlyServiceCharge | undefined;
 }) {
   const { data, isPending } = useQuery({
     queryKey: ["tenant-home"],
@@ -615,7 +879,15 @@ function HomeTab({
               </p>
             </div>
           </div>
-          {notice && <NoticeCard notice={notice} />}
+          {notices.map((notice) => (
+            <NoticeCard
+              key={notice.id}
+              notice={notice}
+              onAcknowledge={() => onNoticeAcknowledge(notice.id)}
+              onPay={() => onNoticePay(notice.id)}
+              onDispute={(message) => onNoticeDispute(notice.id, message)}
+            />
+          ))}
           <div className="grid grid-cols-2 gap-2">
             <Button variant="outline" onClick={onOpenPayments}>
               Payment history
@@ -701,6 +973,72 @@ function HomeTab({
             <QuickAction icon={House} label="Find a home" onClick={onFindHome} />
           </motion.section>
 
+          {monthlyServiceCharge?.enabled && (
+            <motion.section {...stagger(3)} className="surface space-y-3 p-4">
+              <div>
+                <h2 className="font-bold text-primary-deep">Monthly invoice line items</h2>
+                <p className="text-xs text-muted-foreground">{periodLabel}</p>
+              </div>
+              <dl className="divide-y divide-border text-sm">
+                <div className="flex items-start justify-between gap-3 py-2">
+                  <dt className="min-w-0">Rent balance</dt>
+                  <dd className="figure shrink-0 font-semibold">{formatUGX(balance)}</dd>
+                </div>
+                <div className="flex items-start justify-between gap-3 py-2">
+                  <dt className="min-w-0">
+                    {monthlyServiceCharge.label}
+                    <span className="block text-xs text-muted-foreground">
+                      Separate service charge
+                    </span>
+                  </dt>
+                  <dd className="figure shrink-0 font-semibold">
+                    {formatUGX(monthlyServiceCharge.amount)}
+                  </dd>
+                </div>
+              </dl>
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                The service charge is itemised separately and is not included in the rent balance.
+              </p>
+            </motion.section>
+          )}
+
+          <motion.section {...stagger(4)} className="space-y-3">
+            <SectionHeader
+              title="Services for your home"
+              action="See all"
+              onAction={onOpenServices}
+            />
+            <div className="-mx-5 flex snap-x gap-3 overflow-x-auto px-5 pb-2">
+              {homeServiceCategories.slice(0, 4).map((service) => {
+                const Icon = serviceIconById[service.id];
+                const provider = demoHomeServiceProviders.find(
+                  (item) => item.serviceId === service.id,
+                );
+                return (
+                  <button
+                    key={service.id}
+                    type="button"
+                    onClick={onOpenServices}
+                    className="surface flex min-h-28 min-w-36 snap-start flex-col items-start justify-between gap-3 p-3 text-left transition-colors hover:bg-secondary"
+                  >
+                    <span className="grid size-9 place-items-center rounded-full bg-primary-soft text-primary-deep">
+                      <Icon className="size-4" aria-hidden />
+                    </span>
+                    <span>
+                      <span className="block text-sm font-semibold">{service.label}</span>
+                      {provider && (
+                        <span className="mt-1 block text-xs text-muted-foreground">
+                          From {formatUGX(provider.minimumPrice)}
+                        </span>
+                      )}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-xs text-muted-foreground">Demo providers and indicative prices.</p>
+          </motion.section>
+
           {request && (
             <motion.section {...stagger(3)}>
               <SectionHeader
@@ -711,7 +1049,15 @@ function HomeTab({
               <RequestCard request={request} />
             </motion.section>
           )}
-          {notice && <NoticeCard notice={notice} />}
+          {notices.map((notice) => (
+            <NoticeCard
+              key={notice.id}
+              notice={notice}
+              onAcknowledge={() => onNoticeAcknowledge(notice.id)}
+              onPay={() => onNoticePay(notice.id)}
+              onDispute={(message) => onNoticeDispute(notice.id, message)}
+            />
+          ))}
         </>
       )}
 
@@ -723,120 +1069,171 @@ function HomeTab({
   );
 }
 
-const homeServices = [
-  {
-    name: "Plumbing",
-    provider: "Kampala Home Fix",
-    price: "UGX 20,000–80,000",
-    icon: Wrench,
-    surface: "border-primary/20 bg-primary-soft",
-    iconSurface: "bg-white/70 text-primary-deep",
-  },
-  {
-    name: "Electrical",
-    provider: "BrightWire Services",
-    price: "UGX 25,000–100,000",
-    icon: Lightbulb,
-    surface: "border-accent/30 bg-accent-soft",
-    iconSurface: "bg-white/70 text-primary-deep",
-  },
-  {
-    name: "Cleaning",
-    provider: "FreshNest Cleaning",
-    price: "UGX 30,000–90,000",
-    icon: Sparkles,
-    surface: "border-border bg-secondary",
-    iconSurface: "bg-white/70 text-primary-deep",
-  },
-  {
-    name: "Garbage collection",
-    provider: "GreenLoop Kampala",
-    price: "UGX 15,000–35,000",
-    icon: Trash2,
-    surface: "border-success/20 bg-success-soft",
-    iconSurface: "bg-white/70 text-success-ink",
-  },
-  {
-    name: "Water delivery",
-    provider: "ClearDrop Water",
-    price: "UGX 8,000–25,000",
-    icon: Droplets,
-    surface: "border-primary/20 bg-primary-soft",
-    iconSurface: "bg-white/70 text-primary-deep",
-  },
-  {
-    name: "Cooking gas",
-    provider: "QuickFlame Delivery",
-    price: "UGX 10,000–40,000",
-    icon: Flame,
-    surface: "border-warning/25 bg-warning-soft",
-    iconSurface: "bg-white/70 text-warning-ink",
-  },
-];
+const serviceRequestStatusClass: Record<HomeServiceRequest["status"], string> = {
+  Requested: "bg-warning-soft text-warning-ink",
+  Confirmed: "bg-primary-soft text-primary-deep",
+  Done: "bg-success-soft text-success-ink",
+};
+const serviceRequestStatusIcon: Record<HomeServiceRequest["status"], LucideIcon> = {
+  Requested: Clock3,
+  Confirmed: BadgeCheck,
+  Done: CircleCheck,
+};
 
-function ServicesTab() {
+function ServicesTab({
+  serviceRequests,
+  preferredProviderIds,
+  onRequestQuote,
+  onContactProvider,
+}: {
+  serviceRequests: HomeServiceRequest[];
+  preferredProviderIds: string[];
+  onRequestQuote: (providerId: string) => void;
+  onContactProvider: (providerName: string, channel: "Call" | "WhatsApp") => void;
+}) {
   return (
     <section className="space-y-5 p-5 pb-8">
       <header>
-        <p className="text-sm font-medium text-muted-foreground">Demo providers · Kampala</p>
+        <p className="text-sm font-medium text-muted-foreground">Kampala · Demo directory</p>
         <h1 className="mt-1 text-2xl font-bold text-primary-deep">Services for your home</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Request a quote from a local home-service provider.
+          Compare local providers and request a quote. These listings, ratings, and prices are all
+          demo data.
         </p>
       </header>
-      <ul className="space-y-3">
-        {homeServices.map((service) => (
-          <li
-            key={service.name}
-            className={cn(
-              "grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-3 rounded-xl border p-3 shadow-soft",
-              service.surface,
-            )}
-          >
-            <span
-              className={cn(
-                "grid size-10 shrink-0 place-items-center rounded-full",
-                service.iconSurface,
-              )}
-            >
-              <service.icon className="size-5" aria-hidden />
-            </span>
-            <div className="min-w-0 flex-1">
-              <h2 className="font-semibold leading-tight">{service.name}</h2>
-              <p className="mt-1 break-words text-xs text-muted-foreground">
-                {service.provider} · Demo
-              </p>
-            </div>
-            <div className="col-span-2 flex min-w-0 items-center justify-between gap-2 border-t border-foreground/10 pt-2">
-              <p className="figure min-w-0 break-words text-xs font-semibold text-primary-deep">
-                {service.price}
-              </p>
-              <Button
-                size="sm"
-                variant="outline"
-                className="shrink-0"
-                onClick={() =>
-                  toast.success("Quote request noted", {
-                    description: `${service.provider} is a demo provider. No request was sent.`,
-                  })
-                }
-              >
-                Request
-              </Button>
-            </div>
-          </li>
-        ))}
-      </ul>
+      {serviceRequests.length > 0 && (
+        <section className="surface space-y-3 p-4" aria-labelledby="tenant-service-requests-title">
+          <div>
+            <h2 id="tenant-service-requests-title" className="font-bold text-primary-deep">
+              Your service requests
+            </h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Your landlord can update a request’s status.
+            </p>
+          </div>
+          <ul className="divide-y divide-border">
+            {serviceRequests.map((request) => {
+              const StatusIcon = serviceRequestStatusIcon[request.status];
+              return (
+                <li
+                  key={request.id}
+                  className="flex flex-wrap items-center justify-between gap-3 py-3"
+                >
+                  <div className="min-w-0">
+                    <p className="font-semibold">{request.serviceLabel}</p>
+                    <p className="text-sm text-muted-foreground">{request.providerName}</p>
+                  </div>
+                  <span
+                    className={`inline-flex min-h-8 items-center gap-1.5 rounded-full px-3 text-xs font-bold ${serviceRequestStatusClass[request.status]}`}
+                  >
+                    <StatusIcon className="size-3.5" aria-hidden />
+                    {request.status}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
+      <div className="space-y-6">
+        {homeServiceCategories.map((service) => {
+          const Icon = serviceIconById[service.id];
+          const providers = demoHomeServiceProviders
+            .filter((provider) => provider.serviceId === service.id)
+            .sort(
+              (left, right) =>
+                Number(preferredProviderIds.includes(right.id)) -
+                Number(preferredProviderIds.includes(left.id)),
+            );
+          return (
+            <section key={service.id} className="space-y-3">
+              <h2 className="flex items-center gap-2 text-lg font-bold text-primary-deep">
+                <span className="grid size-9 place-items-center rounded-full bg-primary-soft">
+                  <Icon className="size-4" aria-hidden />
+                </span>
+                {service.label}
+              </h2>
+              <ul className="grid gap-3 sm:grid-cols-2">
+                {providers.map((provider) => {
+                  const preferred = preferredProviderIds.includes(provider.id);
+                  return (
+                    <li key={provider.id} className="surface min-w-0 space-y-3 p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <h3 className="break-words font-bold">{provider.name}</h3>
+                          <p className="mt-1 text-sm text-muted-foreground">{provider.area}</p>
+                        </div>
+                        <span className="rounded-full bg-secondary px-2.5 py-1 text-[0.6875rem] font-semibold">
+                          Demo provider
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                        <span className="figure font-semibold text-primary-deep">
+                          {formatUGX(provider.minimumPrice)}–{formatUGX(provider.maximumPrice)}
+                        </span>
+                        <span className="text-xs text-muted-foreground">{provider.priceUnit}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Demo rating {provider.rating.toFixed(1)} / 5 · {provider.ratingCount} demo
+                        ratings
+                      </p>
+                      {preferred && (
+                        <p className="text-xs font-semibold text-success-ink">
+                          Preferred by your landlord
+                        </p>
+                      )}
+                      <div className="grid grid-cols-3 gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="min-h-11 min-w-0 gap-1 px-2 text-xs"
+                          onClick={() => onContactProvider(provider.name, "Call")}
+                        >
+                          <Phone className="size-3.5 shrink-0" aria-hidden />
+                          Call
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="min-h-11 min-w-0 gap-1 px-2 text-xs"
+                          onClick={() => onContactProvider(provider.name, "WhatsApp")}
+                        >
+                          <MessageCircle className="size-3.5 shrink-0" aria-hidden />
+                          WhatsApp
+                        </Button>
+                        <Button
+                          type="button"
+                          className="min-h-11 min-w-0 gap-1 px-2 text-xs"
+                          onClick={() => onRequestQuote(provider.id)}
+                        >
+                          Request quote
+                        </Button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          );
+        })}
+      </div>
     </section>
   );
 }
 
-function TenantSettingsTab() {
-  const [paymentUpdates, setPaymentUpdates] = useState(true);
-  const [repairUpdates, setRepairUpdates] = useState(true);
-
+function TenantSettingsTab({
+  settings,
+  settingsLoaded,
+  onPaymentPreferenceChange,
+  onOpenNotifications,
+}: {
+  settings: { preferredPaymentMethod: TenantPaymentPreference };
+  settingsLoaded: boolean;
+  onPaymentPreferenceChange: (method: TenantPaymentPreference) => void;
+  onOpenNotifications: () => void;
+}) {
   return (
-    <section className="space-y-5 p-5 pb-8">
+    <section className="space-y-5 p-4 pb-8 sm:p-5">
       <header>
         <p className="text-sm font-medium text-muted-foreground">Your account</p>
         <h1 className="mt-1 text-2xl font-bold text-primary-deep">Settings</h1>
@@ -850,21 +1247,52 @@ function TenantSettingsTab() {
           {tenantProfile.unit} · {tenantProfile.property}
         </p>
       </div>
-      <div className="surface divide-y divide-border p-4">
-        <p className="pb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Notifications
-        </p>
-        <label className="flex min-h-14 items-center justify-between gap-4 py-2 text-sm">
-          Payment and rent updates
-          <Switch checked={paymentUpdates} onCheckedChange={setPaymentUpdates} />
-        </label>
-        <label className="flex min-h-14 items-center justify-between gap-4 py-2 text-sm">
-          Repair updates
-          <Switch checked={repairUpdates} onCheckedChange={setRepairUpdates} />
-        </label>
+      <div className="surface space-y-3 p-4">
+        <div>
+          <h2 className="font-semibold text-primary-deep">Payment preference</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Preselect a method when you open Pay rent. You can change it before each payment.
+          </p>
+        </div>
+        <Select
+          value={settings.preferredPaymentMethod}
+          onValueChange={(value) => {
+            if (value === "mobile" || value === "bank" || value === "visa") {
+              onPaymentPreferenceChange(value);
+            }
+          }}
+          disabled={!settingsLoaded}
+        >
+          <SelectTrigger className="min-h-11" aria-label="Preferred payment method">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="mobile">Mobile money · MTN MoMo / Airtel Money</SelectItem>
+            <SelectItem value="bank">Bank transfer</SelectItem>
+            <SelectItem value="visa">Card</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
-      <p className="text-xs text-muted-foreground">
-        Settings shown here are saved for this demo session only.
+      <div className="surface flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="font-semibold text-primary-deep">Notifications</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Choose in-app, SMS, and WhatsApp delivery preferences.
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          className="min-h-11 shrink-0"
+          onClick={onOpenNotifications}
+        >
+          <BellRing className="mr-2 size-4" aria-hidden />
+          Notification settings
+        </Button>
+      </div>
+      <p className="rounded-lg border border-warning/30 bg-warning-soft p-3 text-xs leading-relaxed text-muted-foreground">
+        Demo only: preferences are stored in this browser. Your tenancy details are sample data;
+        there is no live account or payment connection.
       </p>
     </section>
   );
@@ -881,119 +1309,144 @@ function NotificationsTab({
   onRead: (id: string) => void;
   onMarkAllRead: () => void;
 }) {
-  const unreadCount = notifications.filter((notification) => !notification.read).length;
-
   return (
     <div className="space-y-4 px-4 pb-8 pt-5 sm:px-5 sm:pt-6">
-      <header className="flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-3">
-          <Button variant="outline" size="iconSm" onClick={onBack} aria-label="Back to home">
-            <ArrowLeft />
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold">Notifications</h1>
-            <p className="text-sm text-muted-foreground">
-              Rent, payment, advance and landlord updates.
-            </p>
-          </div>
-        </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onMarkAllRead}
-          disabled={unreadCount === 0}
-          className="shrink-0"
-        >
-          Mark all read
-        </Button>
-      </header>
-
-      {notifications.length === 0 ? (
-        <div className="surface px-5 py-10 text-center">
-          <BellRing className="mx-auto size-8 text-muted-foreground" aria-hidden />
-          <p className="mt-3 font-semibold">You’re all caught up</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            New rent and landlord updates will appear here.
-          </p>
-        </div>
-      ) : (
-        <ul className="space-y-3">
-          {notifications.map((notification) => {
-            const Icon =
-              notification.kind === "payment"
-                ? Receipt
-                : notification.kind === "advance"
-                  ? CalendarDays
-                  : notification.kind === "update"
-                    ? MessageSquare
-                    : BellRing;
-            const date = new Date(notification.createdAt);
-            const dateLabel = Number.isNaN(date.getTime())
-              ? "Recently"
-              : new Intl.DateTimeFormat("en-UG", {
-                  day: "numeric",
-                  month: "short",
-                  hour: "numeric",
-                  minute: "2-digit",
-                }).format(date);
-            return (
-              <li key={notification.id}>
-                <button
-                  type="button"
-                  onClick={() => onRead(notification.id)}
-                  aria-label={`${notification.read ? "" : "Unread: "}${notification.title}. ${notification.message}`}
-                  className={`surface flex w-full items-start gap-3 p-4 text-left transition-colors ${
-                    notification.read ? "" : "border-primary/30 bg-primary-soft/35"
-                  }`}
-                >
-                  <span className="grid size-10 shrink-0 place-items-center rounded-full bg-card text-primary-deep">
-                    <Icon className="size-5" aria-hidden />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-start justify-between gap-2">
-                      <span className="font-bold">{notification.title}</span>
-                      {!notification.read && (
-                        <span className="rounded-full bg-primary px-2 py-0.5 text-[0.625rem] font-bold text-primary-foreground">
-                          New
-                        </span>
-                      )}
-                    </span>
-                    <span className="mt-1 block text-sm text-muted-foreground">
-                      {notification.message}
-                    </span>
-                    <time
-                      className="mt-2 block text-xs text-muted-foreground"
-                      dateTime={notification.createdAt}
-                    >
-                      {dateLabel}
-                    </time>
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-      <p className="text-center text-xs text-muted-foreground">
-        Demo notifications are saved in this browser and are not sent as push messages or SMS.
-      </p>
+      <NotificationCenter
+        audience="tenant"
+        notifications={notifications}
+        onBack={onBack}
+        onRead={onRead}
+        onMarkAllRead={onMarkAllRead}
+      />
     </div>
   );
 }
 
-function NoticeCard({ notice }: { notice: EvictionNotice }) {
+function NoticeCard({
+  notice,
+  onAcknowledge,
+  onPay,
+  onDispute,
+}: {
+  notice: TenantNotice;
+  onAcknowledge: () => void;
+  onPay: () => void;
+  onDispute: (message: string) => void;
+}) {
+  const [disputeOpen, setDisputeOpen] = useState(false);
+  const [message, setMessage] = useState("");
+  const labels: Record<TenantNotice["kind"], string> = {
+    "friendly-reminder": "Friendly rent reminder",
+    "formal-rent-demand": "Formal rent demand",
+    "notice-of-default": "Notice of default",
+    "notice-to-vacate": "Notice to vacate",
+    "rent-increase": "Rent-increase notice",
+    "end-of-tenancy": "End-of-tenancy notice",
+  };
+  const isEvictionNotice = notice.kind === "notice-to-vacate";
+
   return (
-    <div className="rounded-lg border border-warning/40 bg-warning-soft p-4">
-      <p className="font-bold text-warning-ink">Notice from your landlord</p>
-      <p className="mt-1 text-sm text-warning-ink">
+    <section
+      className={cn(
+        "rounded-xl border p-4",
+        isEvictionNotice
+          ? "border-warning/40 bg-warning-soft"
+          : "border-primary/20 bg-primary-soft",
+      )}
+      aria-label={labels[notice.kind]}
+    >
+      <p className={cn("font-bold", isEvictionNotice ? "text-warning-ink" : "text-primary-deep")}>
+        {labels[notice.kind]}
+      </p>
+      <p className="mt-1 text-sm text-muted-foreground">
         {notice.property} · Unit {notice.unit}
       </p>
-      <p className="mt-2 text-sm">
-        Requested move-out date: <strong>{notice.vacateBy}</strong>
-      </p>
+      {notice.effectiveDate && (
+        <p className="mt-2 text-sm">
+          {isEvictionNotice ? "Requested move-out date" : "Effective date"}:{" "}
+          <strong>{notice.effectiveDate}</strong>
+        </p>
+      )}
       {notice.reason && <p className="mt-2 text-sm">{notice.reason}</p>}
-      <p className="mt-2 text-xs text-warning-ink">Issued {notice.issuedOn}</p>
-    </div>
+      {notice.details && <p className="mt-2 whitespace-pre-wrap text-sm">{notice.details}</p>}
+      {notice.arrearsStatement && (
+        <p className="mt-2 text-sm">
+          Ledger arrears as of {notice.arrearsStatement.asOf}:{" "}
+          <strong>{formatUGX(notice.arrearsStatement.total)}</strong>
+        </p>
+      )}
+      <p className="mt-2 text-xs text-muted-foreground">Issued {notice.issuedOn}</p>
+      {notice.response && (
+        <p className="mt-2 rounded-md bg-card/70 p-2 text-xs font-medium">
+          Your response: {notice.response.status.replace("-", " ")}
+          {notice.response.message ? ` · ${notice.response.message}` : ""}
+        </p>
+      )}
+      {notice.attachments.length > 0 && (
+        <ul className="mt-3 space-y-1">
+          {notice.attachments.map((attachment, index) => (
+            <li key={`${attachment.name}-${index}`}>
+              <a
+                className="text-sm font-semibold text-primary underline"
+                href={attachment.dataUrl}
+                download={attachment.name}
+              >
+                View attachment: {attachment.name}
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          className="min-h-11 bg-card"
+          onClick={onAcknowledge}
+          disabled={notice.response?.status === "acknowledged"}
+        >
+          Acknowledge
+        </Button>
+        <Button type="button" className="min-h-11" onClick={onPay}>
+          Pay rent
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className="min-h-11 bg-card"
+          onClick={() => setDisputeOpen((open) => !open)}
+        >
+          Dispute
+        </Button>
+      </div>
+      {disputeOpen && (
+        <div className="mt-3 space-y-2">
+          <label className="block text-sm font-medium" htmlFor={`notice-dispute-${notice.id}`}>
+            Message to your landlord
+          </label>
+          <Textarea
+            id={`notice-dispute-${notice.id}`}
+            value={message}
+            onChange={(event) => setMessage(event.target.value)}
+            maxLength={1000}
+            placeholder="Explain what you would like to dispute."
+            className="min-h-20 bg-card"
+          />
+          <Button
+            type="button"
+            className="min-h-11"
+            disabled={!message.trim()}
+            onClick={() => {
+              onDispute(message.trim());
+              setMessage("");
+              setDisputeOpen(false);
+            }}
+          >
+            Send dispute
+          </Button>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -1352,7 +1805,7 @@ function ComplaintsTab({
 function tenantCalendarEvents(
   payments: Payment[],
   complaints: Complaint[],
-  notice: EvictionNotice | null,
+  notices: TenantNotice[],
   activeTenant: boolean,
 ) {
   const events: CalendarEvent[] = [
@@ -1401,24 +1854,31 @@ function tenantCalendarEvents(
       kind: "complaint" as const,
     })),
   ];
-  if (notice) {
-    events.push(
+  events.push(
+    ...notices.flatMap((notice) => [
       {
-        id: "eviction-notice",
+        id: `notice-received-${notice.id}`,
         title: "Notice received",
-        date: new Date(notice.issuedOn),
-        detail: `Requested move-out by ${notice.vacateBy}`,
+        date: new Date(`${notice.issuedOn}T00:00:00`),
+        detail: notice.reason,
         kind: "notice" as const,
       },
-      {
-        id: "move-out-date",
-        title: "Requested move-out date",
-        date: new Date(notice.vacateBy),
-        detail: `${notice.property} · Unit ${notice.unit}`,
-        kind: "notice" as const,
-      },
-    );
-  }
+      ...(notice.effectiveDate
+        ? [
+            {
+              id: `notice-effective-${notice.id}`,
+              title:
+                notice.kind === "notice-to-vacate"
+                  ? "Requested move-out date"
+                  : "Notice effective date",
+              date: new Date(`${notice.effectiveDate}T00:00:00`),
+              detail: `${notice.property} · Unit ${notice.unit}`,
+              kind: "notice" as const,
+            },
+          ]
+        : []),
+    ]),
+  );
   return events;
 }
 

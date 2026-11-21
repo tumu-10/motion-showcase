@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Ban, CircleAlert, CircleCheck, CircleHelp, Clock3, type LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,12 +22,45 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createReceiptImage } from "@/lib/receipt-image";
 import { buildReceiptPdf } from "@/lib/receipt-pdf";
-import { cancelAndReissueReceipt, type ReceiptBundle } from "@/lib/receipt-branding";
+import {
+  cancelAndReissueReceipt,
+  efrisStatusLabel,
+  type ReceiptBundle,
+} from "@/lib/receipt-branding";
+import {
+  cancelEfrisReceipt,
+  refreshEfrisReceiptStatus,
+  submitEfrisReceipt,
+} from "@/lib/efris-service";
+import type { EfrisStatus } from "@/lib/efris";
 
-export function ReceiptActions({ getBundle }: { getBundle: () => ReceiptBundle }) {
+export function ReceiptActions({
+  getBundle,
+  showEfrisStatus = true,
+}: {
+  getBundle: () => ReceiptBundle;
+  showEfrisStatus?: boolean;
+}) {
   const [reissueOpen, setReissueOpen] = useState(false);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
+  const [receiptBundle, setReceiptBundle] = useState(getBundle);
+
+  const efrisTone: Record<EfrisStatus, string> = {
+    "not-required": "bg-muted text-muted-foreground",
+    pending: "bg-warning-soft text-warning-ink",
+    issued: "bg-success-soft text-success-ink",
+    failed: "bg-destructive-soft text-destructive-ink",
+    cancelled: "bg-muted text-muted-foreground",
+  };
+  const efrisIcon: Record<EfrisStatus, LucideIcon> = {
+    "not-required": CircleHelp,
+    pending: Clock3,
+    issued: CircleCheck,
+    failed: CircleAlert,
+    cancelled: Ban,
+  };
+  const StatusIcon = efrisIcon[receiptBundle.receipt.efris.status];
 
   async function run(action: (bundle: ReceiptBundle) => Promise<void>) {
     setBusy(true);
@@ -85,7 +119,11 @@ export function ReceiptActions({ getBundle }: { getBundle: () => ReceiptBundle }
   async function reissue() {
     if (!reason.trim()) return;
     await run(async (bundle) => {
+      if (bundle.receipt.efris.status === "issued") {
+        await cancelEfrisReceipt(bundle.receipt.receiptNumber, reason);
+      }
       const replacement = cancelAndReissueReceipt(bundle.receipt.receiptNumber, reason);
+      setReceiptBundle(replacement);
       setReissueOpen(false);
       setReason("");
       await downloadPdf(replacement);
@@ -104,6 +142,47 @@ export function ReceiptActions({ getBundle }: { getBundle: () => ReceiptBundle }
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
+          {receiptBundle.receipt.content.kind === "rent" &&
+            ["pending", "failed"].includes(receiptBundle.receipt.efris.status) && (
+              <DropdownMenuItem
+                onSelect={() =>
+                  void run(async (bundle) => {
+                    const updated = await submitEfrisReceipt(bundle.receipt.receiptNumber, {
+                      offline: !navigator.onLine,
+                    });
+                    setReceiptBundle(updated);
+                    if (updated.receipt.efris.status === "issued") {
+                      toast.success("Mock EFRIS document issued", {
+                        description: updated.receipt.efris.fiscalDocumentNumber ?? undefined,
+                      });
+                    } else {
+                      toast.error("EFRIS mock submission needs attention", {
+                        description:
+                          updated.receipt.efris.errorMessage ??
+                          "Review the landlord EFRIS profile.",
+                      });
+                    }
+                  })
+                }
+              >
+                Submit / retry EFRIS (mock)
+              </DropdownMenuItem>
+            )}
+          {receiptBundle.receipt.content.kind === "rent" &&
+            receiptBundle.receipt.efris.status === "issued" && (
+              <DropdownMenuItem
+                onSelect={() =>
+                  void run(async (bundle) => {
+                    const updated = await refreshEfrisReceiptStatus(bundle.receipt.receiptNumber, {
+                      offline: !navigator.onLine,
+                    });
+                    setReceiptBundle(updated);
+                  })
+                }
+              >
+                Check mock EFRIS status
+              </DropdownMenuItem>
+            )}
           <DropdownMenuItem onSelect={() => void run(downloadPdf)}>Download PDF</DropdownMenuItem>
           <DropdownMenuItem onSelect={() => void run(sharePdf)}>Share PDF</DropdownMenuItem>
           <DropdownMenuItem onSelect={() => void run(shareImage)}>Share image</DropdownMenuItem>
@@ -169,6 +248,27 @@ export function ReceiptActions({ getBundle }: { getBundle: () => ReceiptBundle }
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {showEfrisStatus && (
+        <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2">
+          <span
+            className={`inline-flex min-h-7 items-center rounded-full px-2.5 text-xs font-semibold ${efrisTone[receiptBundle.receipt.efris.status]}`}
+            aria-label={`EFRIS status: ${efrisStatusLabel(receiptBundle.receipt.efris.status)}`}
+          >
+            <StatusIcon className="mr-1 size-3.5" aria-hidden />
+            EFRIS · {efrisStatusLabel(receiptBundle.receipt.efris.status)}
+          </span>
+          {receiptBundle.receipt.efris.fiscalDocumentNumber && (
+            <span className="break-all text-xs text-muted-foreground">
+              {receiptBundle.receipt.efris.fiscalDocumentNumber}
+            </span>
+          )}
+          {receiptBundle.receipt.efris.accountantNote && (
+            <span className="text-xs text-warning-ink">
+              {receiptBundle.receipt.efris.accountantNote}
+            </span>
+          )}
+        </div>
+      )}
     </>
   );
 }

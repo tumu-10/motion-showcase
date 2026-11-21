@@ -5,9 +5,15 @@ import {
   type LedgerEntry,
   type TenantNotification,
   type Unit,
+  notificationEventTypes,
 } from "@/lib/sample-data";
 import { DEFAULT_DEPOSIT_MONTHS } from "@/lib/legal";
 import type { DepositLedgerEntry, MoveInPaymentRequest, Tenancy } from "@/lib/tenancy";
+import {
+  homeServiceCategories,
+  type HomeServiceRequest,
+  type PropertyHomeServiceSettings,
+} from "@/lib/home-services";
 
 const storageKey = "propatiz-demo-rent-state";
 
@@ -18,10 +24,21 @@ export type RentDemoState = {
   tenancies: Tenancy[];
   depositLedger: DepositLedgerEntry[];
   moveInRequests: MoveInPaymentRequest[];
+  homeServiceRequests: HomeServiceRequest[];
+  propertyHomeServiceSettings: PropertyHomeServiceSettings[];
 };
 
 type StoredRentDemoState = Pick<RentDemoState, "units" | "ledger" | "notifications"> &
-  Partial<Pick<RentDemoState, "tenancies" | "depositLedger" | "moveInRequests">>;
+  Partial<
+    Pick<
+      RentDemoState,
+      | "tenancies"
+      | "depositLedger"
+      | "moveInRequests"
+      | "homeServiceRequests"
+      | "propertyHomeServiceSettings"
+    >
+  >;
 
 export function createSampleDepositLedger(units: Unit[]): DepositLedgerEntry[] {
   const receivedAt = "2026-01-01";
@@ -54,6 +71,8 @@ export const initialRentDemoState: RentDemoState = {
   tenancies: [],
   depositLedger: createSampleDepositLedger(initialUnits),
   moveInRequests: [],
+  homeServiceRequests: [],
+  propertyHomeServiceSettings: [],
 };
 
 export function readRentDemoState(): { state: RentDemoState; error?: Error | undefined } {
@@ -62,12 +81,22 @@ export function readRentDemoState(): { state: RentDemoState; error?: Error | und
     if (!saved) return { state: initialRentDemoState };
     const value: unknown = JSON.parse(saved);
     if (!isRentDemoState(value)) throw new Error("Saved rent demo data has an invalid shape.");
+    const savedUnits = value.units.map((unit) => ({
+      ...unit,
+      dueDay: unit.dueDay ?? initialUnits.find((sample) => sample.id === unit.id)?.dueDay,
+      block: unit.block ?? initialUnits.find((sample) => sample.id === unit.id)?.block,
+      vacantSince:
+        unit.vacantSince ?? initialUnits.find((sample) => sample.id === unit.id)?.vacantSince,
+    }));
     return {
       state: {
         ...value,
+        units: savedUnits,
         tenancies: value.tenancies ?? [],
-        depositLedger: value.depositLedger ?? createSampleDepositLedger(value.units),
+        depositLedger: value.depositLedger ?? createSampleDepositLedger(savedUnits),
         moveInRequests: value.moveInRequests ?? [],
+        homeServiceRequests: value.homeServiceRequests ?? [],
+        propertyHomeServiceSettings: value.propertyHomeServiceSettings ?? [],
       },
     };
   } catch (error) {
@@ -97,7 +126,53 @@ export function isRentDemoState(value: unknown): value is StoredRentDemoState {
     (state["depositLedger"] === undefined ||
       (Array.isArray(state["depositLedger"]) && state["depositLedger"].every(isDepositEntry))) &&
     (state["moveInRequests"] === undefined ||
-      (Array.isArray(state["moveInRequests"]) && state["moveInRequests"].every(isMoveInRequest)))
+      (Array.isArray(state["moveInRequests"]) && state["moveInRequests"].every(isMoveInRequest))) &&
+    (state["homeServiceRequests"] === undefined ||
+      (Array.isArray(state["homeServiceRequests"]) &&
+        state["homeServiceRequests"].every(isHomeServiceRequest))) &&
+    (state["propertyHomeServiceSettings"] === undefined ||
+      (Array.isArray(state["propertyHomeServiceSettings"]) &&
+        state["propertyHomeServiceSettings"].every(isPropertyHomeServiceSettings)))
+  );
+}
+
+function isHomeServiceRequest(value: unknown): value is HomeServiceRequest {
+  if (typeof value !== "object" || value === null) return false;
+  const request = value as Record<string, unknown>;
+  return (
+    typeof request["id"] === "string" &&
+    typeof request["property"] === "string" &&
+    typeof request["unitId"] === "string" &&
+    typeof request["unit"] === "string" &&
+    typeof request["tenant"] === "string" &&
+    homeServiceCategories.some((service) => service.id === request["serviceId"]) &&
+    typeof request["serviceLabel"] === "string" &&
+    typeof request["providerId"] === "string" &&
+    typeof request["providerName"] === "string" &&
+    typeof request["requestedAt"] === "string" &&
+    ["Requested", "Confirmed", "Done"].includes(String(request["status"]))
+  );
+}
+
+function isPropertyHomeServiceSettings(value: unknown): value is PropertyHomeServiceSettings {
+  if (typeof value !== "object" || value === null) return false;
+  const settings = value as Record<string, unknown>;
+  const monthlyChargeValue = settings["monthlyServiceCharge"];
+  const monthlyCharge =
+    typeof monthlyChargeValue === "object" && monthlyChargeValue !== null
+      ? (monthlyChargeValue as Record<string, unknown>)
+      : undefined;
+  return (
+    typeof settings["property"] === "string" &&
+    Array.isArray(settings["preferredProviderIds"]) &&
+    settings["preferredProviderIds"].every((providerId) => typeof providerId === "string") &&
+    (monthlyChargeValue === undefined ||
+      (monthlyCharge !== undefined &&
+        typeof monthlyCharge["label"] === "string" &&
+        typeof monthlyCharge["amount"] === "number" &&
+        Number.isInteger(monthlyCharge["amount"]) &&
+        monthlyCharge["amount"] >= 0 &&
+        typeof monthlyCharge["enabled"] === "boolean"))
   );
 }
 
@@ -111,6 +186,11 @@ function isUnit(value: unknown): value is Unit {
     (typeof unit["tenant"] === "string" || unit["tenant"] === null) &&
     typeof unit["phone"] === "string" &&
     typeof unit["rent"] === "number" &&
+    (unit["dueDay"] === undefined ||
+      (typeof unit["dueDay"] === "number" &&
+        Number.isInteger(unit["dueDay"]) &&
+        unit["dueDay"] >= 1 &&
+        unit["dueDay"] <= 31)) &&
     typeof unit["daysUntilDue"] === "number" &&
     typeof unit["paid"] === "boolean" &&
     typeof unit["leaseEnds"] === "string"
@@ -158,7 +238,28 @@ function isTenantNotification(value: unknown): value is TenantNotification {
     typeof notification["title"] === "string" &&
     typeof notification["message"] === "string" &&
     typeof notification["createdAt"] === "string" &&
-    typeof notification["read"] === "boolean"
+    typeof notification["read"] === "boolean" &&
+    (notification["unitId"] === undefined || typeof notification["unitId"] === "string") &&
+    (notification["audience"] === undefined ||
+      ["landlord", "tenant"].includes(String(notification["audience"]))) &&
+    (notification["eventType"] === undefined ||
+      notificationEventTypes.includes(
+        notification["eventType"] as (typeof notificationEventTypes)[number],
+      )) &&
+    (notification["dedupeKey"] === undefined || typeof notification["dedupeKey"] === "string") &&
+    (notification["delivery"] === undefined ||
+      (Array.isArray(notification["delivery"]) &&
+        notification["delivery"].every(isNotificationDelivery)))
+  );
+}
+
+function isNotificationDelivery(value: unknown) {
+  if (typeof value !== "object" || value === null) return false;
+  const delivery = value as Record<string, unknown>;
+  return (
+    ["in-app", "sms", "whatsapp"].includes(String(delivery["channel"])) &&
+    ["mocked", "disabled"].includes(String(delivery["status"])) &&
+    typeof delivery["note"] === "string"
   );
 }
 

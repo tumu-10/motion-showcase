@@ -11,26 +11,34 @@ import {
   Settings,
   ShieldCheck,
   WalletCards,
+  Wrench,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { AdvanceView } from "@/components/landlord/AdvanceView";
 import { ComplaintsView } from "@/components/landlord/ComplaintsView";
-import { EvictionNoticeDialog } from "@/components/landlord/EvictionNoticeDialog";
+import { EfrisView } from "@/components/landlord/EfrisView";
+import { HomeServicesManagement } from "@/components/landlord/HomeServicesManagement";
 import { MoveInWizard, type MoveInSubmission } from "@/components/landlord/MoveInWizard";
+import { NoticesView } from "@/components/landlord/NoticesView";
+import { NotificationCenter } from "@/components/shared/NotificationCenter";
 import { Overview } from "@/components/landlord/Overview";
 import { PaymentsView } from "@/components/landlord/PaymentsView";
 import { ReportsView } from "@/components/landlord/ReportsView";
 import { ReceiptSettings } from "@/components/landlord/ReceiptSettings";
 import { SecurityView } from "@/components/landlord/SecurityView";
 import { UnitSheet } from "@/components/landlord/UnitSheet";
+import { UraView } from "@/components/landlord/UraView";
 import { UnitsView } from "@/components/landlord/UnitsView";
 import { DashShell, type NavItem } from "@/components/shared/DashShell";
 import { CalendarView, type CalendarEvent } from "@/components/shared/CalendarView";
 import { formatUGX, getRentStatus } from "@/lib/rent";
+import { getReceiptRecords } from "@/lib/receipt-branding";
+import { createNotification } from "@/lib/notifications";
 import { calculateMoveInTotal, formatCoveredUntil, recordMoveInPayment } from "@/lib/tenancy";
 import { issueDepositReceipt, issueRentReceipt } from "@/lib/receipt-helpers";
 import type { DepositDeduction, Tenancy } from "@/lib/tenancy";
+import type { PropertyHomeServiceSettings, HomeServiceRequestStatus } from "@/lib/home-services";
 import {
   addRentPeriodMonths,
   currentRentPeriod,
@@ -41,9 +49,12 @@ import {
   localDateIso,
 } from "@/lib/rent-accounting";
 import { useRentDemoData } from "@/lib/useRentDemoData";
-import { saveTenantNotice, setTenantActive, type EvictionNotice } from "@/lib/tenant-demo";
+import type { ReportKind } from "@/lib/reports";
+import { setTenantActive, type TenantNotice } from "@/lib/tenant-demo";
+import { defaultLandlordDemoSettings, readLandlordDemoSettings } from "@/lib/demo-settings";
 import {
   complaints,
+  stageLabel,
   stageOrder,
   type LedgerEntry,
   type Complaint,
@@ -83,12 +94,18 @@ type View =
   | "advance"
   | "security"
   | "notices"
+  | "notifications"
   | "ura"
   | "efris"
+  | "home-services"
   | "settings";
 
 function LandlordPage() {
   const [view, setView] = useState<View>("overview");
+  const [defaultRentDueDay, setDefaultRentDueDay] = useState(
+    defaultLandlordDemoSettings.defaultRentDueDay,
+  );
+  const [reportsInitialReport, setReportsInitialReport] = useState<ReportKind | undefined>();
   const { data: rentData, setData: setRentData } = useRentDemoData();
   const period = currentRentPeriod();
   const units = useMemo(
@@ -107,12 +124,28 @@ function LandlordPage() {
     [period, rentData.ledger, rentData.tenancies, rentData.units],
   );
   const ledger = rentData.ledger;
+  const landlordNotifications = rentData.notifications.filter(
+    (notification) => notification.audience === "landlord",
+  );
+  const unreadLandlordNotifications = landlordNotifications.filter(
+    (notification) => !notification.read,
+  ).length;
   const [requests, setRequests] = useState<Complaint[]>(complaints);
   const [reminded, setReminded] = useState<string[]>([]);
   const [openUnitId, setOpenUnitId] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [presetUnit, setPresetUnit] = useState<string | undefined>();
-  const [noticeUnit, setNoticeUnit] = useState<Unit | null>(null);
+  const [noticePresetUnitId, setNoticePresetUnitId] = useState<string | undefined>();
+
+  useEffect(() => {
+    try {
+      setDefaultRentDueDay(readLandlordDemoSettings().defaultRentDueDay);
+    } catch (error) {
+      toast.error("Landlord settings could not be loaded.", {
+        description: error instanceof Error ? error.message : "Check browser storage and retry.",
+      });
+    }
+  }, []);
 
   const openUnit = units.find((u) => u.id === openUnitId) ?? null;
   const openTenancy = openUnit
@@ -138,11 +171,19 @@ function LandlordPage() {
     { id: "complaints", label: "Repairs", icon: MessageSquareText, badge: openComplaints },
     { id: "payments", label: "Payments", icon: WalletCards },
     { id: "reports", label: "Reports", icon: ChartNoAxesCombined },
+    {
+      id: "notifications",
+      label: "Notifications",
+      icon: BellRing,
+      badge: unreadLandlordNotifications,
+      mobileMore: true,
+    },
     { id: "advance", label: "Advance", icon: BadgeDollarSign, mobileMore: true },
     { id: "security", label: "Security", icon: ShieldCheck, mobileMore: true },
     { id: "notices", label: "Notices", icon: BellRing, mobileMore: true },
     { id: "ura", label: "URA", icon: Landmark, mobileMore: true },
     { id: "efris", label: "EFRIS", icon: ChartNoAxesCombined, mobileMore: true },
+    { id: "home-services", label: "Home services", icon: Wrench, mobileMore: true },
     { id: "calendar", label: "Calendar", icon: CalendarRange, mobileMore: true },
     { id: "settings", label: "Settings", icon: Settings, mobileMore: true },
   ];
@@ -153,15 +194,18 @@ function LandlordPage() {
     setReminded((r) => [...r, id]);
     if (u) {
       const now = new Date();
-      const notification: TenantNotification = {
+      const notification = createNotification({
         id: reminderId!,
+        unitId: u.id,
         unit: u.unit,
+        audience: "tenant",
+        eventType: "rent-due-soon",
         kind: "rent",
         title: "Rent reminder from your landlord",
         message: `Your rent of ${formatUGX(u.rent)} is due. Please contact your landlord if you need help.`,
         createdAt: now.toISOString(),
         read: false,
-      };
+      });
       setRentData((current) => ({
         ...current,
         notifications: [
@@ -190,15 +234,18 @@ function LandlordPage() {
 
   const remindAdvance = (unit: Unit, coveredUntil: string) => {
     const now = new Date();
-    const notification: TenantNotification = {
+    const notification = createNotification({
       id: `advance-reminder-${unit.id}-${Date.now()}`,
+      unitId: unit.id,
       unit: unit.unit,
+      audience: "tenant",
+      eventType: "advance-running-out",
       kind: "advance",
       title: "Your rent advance is running out",
       message: `Your rent is covered through ${formatCoveredUntil(coveredUntil)}. Please plan for your next rent payment.`,
       createdAt: now.toISOString(),
       read: false,
-    };
+    });
     setReminded((current) => [...current, unit.id]);
     setRentData((current) => ({
       ...current,
@@ -246,15 +293,17 @@ function LandlordPage() {
         ? { ...item, pendingMoveIn: true, pendingTenant: tenancy.tenantName }
         : item,
     );
-    const notification: TenantNotification = {
+    const notification = createNotification({
       id: `move-in-notification-${request.id}`,
+      unitId: unit.id,
       unit: unit.unit,
+      audience: "tenant",
       kind: "rent",
       title: "Move-in payment request",
       message: `${formatUGX(request.amountDue)} is due to start your tenancy at ${unit.unit}. Part payments are allowed.`,
       createdAt: now.toISOString(),
       read: false,
-    };
+    });
     let nextState = {
       ...rentData,
       units: pendingUnits,
@@ -279,6 +328,52 @@ function LandlordPage() {
           id: moveInPaymentId,
         });
         moveInPayment = payment;
+        const paymentNotifications: TenantNotification[] = [
+          createNotification({
+            id: `move-in-receipt:${moveInPaymentId}`,
+            audience: "tenant",
+            eventType: "receipt",
+            unitId: unit.id,
+            unit: unit.unit,
+            kind: "payment",
+            title: "Move-in payment receipt",
+            message: `${formatUGX(initialPayment)} was recorded for ${unit.property} · Unit ${unit.unit}.`,
+            createdAt: now.toISOString(),
+            read: false,
+          }),
+        ];
+        if (payment.request.rentPaid > 0) {
+          paymentNotifications.push(
+            createNotification({
+              id: `move-in-rent-received:${moveInPaymentId}`,
+              audience: "landlord",
+              eventType: tenancy.advanceMonths > 1 ? "advance-received" : "payment-received",
+              unitId: unit.id,
+              unit: unit.unit,
+              kind: tenancy.advanceMonths > 1 ? "advance" : "payment",
+              title: tenancy.advanceMonths > 1 ? "Advance rent received" : "Rent payment received",
+              message: `${formatUGX(payment.request.rentPaid)} was received for ${tenancy.tenantName} · ${unit.property} · Unit ${unit.unit}.`,
+              createdAt: now.toISOString(),
+              read: false,
+            }),
+          );
+        }
+        if (payment.request.depositPaid > 0) {
+          paymentNotifications.push(
+            createNotification({
+              id: `move-in-deposit-received:${moveInPaymentId}`,
+              audience: "landlord",
+              eventType: "deposit-received",
+              unitId: unit.id,
+              unit: unit.unit,
+              kind: "update",
+              title: "Security deposit received",
+              message: `${formatUGX(payment.request.depositPaid)} deposit was received for ${tenancy.tenantName} · ${unit.property} · Unit ${unit.unit}.`,
+              createdAt: now.toISOString(),
+              read: false,
+            }),
+          );
+        }
         nextState = {
           ...nextState,
           units: payment.units,
@@ -286,6 +381,7 @@ function LandlordPage() {
           depositLedger: payment.depositLedger,
           tenancies: [payment.tenancy, ...rentData.tenancies],
           moveInRequests: [payment.request, ...rentData.moveInRequests],
+          notifications: [...paymentNotifications, ...nextState.notifications],
         };
         if (payment.tenancy.status === "Active" && unit.id === "u3") {
           setTenantActive(true, unit.unit);
@@ -332,15 +428,55 @@ function LandlordPage() {
         receivedAt: localDateIso(now),
         id: paymentId,
       });
-      const notification: TenantNotification = {
-        id: `move-in-payment-notification-${Date.now()}`,
-        unit: openUnit.unit,
-        kind: "payment",
-        title: "Move-in payment received",
-        message: `${formatUGX(amount)} was received. ${payment.request.status === "Paid" ? "Your tenancy is active." : `${formatUGX(payment.request.amountDue - payment.request.amountPaid)} remains due.`}`,
-        createdAt: now.toISOString(),
-        read: false,
-      };
+      const paymentNotifications: TenantNotification[] = [
+        createNotification({
+          id: `move-in-payment-notification-${Date.now()}`,
+          unitId: openUnit.id,
+          unit: openUnit.unit,
+          audience: "tenant",
+          eventType: "receipt",
+          kind: "payment",
+          title: "Move-in payment received",
+          message: `${formatUGX(amount)} was received. ${payment.request.status === "Paid" ? "Your tenancy is active." : `${formatUGX(payment.request.amountDue - payment.request.amountPaid)} remains due.`}`,
+          createdAt: now.toISOString(),
+          read: false,
+        }),
+      ];
+      const rentReceived = payment.request.rentPaid - openMoveInRequest.rentPaid;
+      const depositReceived = payment.request.depositPaid - openMoveInRequest.depositPaid;
+      if (rentReceived > 0) {
+        paymentNotifications.push(
+          createNotification({
+            id: `move-in-rent-received:${paymentId}`,
+            audience: "landlord",
+            eventType: payment.tenancy.advanceMonths > 1 ? "advance-received" : "payment-received",
+            unitId: openUnit.id,
+            unit: openUnit.unit,
+            kind: payment.tenancy.advanceMonths > 1 ? "advance" : "payment",
+            title:
+              payment.tenancy.advanceMonths > 1 ? "Advance rent received" : "Rent payment received",
+            message: `${formatUGX(rentReceived)} was received for ${openTenancy.tenantName} · ${openUnit.property} · Unit ${openUnit.unit}.`,
+            createdAt: now.toISOString(),
+            read: false,
+          }),
+        );
+      }
+      if (depositReceived > 0) {
+        paymentNotifications.push(
+          createNotification({
+            id: `move-in-deposit-received:${paymentId}`,
+            audience: "landlord",
+            eventType: "deposit-received",
+            unitId: openUnit.id,
+            unit: openUnit.unit,
+            kind: "update",
+            title: "Security deposit received",
+            message: `${formatUGX(depositReceived)} deposit was received for ${openTenancy.tenantName} · ${openUnit.property} · Unit ${openUnit.unit}.`,
+            createdAt: now.toISOString(),
+            read: false,
+          }),
+        );
+      }
       setRentData((current) => ({
         ...current,
         units: payment.units,
@@ -352,7 +488,7 @@ function LandlordPage() {
         moveInRequests: current.moveInRequests.map((request) =>
           request.id === payment.request.id ? payment.request : request,
         ),
-        notifications: [notification, ...current.notifications],
+        notifications: [...paymentNotifications, ...current.notifications],
       }));
       try {
         issueMoveInReceipts(payment, paymentId, openUnit.property);
@@ -393,15 +529,18 @@ function LandlordPage() {
       return;
     }
     const now = new Date();
-    const notification: TenantNotification = {
+    const notification = createNotification({
       id: `deposit-refund-${entry.id}-${Date.now()}`,
+      unitId: entry.unitId,
       unit: entry.unit,
+      audience: "tenant",
+      eventType: "refund-update",
       kind: "update",
       title: "Security deposit refund proposed",
       message: `${formatUGX(refundAmount)} is proposed after ${formatUGX(arrears)} in arrears and ${formatUGX(deductions.reduce((sum, item) => sum + item.amount, 0))} in itemised deductions. You can accept or dispute.`,
       createdAt: now.toISOString(),
       read: false,
-    };
+    });
     setRentData((current) => ({
       ...current,
       depositLedger: current.depositLedger.map((item) =>
@@ -430,9 +569,12 @@ function LandlordPage() {
     }
     const resolvedAt = new Date().toISOString();
     const status = decision === "accept" ? "Refunded" : "Disputed";
-    const notification: TenantNotification = {
+    const notification = createNotification({
       id: `deposit-decision-${entry.id}-${Date.now()}`,
+      unitId: entry.unitId,
       unit: entry.unit,
+      audience: "landlord",
+      eventType: "refund-update",
       kind: "update",
       title: decision === "accept" ? "Deposit refund accepted" : "Deposit refund disputed",
       message:
@@ -441,7 +583,7 @@ function LandlordPage() {
           : "The tenant disputed the proposed deposit deductions. Please contact them to resolve it.",
       createdAt: resolvedAt,
       read: false,
-    };
+    });
     setRentData((current) => ({
       ...current,
       depositLedger: current.depositLedger.map((item) =>
@@ -479,9 +621,12 @@ function LandlordPage() {
       monthsCovered,
       coverageAmounts,
     };
-    const notification: TenantNotification = {
+    const notification = createNotification({
       id: `payment-${entry.id}`,
+      unitId: u.id,
       unit: u.unit,
+      audience: "tenant",
+      eventType: "receipt",
       kind: monthsCovered > 1 ? "advance" : "payment",
       title: monthsCovered > 1 ? "Advance rent recorded" : "Rent payment recorded",
       message: `${formatUGX(entry.amount)} was recorded for ${formatRentPeriodRange(
@@ -490,7 +635,19 @@ function LandlordPage() {
       )}.`,
       createdAt: now.toISOString(),
       read: false,
-    };
+    });
+    const landlordNotification = createNotification({
+      id: `payment-received:landlord:${entry.id}`,
+      unitId: u.id,
+      unit: u.unit,
+      audience: "landlord",
+      eventType: monthsCovered > 1 ? "advance-received" : "payment-received",
+      kind: monthsCovered > 1 ? "advance" : "payment",
+      title: monthsCovered > 1 ? "Advance rent received" : "Rent payment received",
+      message: `${formatUGX(entry.amount)} was recorded for ${u.tenant} · ${u.property} · Unit ${u.unit}.`,
+      createdAt: now.toISOString(),
+      read: false,
+    });
     setRentData((current) => {
       const nextLedger = [entry, ...current.ledger];
       return {
@@ -506,6 +663,7 @@ function LandlordPage() {
         ),
         notifications: [
           notification,
+          landlordNotification,
           ...current.notifications.filter((item) => item.id !== notification.id),
         ],
       };
@@ -531,15 +689,30 @@ function LandlordPage() {
       return;
     }
     const now = new Date();
-    const notification: TenantNotification = {
+    const notification = createNotification({
       id: `payment-${pending.id}`,
+      unitId: pending.unitId,
       unit: pending.unit,
+      audience: "tenant",
+      eventType: "receipt",
       kind: "payment",
       title: "Rent payment confirmed",
       message: `${formatUGX(pending.amount)} was confirmed for ${pending.unit}.`,
       createdAt: now.toISOString(),
       read: false,
-    };
+    });
+    const landlordNotification = createNotification({
+      id: `payment-received:landlord:${pending.id}`,
+      unitId: pending.unitId,
+      unit: pending.unit,
+      audience: "landlord",
+      eventType: pending.monthsCovered > 1 ? "advance-received" : "payment-received",
+      kind: pending.monthsCovered > 1 ? "advance" : "payment",
+      title: pending.monthsCovered > 1 ? "Advance rent confirmed" : "Rent payment received",
+      message: `${formatUGX(pending.amount)} was confirmed for ${pending.tenant} · Unit ${pending.unit}.`,
+      createdAt: now.toISOString(),
+      read: false,
+    });
     const confirmedEntry = { ...pending, status: "Confirmed" as const };
     const nextLedgerForReceipt = ledger.map((entry) => (entry.id === id ? confirmedEntry : entry));
     setRentData((current) => {
@@ -557,6 +730,7 @@ function LandlordPage() {
         ),
         notifications: [
           notification,
+          landlordNotification,
           ...current.notifications.filter((item) => item.id !== notification.id),
         ],
       };
@@ -580,13 +754,30 @@ function LandlordPage() {
   };
 
   const advance = (id: string) => {
-    setRequests((list) =>
-      list.map((r) => {
-        if (r.id !== id) return r;
-        const next = stageOrder[Math.min(stageOrder.indexOf(r.stage) + 1, stageOrder.length - 1)];
-        return { ...r, stage: next ?? r.stage };
-      }),
+    const request = requests.find((item) => item.id === id);
+    if (!request || request.stage === "resolved") return;
+    const next = stageOrder[Math.min(stageOrder.indexOf(request.stage) + 1, stageOrder.length - 1)];
+    if (!next || next === request.stage) return;
+    setRequests((list) => list.map((item) => (item.id === id ? { ...item, stage: next } : item)));
+    const unit = units.find(
+      (item) => item.unit === request.unit && item.property === request.property,
     );
+    const notification = createNotification({
+      id: `repair-update:${request.id}:${next}`,
+      audience: "tenant",
+      eventType: "repair-update",
+      ...(unit ? { unitId: unit.id } : {}),
+      unit: request.unit,
+      kind: "update",
+      title: `Repair update: ${stageLabel[next]}`,
+      message: `${request.title} · ${request.property} · Unit ${request.unit} is now ${stageLabel[next].toLowerCase()}.`,
+      createdAt: new Date().toISOString(),
+      read: false,
+    });
+    setRentData((current) => ({
+      ...current,
+      notifications: [notification, ...current.notifications],
+    }));
   };
 
   return (
@@ -594,7 +785,12 @@ function LandlordPage() {
       current="/landlord"
       nav={nav}
       view={view}
-      onView={setView}
+      notificationCount={unreadLandlordNotifications}
+      onOpenNotifications={() => setView("notifications")}
+      onView={(nextView) => {
+        if (nextView === "reports") setReportsInitialReport(undefined);
+        setView(nextView);
+      }}
       account={{ name: "Patricia Auma", role: "Kololo Heights Management" }}
     >
       {view === "overview" && (
@@ -632,7 +828,18 @@ function LandlordPage() {
       {view === "calendar" && (
         <CalendarView events={landlordCalendarEvents(units, requests)} audience="landlord" />
       )}
-      {view === "reports" && <ReportsView units={units} ledger={ledger} />}
+      {view === "reports" && (
+        <ReportsView
+          {...(reportsInitialReport ? { initialReport: reportsInitialReport } : {})}
+          units={units}
+          ledger={ledger}
+          deposits={rentData.depositLedger}
+          notifications={rentData.notifications}
+          complaints={requests}
+          tenancies={rentData.tenancies}
+          receipts={getReceiptRecords()}
+        />
+      )}
       {view === "advance" && (
         <AdvanceView units={units} ledger={ledger} reminded={reminded} onRemind={remindAdvance} />
       )}
@@ -646,24 +853,141 @@ function LandlordPage() {
         />
       )}
       {view === "notices" && (
-        <ComingSoonView
-          title="Notices"
-          description="Prepare reminders, demands, rent-increase notices and lawful move-out notices."
+        <NoticesView
+          units={units}
+          ledger={ledger}
+          tenancies={rentData.tenancies}
+          presetUnitId={noticePresetUnitId}
+          onNoticeSaved={(notice: TenantNotice) => {
+            const now = new Date();
+            const noticeUnit = units.find(
+              (unit) => unit.unit === notice.unit && unit.property === notice.property,
+            );
+            const notification = createNotification({
+              id: `notice-${notice.id}`,
+              ...(noticeUnit ? { unitId: noticeUnit.id } : {}),
+              unit: notice.unit,
+              audience: "tenant",
+              eventType: "notice-received",
+              kind: "update",
+              title: "A notice from your landlord",
+              message: `${notice.reason}${notice.effectiveDate ? ` · Effective ${notice.effectiveDate}` : ""}`,
+              createdAt: now.toISOString(),
+              read: false,
+            });
+            setRentData((current) => ({
+              ...current,
+              notifications: [notification, ...current.notifications],
+            }));
+          }}
+        />
+      )}
+      {view === "notifications" && (
+        <NotificationCenter
+          audience="landlord"
+          notifications={landlordNotifications}
+          onRead={(id) =>
+            setRentData((current) => ({
+              ...current,
+              notifications: current.notifications.map((item) =>
+                item.id === id ? { ...item, read: true } : item,
+              ),
+            }))
+          }
+          onMarkAllRead={() =>
+            setRentData((current) => ({
+              ...current,
+              notifications: current.notifications.map((item) =>
+                item.audience === "landlord" ? { ...item, read: true } : item,
+              ),
+            }))
+          }
         />
       )}
       {view === "ura" && (
-        <ComingSoonView
-          title="URA tax pack"
-          description="Review rental-income estimates and quarterly reminders. Guidance only."
+        <UraView
+          units={units}
+          onOpenTaxPack={() => {
+            setReportsInitialReport("annual-tax");
+            setView("reports");
+          }}
+          onOpenEfris={() => setView("efris")}
         />
       )}
       {view === "efris" && (
-        <ComingSoonView
-          title="EFRIS"
-          description="Monitor mock fiscal receipt status and reconciliation. Nothing is sent to URA in the demo."
+        <EfrisView
+          units={units}
+          onEfrisFailure={(receipt, errorMessage) => {
+            const unit = units.find(
+              (item) =>
+                item.property === receipt.content.property && item.unit === receipt.content.unit,
+            );
+            const notification = createNotification({
+              id: `efris-failure:${receipt.receiptNumber}:${receipt.efris.attemptCount}`,
+              audience: "landlord",
+              eventType: "efris-failure",
+              ...(unit ? { unitId: unit.id } : {}),
+              unit: receipt.content.unit,
+              kind: "update",
+              title: "Mock EFRIS submission failed",
+              message: `${receipt.content.tenant} · ${receipt.content.property} · Unit ${receipt.content.unit}: ${errorMessage}`,
+              createdAt: new Date().toISOString(),
+              read: false,
+            });
+            setRentData((current) => ({
+              ...current,
+              notifications: [notification, ...current.notifications],
+            }));
+          }}
+          onOpenReconciliation={() => {
+            setReportsInitialReport("efris");
+            setView("reports");
+          }}
         />
       )}
-      {view === "settings" && <ReceiptSettings />}
+      {view === "home-services" && (
+        <HomeServicesManagement
+          properties={[...new Set(rentData.units.map((unit) => unit.property))]}
+          requests={rentData.homeServiceRequests}
+          settings={rentData.propertyHomeServiceSettings}
+          onSaveSettings={(property, updates: Partial<PropertyHomeServiceSettings>) =>
+            setRentData((current) => {
+              const existing = current.propertyHomeServiceSettings.find(
+                (item) => item.property === property,
+              );
+              const next = {
+                property,
+                preferredProviderIds: [],
+                ...existing,
+                ...updates,
+              };
+              return {
+                ...current,
+                propertyHomeServiceSettings: [
+                  next,
+                  ...current.propertyHomeServiceSettings.filter(
+                    (item) => item.property !== property,
+                  ),
+                ],
+              };
+            })
+          }
+          onRequestStatusChange={(id, status: HomeServiceRequestStatus) => {
+            setRentData((current) => ({
+              ...current,
+              homeServiceRequests: current.homeServiceRequests.map((request) =>
+                request.id === id ? { ...request, status } : request,
+              ),
+            }));
+          }}
+        />
+      )}
+      {view === "settings" && (
+        <ReceiptSettings
+          defaultRentDueDay={defaultRentDueDay}
+          onDefaultRentDueDayChange={setDefaultRentDueDay}
+        />
+      )}
 
       <UnitSheet
         unit={openUnit}
@@ -681,8 +1005,21 @@ function LandlordPage() {
         }
         onMoveOut={() => {
           if (!openUnit) return;
+          const endingNotification = createNotification({
+            id: `tenancy-ending:tenant:${openUnit.id}:${Date.now()}`,
+            audience: "tenant",
+            eventType: "tenancy-ending",
+            unitId: openUnit.id,
+            unit: openUnit.unit,
+            kind: "update",
+            title: "Tenancy ending recorded",
+            message: `Your tenancy at ${openUnit.property} · Unit ${openUnit.unit} has been marked as ended by the landlord.`,
+            createdAt: new Date().toISOString(),
+            read: false,
+          });
           setRentData((current) => ({
             ...current,
+            notifications: [endingNotification, ...current.notifications],
             units: current.units.map((unit) =>
               unit.id === openUnit.id
                 ? {
@@ -696,6 +1033,7 @@ function LandlordPage() {
                     paid: false,
                     daysUntilDue: 0,
                     leaseEnds: "-",
+                    vacantSince: localDateIso(),
                   }
                 : unit,
             ),
@@ -712,7 +1050,9 @@ function LandlordPage() {
           });
         }}
         onEvictionNotice={() => {
-          setNoticeUnit(openUnit);
+          if (!openUnit) return;
+          setNoticePresetUnitId(openUnit.id);
+          setView("notices");
           setOpenUnitId(null);
         }}
         onAddTenant={() => {
@@ -725,30 +1065,9 @@ function LandlordPage() {
         open={addOpen}
         onOpenChange={setAddOpen}
         vacantUnits={vacant}
-        presetUnitId={presetUnit}
+        {...(presetUnit ? { presetUnitId: presetUnit } : {})}
+        defaultRentDueDay={defaultRentDueDay}
         onCreate={createMoveIn}
-      />
-      <EvictionNoticeDialog
-        unit={noticeUnit}
-        onClose={() => setNoticeUnit(null)}
-        onSendToApp={(notice: EvictionNotice) => {
-          saveTenantNotice(notice);
-          const now = new Date();
-          const notification: TenantNotification = {
-            id: `landlord-update-${Date.now()}`,
-            unit: notice.unit,
-            kind: "update",
-            title: "Important update from your landlord",
-            message: `${notice.reason} · Requested move-out by ${notice.vacateBy}.`,
-            createdAt: now.toISOString(),
-            read: false,
-          };
-          setRentData((current) => ({
-            ...current,
-            notifications: [notification, ...current.notifications],
-          }));
-          setNoticeUnit(null);
-        }}
       />
     </DashShell>
   );

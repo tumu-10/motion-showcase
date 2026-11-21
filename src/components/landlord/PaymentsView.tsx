@@ -1,10 +1,19 @@
 import { Download } from "lucide-react";
 import { motion } from "motion/react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { PageHeading } from "@/components/shared/DashShell";
 import { ReceiptActions } from "@/components/shared/ReceiptActions";
 import { Pill, type Tone } from "@/components/shared/StatusPill";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { formatUGX } from "@/lib/rent";
 import { ease } from "@/lib/motion";
 import {
@@ -69,18 +78,101 @@ export function PaymentsView({
   units: Unit[];
   onConfirm: (id: string) => void;
 }) {
-  const confirmed = ledger
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [property, setProperty] = useState("all");
+  const [block, setBlock] = useState("all");
+  const properties = [...new Set(units.map((unit) => unit.property))];
+  const availableBlocks = [
+    ...new Set(
+      units
+        .filter((unit) => property === "all" || unit.property === property)
+        .map((unit) => unit.block)
+        .filter((name): name is string => !!name),
+    ),
+  ];
+  const filteredLedger = useMemo(
+    () =>
+      ledger.filter((entry) => {
+        const unit = units.find((item) => item.id === entry.unitId);
+        return (
+          (!fromDate || entry.receivedAt >= fromDate) &&
+          (!toDate || entry.receivedAt <= toDate) &&
+          (property === "all" || unit?.property === property) &&
+          (block === "all" || unit?.block === block)
+        );
+      }),
+    [block, fromDate, ledger, property, toDate, units],
+  );
+  const confirmed = filteredLedger
     .filter((l) => l.status === "Confirmed" && l.receivedAt.slice(0, 7) === currentRentPeriod())
     .reduce((s, l) => s + l.amount, 0);
   return (
     <>
       <PageHeading eyebrow={`${formatUGX(confirmed)} confirmed this month`} title="Payments">
-        <Button variant="outline" onClick={() => exportCsv(ledger)}>
+        <Button variant="outline" onClick={() => exportCsv(filteredLedger)}>
           <Download /> Export CSV
         </Button>
       </PageHeading>
+      <section
+        className="surface mb-5 grid gap-3 p-4 sm:grid-cols-2 sm:p-5 xl:grid-cols-4"
+        aria-label="Filter payments"
+      >
+        <label className="grid gap-1 text-xs font-semibold text-muted-foreground">
+          From date
+          <Input
+            type="date"
+            value={fromDate}
+            onChange={(event) => setFromDate(event.target.value)}
+            aria-label="Payments from date"
+            className="h-12"
+          />
+        </label>
+        <label className="grid gap-1 text-xs font-semibold text-muted-foreground">
+          To date
+          <Input
+            type="date"
+            value={toDate}
+            onChange={(event) => setToDate(event.target.value)}
+            aria-label="Payments to date"
+            className="h-12"
+          />
+        </label>
+        <Select
+          value={property}
+          onValueChange={(value) => {
+            setProperty(value);
+            setBlock("all");
+          }}
+        >
+          <SelectTrigger aria-label="Filter payments by property" className="h-12 bg-card">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All properties</SelectItem>
+            {properties.map((name) => (
+              <SelectItem key={name} value={name}>
+                {name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={block} onValueChange={setBlock}>
+          <SelectTrigger aria-label="Filter payments by block" className="h-12 bg-card">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All blocks</SelectItem>
+            {availableBlocks.map((name) => (
+              <SelectItem key={name} value={name}>
+                {name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </section>
       <ul className="space-y-3 md:hidden">
-        {ledger.map((entry) => (
+        {filteredLedger.map((entry) => (
           <li key={entry.id}>
             <article
               className={`rounded-xl border p-4 shadow-soft ${
@@ -95,7 +187,11 @@ export function PaymentsView({
                 <div className="min-w-0">
                   <p className="font-bold">{entry.tenant}</p>
                   <p className="mt-0.5 text-sm text-muted-foreground">
-                    Unit {entry.unit} · {entry.date}
+                    Unit {entry.unit}
+                    {units.find((unit) => unit.id === entry.unitId)?.block
+                      ? ` · ${units.find((unit) => unit.id === entry.unitId)?.block}`
+                      : ""}{" "}
+                    · {entry.date}
                   </p>
                 </div>
                 <Pill tone={statusTone[entry.status]} label={entry.status} />
@@ -143,6 +239,11 @@ export function PaymentsView({
             </article>
           </li>
         ))}
+        {filteredLedger.length === 0 && (
+          <li className="surface px-5 py-10 text-center text-sm text-muted-foreground">
+            No payments match these filters.
+          </li>
+        )}
       </ul>
       <div className="surface hidden overflow-x-auto md:block">
         <table className="w-full min-w-[52rem] text-sm">
@@ -159,7 +260,7 @@ export function PaymentsView({
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {ledger.map((l, i) => (
+            {filteredLedger.map((l, i) => (
               <motion.tr
                 key={l.id}
                 layout
@@ -171,7 +272,12 @@ export function PaymentsView({
                 <td className="figure px-6 py-4 text-muted-foreground">{l.date}</td>
                 <td className="px-6 py-4">
                   <span className="font-semibold">{l.tenant}</span>
-                  <span className="block text-xs text-muted-foreground">Unit {l.unit}</span>
+                  <span className="block text-xs text-muted-foreground">
+                    Unit {l.unit}
+                    {units.find((unit) => unit.id === l.unitId)?.block
+                      ? ` · ${units.find((unit) => unit.id === l.unitId)?.block}`
+                      : ""}
+                  </span>
                 </td>
                 <td className="px-6 py-4">
                   {l.method}
@@ -211,6 +317,13 @@ export function PaymentsView({
                 </td>
               </motion.tr>
             ))}
+            {filteredLedger.length === 0 && (
+              <tr>
+                <td colSpan={8} className="px-6 py-10 text-center text-muted-foreground">
+                  No payments match these filters.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

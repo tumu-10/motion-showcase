@@ -1,4 +1,10 @@
-import { MAX_ADVANCE_MONTHS_WITHOUT_AGREEMENT } from "@/lib/legal";
+import {
+  MAX_ADVANCE_MONTHS_WITHOUT_AGREEMENT,
+  MAX_ANNUAL_RENT_INCREASE_PCT,
+  MIN_EVICTION_NOTICE_DAYS,
+  RENT_INCREASE_NOTICE_DAYS,
+} from "@/lib/legal";
+import { localDateIso } from "@/lib/rent-accounting";
 import type { Unit } from "@/lib/sample-data";
 
 /** Rent status rules shared by every role. */
@@ -70,23 +76,61 @@ export const networkLabel: Record<MobileNetwork, string> = {
 
 export { MAX_ADVANCE_MONTHS_WITHOUT_AGREEMENT } from "@/lib/legal";
 
-/** Minimum days between a notice to vacate and the move-out date. */
-export const NOTICE_MIN_DAYS = 30;
-
 export function needsAdvanceAgreement(months: number): boolean {
   return months > MAX_ADVANCE_MONTHS_WITHOUT_AGREEMENT;
 }
 
+export function getMinimumNoticeDate(today: string, noticeDays: number) {
+  const date = new Date(`${today}T00:00:00`);
+  if (
+    !isIsoDate(today) ||
+    Number.isNaN(date.getTime()) ||
+    !Number.isInteger(noticeDays) ||
+    noticeDays < 0
+  ) {
+    throw new RangeError("A valid date and non-negative whole number of notice days are required.");
+  }
+  date.setDate(date.getDate() + noticeDays);
+  return localDateIso(date);
+}
+
 /** Returns an error message, or null when the notice can be issued. */
-export function validateNotice(issuedOn: string, vacateBy: string, reason: string): string | null {
+export function validateNotice(
+  issuedOn: string,
+  vacateBy: string,
+  reason: string,
+  today = localDateIso(),
+): string | null {
   if (!reason.trim()) return "Add the reason for the notice.";
-  const start = Date.parse(issuedOn);
-  const end = Date.parse(vacateBy);
-  if (Number.isNaN(start) || Number.isNaN(end)) return "Choose both dates.";
-  const days = Math.round((end - start) / 86_400_000);
-  if (days < NOTICE_MIN_DAYS)
-    return `The move-out date must be at least ${NOTICE_MIN_DAYS} days after the notice date.`;
+  if (!isIsoDate(issuedOn) || !isIsoDate(vacateBy) || !isIsoDate(today))
+    return "Choose valid notice dates.";
+  if (issuedOn !== today) return "The notice date must be today.";
+  const minimumDate = getMinimumNoticeDate(today, MIN_EVICTION_NOTICE_DAYS);
+  if (vacateBy < minimumDate)
+    return `The move-out date must be at least ${MIN_EVICTION_NOTICE_DAYS} days from today (${minimumDate}).`;
   return null;
+}
+
+export function validateRentIncreaseNotice(
+  effectiveDate: string,
+  increasePct: number,
+  today = localDateIso(),
+): string | null {
+  if (!isIsoDate(effectiveDate) || !isIsoDate(today)) return "Choose a valid effective date.";
+  if (!Number.isFinite(increasePct) || increasePct <= 0)
+    return "Enter a rent increase greater than 0%.";
+  if (increasePct > MAX_ANNUAL_RENT_INCREASE_PCT)
+    return `The annual rent increase cannot exceed ${MAX_ANNUAL_RENT_INCREASE_PCT}%.`;
+  const minimumDate = getMinimumNoticeDate(today, RENT_INCREASE_NOTICE_DAYS);
+  if (effectiveDate < minimumDate)
+    return `The effective date must be at least ${RENT_INCREASE_NOTICE_DAYS} days from today (${minimumDate}).`;
+  return null;
+}
+
+function isIsoDate(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00`);
+  return !Number.isNaN(date.getTime()) && localDateIso(date) === value;
 }
 
 /** Collision-resistant payment reference, e.g. PTZ-8F3K2Q9A. */

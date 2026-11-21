@@ -2,7 +2,8 @@ import fontkit from "@pdf-lib/fontkit";
 import { degrees, PDFDocument, rgb, type PDFFont, type PDFImage, type RGB } from "pdf-lib";
 import QRCode from "qrcode";
 import { formatUGX } from "@/lib/rent";
-import type { ReceiptBundle } from "@/lib/receipt-branding";
+import type { ReceiptBranding, ReceiptBundle } from "@/lib/receipt-branding";
+import { efrisStatusLabel } from "@/lib/receipt-branding";
 
 const PAGE_WIDTH = 595.28;
 const PAGE_HEIGHT = 841.89;
@@ -51,25 +52,19 @@ export function amountInWords(amount: number) {
 
 export async function buildReceiptPdf({ receipt, branding }: ReceiptBundle): Promise<Uint8Array> {
   const document = await PDFDocument.create();
-  document.registerFontkit(fontkit);
   document.setTitle(`${receipt.content.kind} receipt ${receipt.receiptNumber}`);
   document.setAuthor(branding.landlordName);
   document.setSubject(`Payment reference ${receipt.content.reference}`);
 
-  const [bodyFontBytes, displayFontBytes] = await Promise.all([
-    fetchFont("/fonts/Inter-Variable.ttf"),
-    fetchFont("/fonts/Fraunces-Variable.ttf"),
-  ]);
-  const body = await document.embedFont(bodyFontBytes, { subset: true });
-  const display = await document.embedFont(displayFontBytes, { subset: true });
+  const { body, display } = await embedReceiptFonts(document);
   const page = document.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
-  const accent = hexColor(branding.brandColor);
+  const accent = parseBrandColor(branding.brandColor);
   const ink = rgb(0.08, 0.16, 0.17);
   const muted = rgb(0.36, 0.43, 0.44);
   const pale = rgb(0.95, 0.97, 0.96);
-  const logo = await embedLogo(document, branding);
+  const logo = await embedReceiptLogo(document, branding);
 
-  const logoSize = fitImage(logo, 180, 52);
+  const logoSize = fitPdfImage(logo, 180, 52);
   page.drawImage(logo, {
     x: 42,
     y: PAGE_HEIGHT - 92,
@@ -78,12 +73,16 @@ export async function buildReceiptPdf({ receipt, branding }: ReceiptBundle): Pro
   });
 
   const verificationUrl = `${window.location.origin}/verify?ref=${encodeURIComponent(receipt.receiptNumber)}`;
-  const qrDataUrl = await QRCode.toDataURL(verificationUrl, {
+  const hasMockFiscalQr = receipt.efris.status === "issued" && !!receipt.efris.qrPayload;
+  const qrDataUrl = await QRCode.toDataURL(
+    hasMockFiscalQr ? (receipt.efris.qrPayload ?? verificationUrl) : verificationUrl,
+    {
     errorCorrectionLevel: "M",
     margin: 1,
     width: 180,
     color: { dark: branding.brandColor, light: "#ffffff" },
-  });
+    },
+  );
   const qr = await document.embedPng(dataUrlBytes(qrDataUrl));
   const qrSize = 68;
   page.drawImage(qr, {
@@ -107,7 +106,7 @@ export async function buildReceiptPdf({ receipt, branding }: ReceiptBundle): Pro
     font: body,
     color: ink,
   });
-  page.drawText("SCAN TO VERIFY", {
+  page.drawText(hasMockFiscalQr ? "MOCK EFRIS QR · DEMO" : "SCAN TO VERIFY", {
     x: PAGE_WIDTH - 42 - qrSize,
     y: PAGE_HEIGHT - 121,
     size: 6,
@@ -133,7 +132,7 @@ export async function buildReceiptPdf({ receipt, branding }: ReceiptBundle): Pro
       : isDeposit
         ? "Security Deposit Receipt (Refundable)"
         : "Rent payment receipt";
-  const landlordLines = wrapText(branding.landlordName, display, 10, 290);
+  const landlordLines = wrapPdfText(branding.landlordName, display, 10, 290);
   landlordLines.forEach((line, index) => {
     page.drawText(line, {
       x: 42,
@@ -180,7 +179,7 @@ export async function buildReceiptPdf({ receipt, branding }: ReceiptBundle): Pro
     ...(isDeposit
       ? [["Deposit type", receipt.content.depositLabel ?? "Security deposit"] as [string, string]]
       : [
-          ["Period covered", receipt.content.periodCovered],
+          ["Period covered", receipt.content.periodCovered] as [string, string],
           ...(receipt.content.coveredUntil
             ? [["Covered until", receipt.content.coveredUntil] as [string, string]]
             : []),
@@ -191,11 +190,18 @@ export async function buildReceiptPdf({ receipt, branding }: ReceiptBundle): Pro
     ["Payment reference", receipt.content.reference],
     ["Balance after payment", formatUGX(receipt.content.balanceAfter)],
     ...(receipt.content.notes ? [["Notes", receipt.content.notes] as [string, string]] : []),
-    ["EFRIS status", receipt.content.efrisStatus],
+    ["EFRIS document type", receipt.efris.documentType],
+    ["EFRIS status", efrisStatusLabel(receipt.efris.status)],
+    ...(receipt.efris.fiscalDocumentNumber
+      ? [["Mock fiscal document no.", receipt.efris.fiscalDocumentNumber] as [string, string]]
+      : []),
+    ...(receipt.efris.accountantNote
+      ? [["EFRIS note", receipt.efris.accountantNote] as [string, string]]
+      : []),
   ];
 
   for (const [label, value] of rows) {
-    const lines = wrapText(value, body, 9, rowWidth);
+    const lines = wrapPdfText(value, body, 9, rowWidth);
     const rowHeight = Math.max(29, lines.length * 12 + 14);
     const rowBottom = y - rowHeight;
     page.drawRectangle({
@@ -222,7 +228,7 @@ export async function buildReceiptPdf({ receipt, branding }: ReceiptBundle): Pro
   }
 
   if (branding.watermarkEnabled) {
-    const watermarkSize = fitImage(logo, 350, 130);
+    const watermarkSize = fitPdfImage(logo, 350, 130);
     page.drawImage(logo, {
       x: (PAGE_WIDTH - watermarkSize.width) / 2 + 55,
       y: 310,
@@ -244,13 +250,18 @@ export async function buildReceiptPdf({ receipt, branding }: ReceiptBundle): Pro
       opacity: 0.62,
     });
   }
-  page.drawText("Computer-generated receipt", {
+  page.drawText(
+    receipt.efris.status === "issued"
+      ? "Mock EFRIS status · Nothing was submitted to URA"
+      : "Computer-generated receipt · EFRIS not submitted",
+    {
     x: 42,
     y: 39,
     size: 8,
     font: body,
     color: muted,
-  });
+    },
+  );
   page.drawText("Powered by Propatiz", {
     x: PAGE_WIDTH - 42 - body.widthOfTextAtSize("Powered by Propatiz", 8),
     y: 39,
@@ -261,13 +272,27 @@ export async function buildReceiptPdf({ receipt, branding }: ReceiptBundle): Pro
   return document.save();
 }
 
-async function fetchFont(path: string) {
+export async function embedReceiptFonts(document: PDFDocument) {
+  document.registerFontkit(fontkit);
+  const [bodyFontBytes, displayFontBytes] = await Promise.all([
+    fetchReceiptFont("/fonts/Inter-Variable.ttf"),
+    fetchReceiptFont("/fonts/Fraunces-Variable.ttf"),
+  ]);
+  // Acrobat cannot reliably extract the subsetted forms of these variable fonts.
+  const [body, display] = await Promise.all([
+    document.embedFont(bodyFontBytes, { subset: false }),
+    document.embedFont(displayFontBytes, { subset: false }),
+  ]);
+  return { body, display };
+}
+
+export async function fetchReceiptFont(path: string) {
   const response = await fetch(path);
   if (!response.ok) throw new Error(`Could not load the self-hosted receipt font: ${path}`);
   return response.arrayBuffer();
 }
 
-async function embedLogo(pdf: PDFDocument, branding: ReceiptBundle["branding"]) {
+export async function embedReceiptLogo(pdf: PDFDocument, branding: ReceiptBranding) {
   const response =
     branding.logoChoice === "custom" && branding.customLogoDataUrl
       ? await fetch(branding.customLogoDataUrl)
@@ -301,12 +326,12 @@ async function embedLogo(pdf: PDFDocument, branding: ReceiptBundle["branding"]) 
   }
 }
 
-function fitImage(image: PDFImage, maxWidth: number, maxHeight: number) {
+export function fitPdfImage(image: PDFImage, maxWidth: number, maxHeight: number) {
   const scale = Math.min(maxWidth / image.width, maxHeight / image.height);
   return { width: image.width * scale, height: image.height * scale };
 }
 
-function hexColor(value: string): RGB {
+export function parseBrandColor(value: string): RGB {
   if (!/^#[\da-f]{6}$/i.test(value)) {
     throw new TypeError("Receipt brand colour must be a six-digit hex value.");
   }
@@ -323,7 +348,7 @@ function dataUrlBytes(dataUrl: string) {
   return Uint8Array.from(binary, (character) => character.charCodeAt(0));
 }
 
-function wrapText(text: string, font: PDFFont, size: number, maxWidth: number) {
+export function wrapPdfText(text: string, font: PDFFont, size: number, maxWidth: number) {
   const words = text.split(/\s+/);
   const lines: string[] = [];
   let line = "";

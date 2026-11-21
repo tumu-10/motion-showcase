@@ -1,8 +1,14 @@
+import { createInitialEfrisState, type EfrisProfile, type EfrisReceiptState } from "@/lib/efris";
+
 export type ReceiptBranding = {
   versionId: string;
   landlordName: string;
   landlordAddress: string;
   landlordTin: string;
+  landlordType: EfrisProfile["landlordType"];
+  vatRegistered: boolean;
+  efrisEnrollmentStatus: EfrisProfile["efrisEnrollmentStatus"];
+  annualRentalIncomeUGX: number | null;
   logoChoice: "propatiz" | "custom";
   customLogoDataUrl: string | null;
   brandColor: string;
@@ -14,6 +20,10 @@ export const defaultReceiptBranding: ReceiptBranding = {
   landlordName: "Kololo Heights Management",
   landlordAddress: "Kololo, Kampala, Uganda",
   landlordTin: "",
+  landlordType: "individual",
+  vatRegistered: false,
+  efrisEnrollmentStatus: "not-enrolled",
+  annualRentalIncomeUGX: null,
   logoChoice: "propatiz",
   customLogoDataUrl: null,
   brandColor: "#103b43",
@@ -48,6 +58,7 @@ export type ReceiptRecord = {
   cancellationReason: string | null;
   brandingVersionId: string;
   content: ReceiptContent;
+  efris: EfrisReceiptState;
 };
 
 export type ReceiptArchive = {
@@ -83,7 +94,19 @@ function readArchive(): ReceiptArchive {
   ) {
     throw new Error("Saved receipt archive has an invalid shape.");
   }
-  return parsed as ReceiptArchive;
+  const archive = parsed as ReceiptArchive;
+  const brandings = Object.fromEntries(
+    Object.entries(archive.brandings).map(([id, branding]) => [id, normalizeBranding(branding)]),
+  );
+  const currentBranding = normalizeBranding(archive.currentBranding);
+  brandings[currentBranding.versionId] = currentBranding;
+  return {
+    currentBranding,
+    brandings,
+    receipts: archive.receipts.map((receipt) =>
+      normalizeReceipt(receipt, brandings[receipt.brandingVersionId] ?? currentBranding),
+    ),
+  };
 }
 
 function writeArchive(archive: ReceiptArchive) {
@@ -92,6 +115,10 @@ function writeArchive(archive: ReceiptArchive) {
 
 export function getReceiptBranding() {
   return readArchive().currentBranding;
+}
+
+export function getReceiptRecords() {
+  return readArchive().receipts;
 }
 
 export function saveReceiptBranding(branding: Omit<ReceiptBranding, "versionId">): ReceiptBranding {
@@ -139,13 +166,15 @@ export function issueReceipt(content: ReceiptContent): ReceiptBundle {
 
   const branding = archive.currentBranding;
   archive.brandings[branding.versionId] = branding;
+  const efris = createInitialEfrisState(content, branding);
   const receipt: ReceiptRecord = {
     receiptNumber: makeReceiptNumber(),
     status: "Valid",
     replacementReceiptNumber: null,
     cancellationReason: null,
     brandingVersionId: branding.versionId,
-    content: structuredClone(content),
+    content: { ...structuredClone(content), efrisStatus: efrisStatusLabel(efris.status) },
+    efris,
   };
   archive.receipts.unshift(receipt);
   writeArchive(archive);
@@ -159,6 +188,35 @@ export function getReceiptBundle(receiptNumber: string): ReceiptBundle | null {
   const branding = archive.brandings[receipt.brandingVersionId];
   if (!branding) throw new Error("The branding snapshot for this receipt is missing.");
   return { receipt, branding };
+}
+
+export function updateReceiptEfris(receiptNumber: string, efris: EfrisReceiptState): ReceiptBundle {
+  const archive = readArchive();
+  const index = archive.receipts.findIndex((receipt) => receipt.receiptNumber === receiptNumber);
+  if (index < 0) throw new Error("The receipt could not be found in the local archive.");
+  const receipt = archive.receipts[index];
+  if (!receipt) throw new Error("The receipt could not be found in the local archive.");
+  const updated: ReceiptRecord = {
+    ...receipt,
+    efris,
+    content: { ...receipt.content, efrisStatus: efrisStatusLabel(efris.status) },
+  };
+  archive.receipts[index] = updated;
+  writeArchive(archive);
+  const branding = archive.brandings[updated.brandingVersionId];
+  if (!branding) throw new Error("The branding snapshot for this receipt is missing.");
+  return { receipt: updated, branding };
+}
+
+export function efrisStatusLabel(status: EfrisReceiptState["status"]) {
+  const labels: Record<EfrisReceiptState["status"], string> = {
+    "not-required": "Not required",
+    pending: "Pending",
+    issued: "Issued",
+    failed: "Failed",
+    cancelled: "Cancelled",
+  };
+  return labels[status];
 }
 
 export function findReceiptByReference(reference: string): ReceiptRecord | null {
@@ -180,6 +238,10 @@ export function cancelAndReissueReceipt(receiptNumber: string, reason: string): 
   if (!cleanReason) throw new Error("Enter a reason for cancelling and reissuing this receipt.");
 
   const replacementNumber = makeReceiptNumber();
+  const replacementEfris = createInitialEfrisState(
+    current.content,
+    archive.brandings[current.brandingVersionId] ?? archive.currentBranding,
+  );
   const replacement: ReceiptRecord = {
     receiptNumber: replacementNumber,
     status: "Valid",
@@ -189,7 +251,9 @@ export function cancelAndReissueReceipt(receiptNumber: string, reason: string): 
     content: {
       ...current.content,
       issuedAt: new Date().toISOString(),
+      efrisStatus: efrisStatusLabel(replacementEfris.status),
     },
+    efris: replacementEfris,
   };
   const cancelled: ReceiptRecord = {
     ...current,
@@ -205,6 +269,44 @@ export function cancelAndReissueReceipt(receiptNumber: string, reason: string): 
   const branding = archive.brandings[replacement.brandingVersionId];
   if (!branding) throw new Error("The branding snapshot for this receipt is missing.");
   return { receipt: replacement, branding };
+}
+
+function normalizeBranding(value: ReceiptBranding): ReceiptBranding {
+  return { ...defaultReceiptBranding, ...value };
+}
+
+function normalizeReceipt(record: ReceiptRecord, branding: ReceiptBranding): ReceiptRecord {
+  if (record.efris && typeof record.efris.status === "string") {
+    const efris = {
+      ...createInitialEfrisState(record.content, branding),
+      ...record.efris,
+    };
+    return {
+      ...record,
+      content: { ...record.content, efrisStatus: efrisStatusLabel(efris.status) },
+      efris,
+    };
+  }
+  const legacyStatus = record.content.efrisStatus.toLowerCase();
+  const initial = createInitialEfrisState(record.content, branding);
+  const status: EfrisReceiptState["status"] = legacyStatus.includes("not applicable")
+    ? "not-required"
+    : legacyStatus.includes("issued") || legacyStatus.includes("successful")
+      ? "issued"
+      : legacyStatus.includes("failed")
+        ? "failed"
+        : initial.status === "not-required"
+          ? "not-required"
+          : "pending";
+  const efris = {
+    ...initial,
+    status,
+  };
+  return {
+    ...record,
+    content: { ...record.content, efrisStatus: efrisStatusLabel(efris.status) },
+    efris,
+  };
 }
 
 export async function resizeReceiptLogo(file: File): Promise<string> {

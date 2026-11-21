@@ -3,7 +3,7 @@ import QRCode from "qrcode";
 import { escapeHtml } from "@/lib/documents";
 import { formatUGX } from "@/lib/rent";
 import { amountInWords } from "@/lib/receipt-pdf";
-import type { ReceiptBundle } from "@/lib/receipt-branding";
+import { efrisStatusLabel, type ReceiptBundle } from "@/lib/receipt-branding";
 
 export async function createReceiptImage({ receipt, branding }: ReceiptBundle) {
   const logo =
@@ -11,7 +11,11 @@ export async function createReceiptImage({ receipt, branding }: ReceiptBundle) {
       ? branding.customLogoDataUrl
       : "/propatiz-logo.svg";
   const verifyUrl = `${window.location.origin}/verify?ref=${encodeURIComponent(receipt.receiptNumber)}`;
-  const qr = await QRCode.toDataURL(verifyUrl, { margin: 1, width: 180 });
+  const hasMockFiscalQr = receipt.efris.status === "issued" && !!receipt.efris.qrPayload;
+  const qr = await QRCode.toDataURL(
+    hasMockFiscalQr ? (receipt.efris.qrPayload ?? verifyUrl) : verifyUrl,
+    { margin: 1, width: 180 },
+  );
   const rows: [string, string][] = [
     ["Tenant", receipt.content.tenant],
     ["Property", receipt.content.property],
@@ -26,7 +30,14 @@ export async function createReceiptImage({ receipt, branding }: ReceiptBundle) {
     ["Reference", receipt.content.reference],
     ["Balance after payment", formatUGX(receipt.content.balanceAfter)],
     ...(receipt.content.notes ? [["Notes", receipt.content.notes] as [string, string]] : []),
-    ["EFRIS", receipt.content.efrisStatus],
+    ["EFRIS document type", receipt.efris.documentType],
+    ["EFRIS status", efrisStatusLabel(receipt.efris.status)],
+    ...(receipt.efris.fiscalDocumentNumber
+      ? [["Mock fiscal document no.", receipt.efris.fiscalDocumentNumber] as [string, string]]
+      : []),
+    ...(receipt.efris.accountantNote
+      ? [["EFRIS note", receipt.efris.accountantNote] as [string, string]]
+      : []),
   ];
   const watermark = branding.watermarkEnabled
     ? `<img src="${escapeHtml(logo)}" alt="" style="position:absolute;width:420px;left:160px;top:380px;opacity:.06;transform:rotate(-25deg);">`
@@ -52,7 +63,7 @@ export async function createReceiptImage({ receipt, branding }: ReceiptBundle) {
         </div>
         <div style="text-align:right;">
           <img src="${escapeHtml(qr)}" alt="Verification QR code" style="width:96px;height:96px;">
-          <p style="margin:8px 0 0;font-size:11px;color:#647476;">SCAN TO VERIFY</p>
+          <p style="margin:8px 0 0;font-size:11px;color:#647476;">${hasMockFiscalQr ? "MOCK EFRIS QR · DEMO" : "SCAN TO VERIFY"}</p>
           <p style="margin:8px 0 0;font-size:12px;font-weight:700;">${escapeHtml(receipt.receiptNumber)}</p>
           <p style="margin:4px 0;font-size:11px;color:#647476;">${escapeHtml(new Date(receipt.content.issuedAt).toLocaleString("en-UG"))}</p>
         </div>
@@ -70,7 +81,7 @@ export async function createReceiptImage({ receipt, branding }: ReceiptBundle) {
           .join("")}
       </section>
       <footer style="position:relative;display:flex;justify-content:space-between;margin-top:28px;padding-top:16px;border-top:1px solid #dfe7e5;font-size:12px;color:#647476;">
-        <span>Computer-generated receipt</span>
+        <span>${receipt.efris.status === "issued" ? "Mock EFRIS status · Nothing was submitted to URA" : "Computer-generated receipt · EFRIS not submitted"}</span>
         <strong style="color:${escapeHtml(branding.brandColor)};">Powered by Propatiz</strong>
       </footer>
     </article>`;

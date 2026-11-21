@@ -7,6 +7,14 @@ import listing2 from "@/assets/listing-2.jpg";
 import listing3 from "@/assets/listing-3.jpg";
 import hero from "@/assets/hero-kampala.jpg";
 
+function dateDaysAgo(days: number) {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
+    date.getDate(),
+  ).padStart(2, "0")}`;
+}
+
 export const tenantProfile = {
   name: "Amina Nakato",
   firstName: "Amina",
@@ -120,7 +128,9 @@ export type Complaint = {
   urgency: "Low" | "Normal" | "Urgent";
   stage: ComplaintStage;
   reported: string;
+  reportedAt?: string | undefined;
   description: string;
+  cost?: number | undefined;
 };
 
 export const complaints: Complaint[] = [
@@ -134,6 +144,7 @@ export const complaints: Complaint[] = [
     urgency: "Normal",
     stage: "assigned",
     reported: "12 Nov",
+    reportedAt: dateDaysAgo(9),
     description: "Water drips from the pipe under the sink when the tap is on.",
   },
   {
@@ -146,6 +157,7 @@ export const complaints: Complaint[] = [
     urgency: "Urgent",
     stage: "submitted",
     reported: "15 Nov",
+    reportedAt: dateDaysAgo(6),
     description: "Both sockets in the main bedroom stopped working last night.",
   },
   {
@@ -158,6 +170,7 @@ export const complaints: Complaint[] = [
     urgency: "Low",
     stage: "in-progress",
     reported: "9 Nov",
+    reportedAt: dateDaysAgo(12),
     description: "The main gate padlock is hard to open in the morning.",
   },
   {
@@ -170,6 +183,7 @@ export const complaints: Complaint[] = [
     urgency: "Normal",
     stage: "resolved",
     reported: "2 Nov",
+    reportedAt: dateDaysAgo(19),
     description: "Shower pressure has been very low for a week.",
   },
   {
@@ -182,6 +196,7 @@ export const complaints: Complaint[] = [
     urgency: "Normal",
     stage: "submitted",
     reported: "14 Nov",
+    reportedAt: dateDaysAgo(7),
     description: "The small bathroom window has a crack across the glass.",
   },
 ];
@@ -193,6 +208,7 @@ export type Unit = {
   tenant: string | null;
   phone: string;
   rent: number;
+  dueDay?: number | undefined;
   daysUntilDue: number;
   paid: boolean;
   leaseEnds: string;
@@ -201,6 +217,7 @@ export type Unit = {
   occupation?: string | undefined;
   sex?: string | undefined;
   block?: string | undefined;
+  vacantSince?: string | undefined;
   pendingMoveIn?: boolean | undefined;
   pendingTenant?: string | undefined;
 };
@@ -212,9 +229,11 @@ export const units: Unit[] = [
     id: "u1",
     unit: "A1",
     property: "Kololo Heights",
+    block: "Block A",
     tenant: "Daniel Ssempijja",
     phone: "0772 410 221",
     rent: 1_500_000,
+    dueDay: 26,
     daysUntilDue: 5,
     paid: true,
     leaseEnds: "Mar 2027",
@@ -223,9 +242,11 @@ export const units: Unit[] = [
     id: "u2",
     unit: "A2",
     property: "Kololo Heights",
+    block: "Block A",
     tenant: "Brian Okello",
     phone: "0752 330 118",
     rent: 1_500_000,
+    dueDay: 15,
     daysUntilDue: -6,
     paid: false,
     leaseEnds: "Jan 2027",
@@ -234,6 +255,7 @@ export const units: Unit[] = [
     id: "u3",
     unit: "B4",
     property: "Kololo Heights",
+    block: "Block B",
     tenant: "Amina Nakato",
     phone: "0772 123 456",
     email: "amina@example.com",
@@ -241,6 +263,7 @@ export const units: Unit[] = [
     occupation: "Accountant",
     sex: "Female",
     rent: 1_200_000,
+    dueDay: 26,
     daysUntilDue: 5,
     paid: false,
     leaseEnds: "Jul 2027",
@@ -249,9 +272,11 @@ export const units: Unit[] = [
     id: "u4",
     unit: "B5",
     property: "Kololo Heights",
+    block: "Block B",
     tenant: "Ruth Kyomuhendo",
     phone: "0701 556 902",
     rent: 1_200_000,
+    dueDay: 26,
     daysUntilDue: 5,
     paid: true,
     leaseEnds: "Aug 2027",
@@ -260,9 +285,11 @@ export const units: Unit[] = [
     id: "u5",
     unit: "C1",
     property: "Ntinda Court",
+    block: "Block C",
     tenant: "Joseph Mugisha",
     phone: "0784 220 331",
     rent: 850_000,
+    dueDay: 23,
     daysUntilDue: 2,
     paid: false,
     leaseEnds: "Dec 2026",
@@ -271,9 +298,11 @@ export const units: Unit[] = [
     id: "u6",
     unit: "C2",
     property: "Ntinda Court",
+    block: "Block C",
     tenant: "Grace Achieng",
     phone: "0759 118 440",
     rent: 850_000,
+    dueDay: 23,
     daysUntilDue: 2,
     paid: true,
     leaseEnds: "May 2027",
@@ -282,6 +311,8 @@ export const units: Unit[] = [
     id: "u7",
     unit: "C3",
     property: "Ntinda Court",
+    block: "Block C",
+    vacantSince: dateDaysAgo(18),
     tenant: null,
     phone: "",
     rent: 850_000,
@@ -293,9 +324,11 @@ export const units: Unit[] = [
     id: "u8",
     unit: "C4",
     property: "Ntinda Court",
+    block: "Block C",
     tenant: "Peter Byaruhanga",
     phone: "0776 902 114",
     rent: 900_000,
+    dueDay: 9,
     daysUntilDue: -12,
     paid: false,
     leaseEnds: "Feb 2027",
@@ -304,9 +337,11 @@ export const units: Unit[] = [
     id: "u9",
     unit: "D1",
     property: "Kira Gardens",
+    block: "Block D",
     tenant: "Esther Nabirye",
     phone: "0700 441 778",
     rent: 600_000,
+    dueDay: 3,
     daysUntilDue: 12,
     paid: false,
     leaseEnds: "Oct 2027",
@@ -315,9 +350,11 @@ export const units: Unit[] = [
     id: "u10",
     unit: "D2",
     property: "Kira Gardens",
+    block: "Block D",
     tenant: "Moses Tumusiime",
     phone: "0782 664 019",
     rent: 600_000,
+    dueDay: 3,
     daysUntilDue: 12,
     paid: true,
     leaseEnds: "Jun 2027",
@@ -326,9 +363,11 @@ export const units: Unit[] = [
     id: "u11",
     unit: "D3",
     property: "Kira Gardens",
+    block: "Block D",
     tenant: "Sarah Namubiru",
     phone: "0751 208 663",
     rent: 650_000,
+    dueDay: 25,
     daysUntilDue: 4,
     paid: false,
     leaseEnds: "Sep 2027",
@@ -337,9 +376,11 @@ export const units: Unit[] = [
     id: "u12",
     unit: "D4",
     property: "Kira Gardens",
+    block: "Block D",
     tenant: "Ivan Kato",
     phone: "0774 338 902",
     rent: 650_000,
+    dueDay: 19,
     daysUntilDue: -2,
     paid: false,
     leaseEnds: "Apr 2027",
@@ -463,11 +504,43 @@ export const ledger: LedgerEntry[] = [
 export type TenantNotification = {
   id: string;
   unit: string;
+  unitId?: string | undefined;
   kind: "rent" | "payment" | "advance" | "update";
+  audience?: NotificationAudience | undefined;
+  eventType?: NotificationEventType | undefined;
+  dedupeKey?: string | undefined;
+  delivery?: NotificationDelivery[] | undefined;
   title: string;
   message: string;
   createdAt: string;
   read: boolean;
+};
+
+export type NotificationAudience = "landlord" | "tenant";
+
+export const notificationEventTypes = [
+  "rent-due-soon",
+  "rent-overdue",
+  "payment-received",
+  "advance-received",
+  "deposit-received",
+  "advance-running-out",
+  "new-complaint",
+  "notice-response",
+  "efris-failure",
+  "tenancy-ending",
+  "receipt",
+  "notice-received",
+  "repair-update",
+  "refund-update",
+] as const;
+export type NotificationEventType = (typeof notificationEventTypes)[number];
+
+export type NotificationChannel = "in-app" | "sms" | "whatsapp";
+export type NotificationDelivery = {
+  channel: NotificationChannel;
+  status: "mocked" | "disabled";
+  note: string;
 };
 
 export const tenantNotifications: TenantNotification[] = [

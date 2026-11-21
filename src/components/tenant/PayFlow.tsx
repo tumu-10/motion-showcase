@@ -28,6 +28,7 @@ import { ease } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import { mockPaymentProviders } from "@/lib/payment-provider";
 import type { LucideIcon } from "lucide-react";
+import type { TenantPaymentPreference } from "@/lib/demo-settings";
 
 type Step = "form" | "approve" | "success" | "failed";
 
@@ -44,7 +45,7 @@ export type PaymentResult = {
   providerToken?: string;
   failed?: boolean | undefined;
 };
-type PaymentMethod = "mobile" | "bank" | "visa";
+type PaymentMethod = TenantPaymentPreference;
 
 const APPROVE_SECONDS = 4;
 
@@ -54,7 +55,9 @@ export function PayFlow({
   rentPeriod,
   defaultPhone,
   paymentDetails,
+  preferredPaymentMethod,
   onPaid,
+  onOpenServices,
   onClose,
 }: {
   rent: number;
@@ -62,7 +65,9 @@ export function PayFlow({
   rentPeriod: string;
   defaultPhone: string;
   paymentDetails: LandlordPaymentDetails;
+  preferredPaymentMethod: PaymentMethod;
   onPaid: (r: PaymentResult) => void;
+  onOpenServices: () => void;
   onClose: () => void;
 }) {
   const [step, setStep] = useState<Step>("form");
@@ -70,7 +75,7 @@ export function PayFlow({
   const [monthsCovered, setMonthsCovered] = useState("1");
   const [otherAmount, setOtherAmount] = useState("");
   const [network, setNetwork] = useState<MobileNetwork>(detectNetwork(defaultPhone) ?? "mtn");
-  const [method, setMethod] = useState<PaymentMethod>("mobile");
+  const [method, setMethod] = useState<PaymentMethod>(preferredPaymentMethod);
   const [cardBrand, setCardBrand] = useState<"Visa" | "Mastercard">("Visa");
   const [cardNumber, setCardNumber] = useState("");
   const [cardExpiry, setCardExpiry] = useState("");
@@ -106,6 +111,10 @@ export function PayFlow({
       : []),
     ["visa", "Visa", CreditCard],
   ];
+
+  useEffect(() => {
+    setMethod(preferredPaymentMethod);
+  }, [preferredPaymentMethod]);
 
   useEffect(() => {
     if (method === "mobile" && !paymentDetails.mobileMoneyEnabled) {
@@ -603,6 +612,22 @@ export function PayFlow({
                   </div>
                 ))}
               </dl>
+              {!result.pending && (
+                <div className="mt-5 rounded-xl border border-primary/15 bg-primary-soft/60 p-4 text-left">
+                  <p className="font-bold text-primary-deep">Need a hand around your home?</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Browse demo plumbers, cleaners, electricians, and more.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="mt-3 min-h-11 w-full"
+                    onClick={onOpenServices}
+                  >
+                    Services for your home
+                  </Button>
+                </div>
+              )}
               <Button size="lg" className="mt-6 w-full" onClick={onClose}>
                 Done
               </Button>
