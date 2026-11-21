@@ -34,7 +34,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AppSheet } from "@/components/tenant/AppSheet";
 import { ImageActionCard, ServiceImageBanner } from "@/components/tenant/ImageActionCard";
@@ -831,7 +831,26 @@ function HomeTab({
     queryFn: fetchTenantHome,
     staleTime: Infinity,
   });
+  const serviceScrollerRef = useRef<HTMLDivElement>(null);
+  const [hasMoreServices, setHasMoreServices] = useState(false);
   const status = getRentStatus(tenantProfile.daysUntilDue, paid);
+
+  useEffect(() => {
+    const scroller = serviceScrollerRef.current;
+    if (!scroller) return;
+
+    const updateScrollState = () => {
+      setHasMoreServices(scroller.scrollLeft + scroller.clientWidth < scroller.scrollWidth - 1);
+    };
+
+    updateScrollState();
+    scroller.addEventListener("scroll", updateScrollState, { passive: true });
+    window.addEventListener("resize", updateScrollState);
+    return () => {
+      scroller.removeEventListener("scroll", updateScrollState);
+      window.removeEventListener("resize", updateScrollState);
+    };
+  }, [isPending]);
 
   if (isPending || !data) return <HomeSkeleton />;
 
@@ -1023,24 +1042,51 @@ function HomeTab({
               action="See all"
               onAction={onOpenServices}
             />
-            <div className="-mx-5 flex snap-x gap-3 overflow-x-auto px-5 pb-2">
-              {homeServiceCategories.slice(0, 4).map((service, index) => {
-                const provider = demoHomeServiceProviders.find(
-                  (item) => item.serviceId === service.id,
-                );
-                return (
-                  <ImageActionCard
-                    key={service.id}
-                    icon={serviceIconById[service.id]}
-                    image={serviceImageById[service.id]}
-                    label={service.label}
-                    meta={provider ? `From ${formatUGX(provider.minimumPrice)}` : undefined}
-                    onClick={onOpenServices}
-                    className="min-h-32 min-w-40 flex-none snap-start"
-                    delay={index * 0.045}
-                  />
-                );
-              })}
+            <div className="relative -mx-5">
+              <div
+                id="tenant-home-services"
+                ref={serviceScrollerRef}
+                role="region"
+                aria-label="Home services"
+                className="scrollbar-hidden flex snap-x snap-mandatory gap-3 overflow-x-auto scroll-smooth pb-2 pl-5 pr-16"
+              >
+                {homeServiceCategories.slice(0, 4).map((service, index) => {
+                  const provider = demoHomeServiceProviders.find(
+                    (item) => item.serviceId === service.id,
+                  );
+                  return (
+                    <ImageActionCard
+                      key={service.id}
+                      icon={serviceIconById[service.id]}
+                      image={serviceImageById[service.id]}
+                      label={service.label}
+                      meta={provider ? `From ${formatUGX(provider.minimumPrice)}` : undefined}
+                      onClick={onOpenServices}
+                      className="min-h-32 w-[min(43vw,11rem)] min-w-36 flex-none snap-start sm:min-w-44"
+                      delay={index * 0.045}
+                    />
+                  );
+                })}
+              </div>
+              {hasMoreServices && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  aria-label="Show more home services"
+                  aria-controls="tenant-home-services"
+                  onClick={() => {
+                    const scroller = serviceScrollerRef.current;
+                    scroller?.scrollBy({
+                      left: Math.max(1, scroller.clientWidth * 0.75),
+                      behavior: "smooth",
+                    });
+                  }}
+                  className="absolute right-2 top-1/2 z-10 size-11 -translate-y-1/2 border-0 bg-background/95 shadow-soft"
+                >
+                  <ChevronRight className="size-5" aria-hidden="true" />
+                </Button>
+              )}
             </div>
             <p className="text-xs text-muted-foreground">Demo providers and indicative prices.</p>
           </motion.section>
