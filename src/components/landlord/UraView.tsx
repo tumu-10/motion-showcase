@@ -203,7 +203,7 @@ export function UraView({
 
 function MetricCard({ label, value }: { label: string; value: string }) {
   return (
-    <article className="surface min-w-0 p-4 sm:p-5">
+    <article className="alive-card surface min-w-0 p-4 sm:p-5">
       <p className="text-xs font-semibold text-muted-foreground">{label}</p>
       <p className="mt-2 break-words text-xl font-bold text-primary-deep sm:text-2xl">{value}</p>
     </article>

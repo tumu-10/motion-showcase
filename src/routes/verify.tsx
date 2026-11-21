@@ -7,7 +7,7 @@ import { formatUGX } from "@/lib/rent";
 
 export const Route = createFileRoute("/verify")({
   validateSearch: (search: Record<string, unknown>) => ({
-    ref: typeof search.ref === "string" ? search.ref : "",
+    ref: typeof search["ref"] === "string" ? search["ref"] : "",
   }),
   head: () => ({
     meta: [

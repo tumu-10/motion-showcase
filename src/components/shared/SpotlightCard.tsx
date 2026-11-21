@@ -2,7 +2,7 @@ import { forwardRef, type ComponentPropsWithoutRef, type PointerEvent } from "re
 import { cn } from "@/lib/utils";
 
 type SpotlightCardProps = ComponentPropsWithoutRef<"article"> & {
-  image?: string;
+  image?: string | undefined;
   dark?: boolean;
 };
 

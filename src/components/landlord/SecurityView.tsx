@@ -51,7 +51,7 @@ export function SecurityView({
   const [error, setError] = useState("");
   const period = currentRentPeriod();
   const selected = depositLedger.find((entry) => entry.id === selectedId) ?? null;
-  const selectedUnit = selected ? units.find((unit) => unit.id === selected.unitId) : null;
+  const selectedUnit = selected ? units.find((unit) => unit.id === selected.unitId) : undefined;
   const selectedArrears = getCurrentArrears(selectedUnit, rentLedger, period);
   const deductionTotal = drafts.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
   const selectedRefundable = selected
@@ -422,7 +422,15 @@ function SummaryCard({ label, value, detail }: { label: string; value: string; d
   );
 }
 
-function Metric({ label, value, note }: { label: string; value: string; note?: string }) {
+function Metric({
+  label,
+  value,
+  note,
+}: {
+  label: string;
+  value: string;
+  note?: string | undefined;
+}) {
   return (
     <div className="min-w-0">
       <p className="text-xs text-muted-foreground">{label}</p>

@@ -232,7 +232,7 @@ export function ReportsView({
         </div>
         <div className="grid gap-3 sm:grid-cols-3">
           {model.metrics.map((metric) => (
-            <article key={metric.label} className="surface min-w-0 p-4 sm:p-5">
+            <article key={metric.label} className="alive-card surface min-w-0 p-4 sm:p-5">
               <p className="text-sm text-muted-foreground">{metric.label}</p>
               <p className="figure mt-2 break-words text-xl font-bold text-primary-deep">
                 {metric.value}

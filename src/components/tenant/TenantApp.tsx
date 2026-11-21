@@ -37,6 +37,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { AppSheet } from "@/components/tenant/AppSheet";
+import { ImageActionCard, ServiceImageBanner } from "@/components/tenant/ImageActionCard";
 import { PayFlow, type PaymentResult } from "@/components/tenant/PayFlow";
 import { ReportFlow, type ReportInput } from "@/components/tenant/ReportFlow";
 import { SwipeDeck } from "@/components/tenant/SwipeDeck";
@@ -82,6 +83,7 @@ import {
   type MonthlyServiceCharge,
 } from "@/lib/home-services";
 import { ease } from "@/lib/motion";
+import { quickActionImages, serviceImageById } from "@/lib/service-images";
 import { issueRentReceipt } from "@/lib/receipt-helpers";
 import {
   listings,
@@ -852,7 +854,7 @@ function HomeTab({
         </div>
         <button
           onClick={onOpenNotifications}
-          className="relative grid size-12 place-items-center rounded-full bg-card shadow-soft"
+          className="relative grid size-12 place-items-center rounded-full bg-card shadow-soft transition-transform duration-200 hover:-translate-y-0.5 active:scale-95"
           aria-label={
             notificationCount ? `Notifications, ${notificationCount} unread` : "Notifications"
           }
@@ -969,8 +971,21 @@ function HomeTab({
             className="grid grid-cols-2 gap-3"
             aria-label="Quick actions"
           >
-            <QuickAction icon={MessageSquare} label="Send a complaint" onClick={onReport} />
-            <QuickAction icon={House} label="Find a home" onClick={onFindHome} />
+            <QuickAction
+              icon={MessageSquare}
+              label="Send a complaint"
+              meta="Tell your landlord"
+              image={quickActionImages.complaint}
+              onClick={onReport}
+            />
+            <QuickAction
+              icon={House}
+              label="Find a home"
+              meta="Browse available spaces"
+              image={quickActionImages.findHome}
+              onClick={onFindHome}
+              delay={0.06}
+            />
           </motion.section>
 
           {monthlyServiceCharge?.enabled && (
@@ -1009,30 +1024,21 @@ function HomeTab({
               onAction={onOpenServices}
             />
             <div className="-mx-5 flex snap-x gap-3 overflow-x-auto px-5 pb-2">
-              {homeServiceCategories.slice(0, 4).map((service) => {
-                const Icon = serviceIconById[service.id];
+              {homeServiceCategories.slice(0, 4).map((service, index) => {
                 const provider = demoHomeServiceProviders.find(
                   (item) => item.serviceId === service.id,
                 );
                 return (
-                  <button
+                  <ImageActionCard
                     key={service.id}
-                    type="button"
+                    icon={serviceIconById[service.id]}
+                    image={serviceImageById[service.id]}
+                    label={service.label}
+                    meta={provider ? `From ${formatUGX(provider.minimumPrice)}` : undefined}
                     onClick={onOpenServices}
-                    className="surface flex min-h-28 min-w-36 snap-start flex-col items-start justify-between gap-3 p-3 text-left transition-colors hover:bg-secondary"
-                  >
-                    <span className="grid size-9 place-items-center rounded-full bg-primary-soft text-primary-deep">
-                      <Icon className="size-4" aria-hidden />
-                    </span>
-                    <span>
-                      <span className="block text-sm font-semibold">{service.label}</span>
-                      {provider && (
-                        <span className="mt-1 block text-xs text-muted-foreground">
-                          From {formatUGX(provider.minimumPrice)}
-                        </span>
-                      )}
-                    </span>
-                  </button>
+                    className="min-h-32 min-w-40 flex-none snap-start"
+                    delay={index * 0.045}
+                  />
                 );
               })}
             </div>
@@ -1147,17 +1153,17 @@ function ServicesTab({
             );
           return (
             <section key={service.id} className="space-y-3">
-              <h2 className="flex items-center gap-2 text-lg font-bold text-primary-deep">
-                <span className="grid size-9 place-items-center rounded-full bg-primary-soft">
-                  <Icon className="size-4" aria-hidden />
-                </span>
-                {service.label}
-              </h2>
-              <ul className="grid gap-3 sm:grid-cols-2">
+              <ServiceImageBanner
+                icon={Icon}
+                image={serviceImageById[service.id]}
+                label={service.label}
+                providerCount={providers.length}
+              />
+              <ul className="grid gap-3">
                 {providers.map((provider) => {
                   const preferred = preferredProviderIds.includes(provider.id);
                   return (
-                    <li key={provider.id} className="surface min-w-0 space-y-3 p-4">
+                    <li key={provider.id} className="alive-card surface min-w-0 space-y-3 p-4">
                       <div className="flex flex-wrap items-start justify-between gap-2">
                         <div className="min-w-0">
                           <h3 className="break-words font-bold">{provider.name}</h3>
@@ -1182,7 +1188,7 @@ function ServicesTab({
                           Preferred by your landlord
                         </p>
                       )}
-                      <div className="grid grid-cols-3 gap-2">
+                      <div className="grid grid-cols-[auto_auto_1fr] gap-2">
                         <Button
                           type="button"
                           variant="outline"
@@ -1471,24 +1477,30 @@ function HomeSkeleton() {
 }
 
 function QuickAction({
-  icon: Icon,
+  icon,
   label,
+  image,
+  meta,
   onClick,
+  delay,
 }: {
   icon: LucideIcon;
   label: string;
+  image: string;
+  meta: string;
   onClick: () => void;
+  delay?: number;
 }) {
   return (
-    <button
+    <ImageActionCard
+      icon={icon}
+      label={label}
+      image={image}
+      meta={meta}
       onClick={onClick}
-      className="surface press flex min-h-24 flex-col justify-between p-4 text-left"
-    >
-      <span className="grid size-10 place-items-center rounded-full bg-accent-soft text-warning-ink">
-        <Icon className="size-5" aria-hidden />
-      </span>
-      <span className="text-sm font-semibold">{label}</span>
-    </button>
+      delay={delay}
+      className="min-h-32"
+    />
   );
 }
 
@@ -1519,7 +1531,7 @@ function SectionHeader({
 
 function PaymentRow({ payment }: { payment: Payment }) {
   return (
-    <div className="surface flex min-w-0 items-start gap-3 p-3 sm:p-4">
+    <div className="alive-card surface flex min-w-0 items-start gap-3 p-3 sm:p-4">
       <span className="grid size-10 shrink-0 place-items-center rounded-full bg-success-soft text-success-ink">
         <Receipt className="size-5" aria-hidden />
       </span>
@@ -1581,7 +1593,7 @@ function RequestCard({ request }: { request: Complaint }) {
   const tone =
     request.stage === "resolved" ? "success" : request.stage === "submitted" ? "neutral" : "info";
   return (
-    <div className="surface min-w-0 p-3 sm:p-4">
+    <div className="alive-card surface min-w-0 p-3 sm:p-4">
       <div className="flex min-w-0 flex-col items-start gap-2">
         <div className="min-w-0">
           <p className="break-words font-semibold">{request.title}</p>
@@ -1633,7 +1645,7 @@ function PaymentsTab({
   return (
     <div className="min-w-0 px-4 pb-8 pt-5 sm:px-5 sm:pt-6">
       <h1 className="text-2xl font-bold">Payments</h1>
-      <div className="surface mt-4 flex flex-wrap items-center justify-between gap-4 p-4 sm:mt-5 sm:p-5">
+      <div className="alive-card surface mt-4 flex flex-wrap items-center justify-between gap-4 p-4 sm:mt-5 sm:p-5">
         <div>
           <p className="text-sm text-muted-foreground">Balance due</p>
           <p className="figure mt-1 text-2xl font-bold">
@@ -1667,7 +1679,7 @@ function PaymentsTab({
             >
               <article
                 className={cn(
-                  "overflow-hidden rounded-xl border p-4 shadow-soft sm:p-5",
+                  "alive-card overflow-hidden rounded-xl border p-4 shadow-soft sm:p-5",
                   p.status === "Pending"
                     ? "border-warning/30 bg-warning-soft/70"
                     : p.status === "Failed"

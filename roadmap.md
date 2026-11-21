@@ -1,5 +1,6 @@
 # Propatiz completion roadmap
 
+- [x] Enrich tenant quick actions and home-service imagery, and add restrained branded card motion across the demo without changing layouts.
 - [ ] Study the existing app and document the current system in docs/SYSTEM_MAP.md.
 - [ ] Align tokens, self-hosted typography, lightweight loading, motion, navigation and accessible coloured overview cards.
 - [ ] Complete move-in, advance rent, refundable deposits and shared payment/receipt ledgers.

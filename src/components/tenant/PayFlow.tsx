@@ -41,8 +41,8 @@ export type PaymentResult = {
   reference: string;
   phone: string;
   pending: boolean;
-  bankProofDataUrl?: string;
-  providerToken?: string;
+  bankProofDataUrl?: string | undefined;
+  providerToken?: string | undefined;
   failed?: boolean | undefined;
 };
 type PaymentMethod = TenantPaymentPreference;
@@ -85,10 +85,10 @@ export function PayFlow({
   const [phone, setPhone] = useState(defaultPhone);
   const [simulateDecline, setSimulateDecline] = useState(false);
   const [errors, setErrors] = useState<{
-    amount?: string;
-    phone?: string;
-    card?: string;
-    proof?: string;
+    amount?: string | undefined;
+    phone?: string | undefined;
+    card?: string | undefined;
+    proof?: string | undefined;
   }>({});
   const [agreed, setAgreed] = useState(false);
   const needsAgreement = amountMode === "full" && needsAdvanceAgreement(Number(monthsCovered));
