@@ -2,6 +2,7 @@ import { CreditCard, Landmark, Loader2, Smartphone } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { BrandLogo, type PayBrand } from "@/components/payments/BrandLogo";
 import { AnimatedCheck } from "@/components/shared/AnimatedCheck";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -25,8 +26,8 @@ import type { LandlordPaymentDetails } from "@/lib/sample-data";
 import { makePaymentReference, needsAdvanceAgreement } from "@/lib/rent";
 import { formatRentPeriodRange } from "@/lib/rent-accounting";
 import { ease } from "@/lib/motion";
+import { bankOptions, getBankBrand, type BankBrand } from "@/lib/payment-banks";
 import { cn } from "@/lib/utils";
-import { BrandLogo, type PayBrand } from "@/components/payments/BrandLogo";
 import { mockPaymentProviders } from "@/lib/payment-provider";
 import type { LucideIcon } from "lucide-react";
 import type { TenantPaymentPreference } from "@/lib/demo-settings";
@@ -78,8 +79,8 @@ export function PayFlow({
   const [network, setNetwork] = useState<MobileNetwork>(detectNetwork(defaultPhone) ?? "mtn");
   const [method, setMethod] = useState<PaymentMethod>(preferredPaymentMethod);
   const [cardBrand, setCardBrand] = useState<"Visa" | "Mastercard">("Visa");
-  const [bankChoice, setBankChoice] = useState<"stanbic" | "hfb">(
-    /housing/i.test(paymentDetails.bankName ?? "") ? "hfb" : "stanbic",
+  const [bankChoice, setBankChoice] = useState<BankBrand>(
+    () => getBankBrand(paymentDetails.bankName) ?? "stanbic",
   );
   const [cardNumber, setCardNumber] = useState("");
   const [cardExpiry, setCardExpiry] = useState("");
@@ -100,6 +101,7 @@ export function PayFlow({
   const receivingNetwork = paymentDetails.mobileMoneyNumber
     ? detectNetwork(paymentDetails.mobileMoneyNumber)
     : null;
+  const landlordBankBrand = getBankBrand(paymentDetails.bankName);
 
   const amount =
     amountMode === "full"
@@ -395,13 +397,13 @@ export function PayFlow({
                     id === "mobile"
                       ? ["mtn", "airtel"]
                       : id === "bank"
-                        ? ["stanbic", "hfb"]
+                        ? ["stanbic", "hfb", "centenary"]
                         : ["visa", "mastercard"];
                   const sub =
                     id === "mobile"
                       ? "Instant · PIN prompt"
                       : id === "bank"
-                        ? "1–2 days · upload proof"
+                        ? "6 banks · upload proof"
                         : "Visa or Mastercard";
                   const active = method === id;
                   return (
@@ -509,34 +511,37 @@ export function PayFlow({
                 </div>
               </div>
             ) : method === "bank" ? (
-              <div className="rounded-xl border border-primary/15 bg-primary-soft/60 p-4 text-sm">
+              <div className="min-w-0 rounded-xl border border-primary/15 bg-primary-soft/60 p-4 text-sm">
                 <p className="font-bold text-primary-deep">Choose your bank</p>
-                <div className="mt-2 grid grid-cols-2 gap-2">
-                  {(["stanbic", "hfb"] as const).map((b) => (
+                <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {bankOptions.map(({ brand, name }) => (
                     <button
-                      key={b}
+                      key={brand}
                       type="button"
-                      aria-pressed={bankChoice === b}
-                      onClick={() => setBankChoice(b)}
+                      aria-label={`Paying from ${name}`}
+                      aria-pressed={bankChoice === brand}
+                      onClick={() => setBankChoice(brand)}
                       className={cn(
-                        "press flex items-center gap-2 rounded-lg border-2 bg-card p-2 text-left text-xs font-semibold",
-                        bankChoice === b ? "border-primary" : "border-border",
+                        "press flex min-h-16 min-w-0 items-center gap-2 rounded-lg border-2 bg-card p-2 text-left text-xs font-semibold",
+                        bankChoice === brand ? "border-primary" : "border-border",
                       )}
                     >
-                      <BrandLogo brand={b} className="h-8 w-10" />
-                      {b === "stanbic" ? "Stanbic Bank" : "Housing Finance Bank"}
+                      <BrandLogo brand={brand} className="h-8 w-10" />
+                      <span className="min-w-0 break-words leading-tight">{name}</span>
                     </button>
                   ))}
                 </div>
                 <p className="mt-4 font-bold text-primary-deep">Transfer to</p>
-                <dl className="mt-2 space-y-2">
+                <dl className="mt-2 min-w-0 space-y-2">
                   <PaymentDetail
                     label="Paying from"
-                    value={
-                      bankChoice === "stanbic" ? "Stanbic Bank Uganda" : "Housing Finance Bank"
-                    }
+                    value={bankOptions.find((bank) => bank.brand === bankChoice)?.name}
                   />
-                  <PaymentDetail label="Landlord bank" value={paymentDetails.bankName} />
+                  <PaymentDetail
+                    label="Landlord bank"
+                    value={paymentDetails.bankName}
+                    {...(landlordBankBrand ? { brand: landlordBankBrand } : {})}
+                  />
                   <PaymentDetail label="Account name" value={paymentDetails.bankAccountName} />
                   <PaymentDetail label="Account number" value={paymentDetails.bankAccountNumber} />
                 </dl>
@@ -845,12 +850,25 @@ export function FieldError({ id, message }: { id: string; message?: string | und
   );
 }
 
-function PaymentDetail({ label, value }: { label: string; value?: string | undefined }) {
+function PaymentDetail({
+  label,
+  value,
+  brand,
+}: {
+  label: string;
+  value?: string | undefined;
+  brand?: PayBrand;
+}) {
   if (!value) return null;
   return (
     <div className="grid min-w-0 grid-cols-[7rem_minmax(0,1fr)] gap-2">
       <dt className="text-muted-foreground">{label}</dt>
-      <dd className="figure min-w-0 break-all text-right font-semibold">{value}</dd>
+      <dd className="figure min-w-0 break-all text-right font-semibold">
+        <span className="inline-flex max-w-full items-center justify-end gap-2">
+          {brand && <BrandLogo brand={brand} className="h-7 w-10" />}
+          <span className="min-w-0 break-all">{value}</span>
+        </span>
+      </dd>
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { BrandLogo } from "@/components/payments/BrandLogo";
 import {
   defaultLandlordPaymentDetails,
   readLandlordPaymentDetails,
@@ -12,6 +13,7 @@ import {
   saveLandlordPaymentDetails,
 } from "@/lib/demo-settings";
 import type { LandlordPaymentDetails } from "@/lib/sample-data";
+import { bankOptions, getBankBrand } from "@/lib/payment-banks";
 import {
   defaultReceiptBranding,
   getReceiptBranding,
@@ -33,6 +35,7 @@ export function ReceiptSettings({
   const [paymentDetails, setPaymentDetails] = useState<LandlordPaymentDetails>(
     defaultLandlordPaymentDetails,
   );
+  const [bankOther, setBankOther] = useState(false);
   const [paymentDetailsLoaded, setPaymentDetailsLoaded] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
@@ -54,7 +57,9 @@ export function ReceiptSettings({
 
   useEffect(() => {
     try {
-      setPaymentDetails(readLandlordPaymentDetails());
+      const saved = readLandlordPaymentDetails();
+      setPaymentDetails(saved);
+      setBankOther(!!saved.bankName && !getBankBrand(saved.bankName));
     } catch (error) {
       console.error("Could not load landlord payment details.", error);
       toast.error("Landlord payment details could not be loaded.", {
@@ -69,6 +74,7 @@ export function ReceiptSettings({
     branding.logoChoice === "custom" && branding.customLogoDataUrl
       ? branding.customLogoDataUrl
       : "/propatiz-logo.svg";
+  const landlordBankBrand = getBankBrand(paymentDetails.bankName);
 
   async function uploadLogo(file: File | undefined) {
     if (!file) return;
@@ -235,15 +241,52 @@ export function ReceiptSettings({
               <div className="grid gap-3">
                 <div className="space-y-2">
                   <Label htmlFor="landlord-payment-bank-name">Bank name</Label>
-                  <Input
-                    id="landlord-payment-bank-name"
-                    className="min-h-11"
-                    value={paymentDetails.bankName ?? ""}
-                    onChange={(event) =>
-                      setPaymentDetails((current) => ({ ...current, bankName: event.target.value }))
-                    }
-                    placeholder="e.g. Stanbic Bank Uganda"
-                  />
+                  <div className="flex min-w-0 items-center gap-2">
+                    <select
+                      id="landlord-payment-bank-name"
+                      className="h-11 min-w-0 flex-1 rounded-md border border-input bg-background px-3 text-sm"
+                      value={
+                        bankOther
+                          ? "other"
+                          : (bankOptions.find((bank) => bank.brand === landlordBankBrand)?.name ??
+                            "")
+                      }
+                      onChange={(event) => {
+                        const selected = event.target.value;
+                        setBankOther(selected === "other");
+                        setPaymentDetails((current) => ({
+                          ...current,
+                          bankName: selected === "other" ? "" : selected,
+                        }));
+                      }}
+                    >
+                      <option value="">Choose a bank</option>
+                      {bankOptions.map((bank) => (
+                        <option key={bank.brand} value={bank.name}>
+                          {bank.name}
+                        </option>
+                      ))}
+                      <option value="other">Other bank</option>
+                    </select>
+                    {!bankOther && landlordBankBrand && (
+                      <BrandLogo brand={landlordBankBrand} className="h-9 w-12" />
+                    )}
+                  </div>
+                  {bankOther && (
+                    <Input
+                      id="landlord-payment-other-bank-name"
+                      aria-label="Other bank name"
+                      className="min-h-11"
+                      value={paymentDetails.bankName ?? ""}
+                      onChange={(event) =>
+                        setPaymentDetails((current) => ({
+                          ...current,
+                          bankName: event.target.value,
+                        }))
+                      }
+                      placeholder="Enter bank name"
+                    />
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="landlord-payment-bank-account-name">Account name</Label>

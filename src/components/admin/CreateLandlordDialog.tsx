@@ -12,7 +12,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { BrandLogo } from "@/components/payments/BrandLogo";
 import { validateLandlordPaymentDetails } from "@/lib/demo-settings";
+import { bankOptions, getBankBrand } from "@/lib/payment-banks";
 import {
   PROPERTY_TYPE_LABELS,
   type Landlord,
@@ -109,6 +111,7 @@ export function CreateLandlordDialog({
   const [mobileMoneyName, setMobileMoneyName] = useState("");
   const [mobileMoneyNumber, setMobileMoneyNumber] = useState("");
   const [bankEnabled, setBankEnabled] = useState(false);
+  const [bankOther, setBankOther] = useState(false);
   const [bankName, setBankName] = useState("");
   const [bankAccountName, setBankAccountName] = useState("");
   const [bankAccountNumber, setBankAccountNumber] = useState("");
@@ -126,6 +129,7 @@ export function CreateLandlordDialog({
     setMobileMoneyName("");
     setMobileMoneyNumber("");
     setBankEnabled(false);
+    setBankOther(false);
     setBankName("");
     setBankAccountName("");
     setBankAccountNumber("");
@@ -309,6 +313,7 @@ export function CreateLandlordDialog({
   }
 
   const unitCount = blocks.reduce((count, block) => count + block.units.length, 0);
+  const selectedBankBrand = getBankBrand(bankName);
 
   return (
     <Dialog
@@ -474,14 +479,46 @@ export function CreateLandlordDialog({
                 {bankEnabled && (
                   <div className="mt-3 grid gap-3 sm:grid-cols-2">
                     <Field label="Bank name" htmlFor="landlord-bank-name">
-                      <Input
-                        id="landlord-bank-name"
-                        value={bankName}
-                        onChange={(event) => setBankName(event.target.value)}
-                        placeholder="e.g. Stanbic Bank"
-                        className="bg-card"
-                      />
+                      <div className="flex min-w-0 items-center gap-2">
+                        <select
+                          id="landlord-bank-name"
+                          className="h-11 min-w-0 flex-1 rounded-md border border-input bg-card px-3 text-sm"
+                          value={
+                            bankOther
+                              ? "other"
+                              : (bankOptions.find((bank) => bank.brand === selectedBankBrand)
+                                  ?.name ?? "")
+                          }
+                          onChange={(event) => {
+                            const selected = event.target.value;
+                            setBankOther(selected === "other");
+                            setBankName(selected === "other" ? "" : selected);
+                          }}
+                        >
+                          <option value="">Choose a bank</option>
+                          {bankOptions.map((bank) => (
+                            <option key={bank.brand} value={bank.name}>
+                              {bank.name}
+                            </option>
+                          ))}
+                          <option value="other">Other bank</option>
+                        </select>
+                        {!bankOther && selectedBankBrand && (
+                          <BrandLogo brand={selectedBankBrand} className="h-9 w-12" />
+                        )}
+                      </div>
                     </Field>
+                    {bankOther && (
+                      <Field label="Other bank name" htmlFor="landlord-other-bank-name">
+                        <Input
+                          id="landlord-other-bank-name"
+                          value={bankName}
+                          onChange={(event) => setBankName(event.target.value)}
+                          placeholder="Enter bank name"
+                          className="bg-card"
+                        />
+                      </Field>
+                    )}
                     <Field label="Account name" htmlFor="landlord-bank-account-name">
                       <Input
                         id="landlord-bank-account-name"
