@@ -399,22 +399,18 @@ export function PayFlow({
                       : id === "bank"
                         ? ["stanbic", "hfb", "centenary"]
                         : ["visa", "mastercard"];
-                  const sub =
-                    id === "mobile"
-                      ? "Instant · PIN prompt"
-                      : id === "bank"
-                        ? "6 banks · upload proof"
-                        : "Visa or Mastercard";
                   const active = method === id;
+                  const methodLabel = id === "visa" ? "Card" : label;
                   return (
                     <motion.button
                       key={id}
                       type="button"
+                      aria-label={methodLabel}
                       aria-pressed={active}
                       onClick={() => setMethod(id)}
                       whileTap={{ scale: 0.98 }}
                       className={cn(
-                        "relative flex min-w-0 items-center gap-3 rounded-xl border-2 p-3 text-left transition-colors",
+                        "relative flex min-h-16 min-w-0 items-center gap-3 rounded-xl border-2 py-2 pl-3 pr-10 text-left transition-colors",
                         active
                           ? "border-primary bg-primary-soft shadow-sm"
                           : "border-border bg-card hover:border-primary/40",
@@ -422,19 +418,14 @@ export function PayFlow({
                     >
                       <span className="flex -space-x-2">
                         {brands.map((b) => (
-                          <BrandLogo key={b} brand={b} className="h-7 w-10 ring-2 ring-card" />
+                          <BrandLogo key={b} brand={b} className="h-7 w-9 ring-2 ring-card" />
                         ))}
                       </span>
-                      <span className="min-w-0">
-                        <span className="block text-sm font-bold">
-                          {id === "visa" ? "Card" : label}
-                        </span>
-                        <span className="block text-xs text-muted-foreground">{sub}</span>
-                      </span>
+                      <span className="min-w-0 text-sm font-bold">{methodLabel}</span>
                       <span
                         aria-hidden
                         className={cn(
-                          "absolute right-4 top-1/2 size-4 -translate-y-1/2 rounded-full border-2 transition-all",
+                          "absolute right-3 top-1/2 size-4 -translate-y-1/2 rounded-full border-2 transition-all",
                           active
                             ? "border-primary bg-primary shadow-[inset_0_0_0_3px_var(--card)]"
                             : "border-input",
@@ -450,22 +441,17 @@ export function PayFlow({
                     <button
                       key={n}
                       type="button"
+                      aria-label={n === "mtn" ? "MTN Mobile Money" : "Airtel Money"}
                       aria-pressed={network === n}
                       onClick={() => setNetwork(n)}
                       className={cn(
-                        "press flex min-h-16 items-center gap-3 rounded-lg border-2 px-3 text-left",
-                        network === n ? "border-primary bg-primary-soft" : "border-border bg-card",
+                        "press flex min-h-16 min-w-0 items-center justify-center rounded-xl border-2 p-2",
+                        network === n
+                          ? "border-primary bg-primary-soft shadow-sm"
+                          : "border-border bg-card hover:border-primary/40",
                       )}
                     >
-                      <BrandLogo brand={n} className="h-9 w-12" />
-                      <span className="flex flex-col">
-                        <span className="text-sm font-bold">
-                          {n === "mtn" ? "MTN MoMo" : "Airtel Money"}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          {n === "mtn" ? "076, 077, 078" : "070, 074, 075"}
-                        </span>
-                      </span>
+                      <BrandLogo brand={n} className="h-9 w-14" />
                     </button>
                   ))}
                 </div>
@@ -513,37 +499,43 @@ export function PayFlow({
             ) : method === "bank" ? (
               <div className="min-w-0 rounded-xl border border-primary/15 bg-primary-soft/60 p-4 text-sm">
                 <p className="font-bold text-primary-deep">Choose your bank</p>
-                <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                <div className="mt-2 grid grid-cols-3 gap-2">
                   {bankOptions.map(({ brand, name }) => (
                     <button
                       key={brand}
                       type="button"
                       aria-label={`Paying from ${name}`}
+                      title={name}
                       aria-pressed={bankChoice === brand}
                       onClick={() => setBankChoice(brand)}
                       className={cn(
-                        "press flex min-h-16 min-w-0 items-center gap-2 rounded-lg border-2 bg-card p-2 text-left text-xs font-semibold",
-                        bankChoice === brand ? "border-primary" : "border-border",
+                        "press flex min-h-16 min-w-0 items-center justify-center rounded-xl border-2 bg-card p-2 transition-colors hover:border-primary/40",
+                        bankChoice === brand && "border-primary bg-primary-soft shadow-sm",
                       )}
                     >
-                      <BrandLogo brand={brand} className="h-8 w-10" />
-                      <span className="min-w-0 break-words leading-tight">{name}</span>
+                      <BrandLogo brand={brand} className="h-8 w-12" />
                     </button>
                   ))}
                 </div>
                 <p className="mt-4 font-bold text-primary-deep">Transfer to</p>
                 <dl className="mt-2 min-w-0 space-y-2">
-                  <PaymentDetail
-                    label="Paying from"
-                    value={bankOptions.find((bank) => bank.brand === bankChoice)?.name}
-                  />
+                  <div className="grid min-w-0 grid-cols-[7rem_minmax(0,1fr)] items-center gap-2">
+                    <dt className="text-muted-foreground">Paying from</dt>
+                    <dd className="flex min-w-0 justify-end">
+                      <BrandLogo brand={bankChoice} className="h-7 w-10" />
+                    </dd>
+                  </div>
                   <PaymentDetail
                     label="Landlord bank"
                     value={paymentDetails.bankName}
                     {...(landlordBankBrand ? { brand: landlordBankBrand } : {})}
                   />
                   <PaymentDetail label="Account name" value={paymentDetails.bankAccountName} />
-                  <PaymentDetail label="Account number" value={paymentDetails.bankAccountNumber} />
+                  <PaymentDetail
+                    label="Account number"
+                    value={paymentDetails.bankAccountNumber}
+                    breakAll
+                  />
                 </dl>
                 <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
                   Transfers are recorded as pending until the landlord confirms receipt. Use the
@@ -575,18 +567,19 @@ export function PayFlow({
                     <button
                       key={brand}
                       type="button"
+                      aria-label={`Pay with ${brand}`}
+                      title={brand}
                       aria-pressed={cardBrand === brand}
                       onClick={() => setCardBrand(brand)}
                       className={cn(
-                        "press flex items-center justify-center gap-2 rounded-lg border-2 bg-card px-3 py-2 font-semibold",
-                        cardBrand === brand ? "border-primary" : "border-border",
+                        "press flex min-h-16 min-w-0 items-center justify-center rounded-xl border-2 bg-card p-2 transition-colors hover:border-primary/40",
+                        cardBrand === brand && "border-primary bg-primary-soft shadow-sm",
                       )}
                     >
                       <BrandLogo
                         brand={brand === "Visa" ? "visa" : "mastercard"}
-                        className="h-7 w-11 border-0 shadow-none"
+                        className="h-9 w-14"
                       />
-                      {brand}
                     </button>
                   ))}
                 </div>
@@ -854,19 +847,26 @@ function PaymentDetail({
   label,
   value,
   brand,
+  breakAll = false,
 }: {
   label: string;
   value?: string | undefined;
   brand?: PayBrand;
+  breakAll?: boolean;
 }) {
   if (!value) return null;
   return (
     <div className="grid min-w-0 grid-cols-[7rem_minmax(0,1fr)] gap-2">
       <dt className="text-muted-foreground">{label}</dt>
-      <dd className="figure min-w-0 break-all text-right font-semibold">
+      <dd
+        className={cn(
+          "figure min-w-0 text-right font-semibold",
+          breakAll ? "break-all" : "break-words",
+        )}
+      >
         <span className="inline-flex max-w-full items-center justify-end gap-2">
           {brand && <BrandLogo brand={brand} className="h-7 w-10" />}
-          <span className="min-w-0 break-all">{value}</span>
+          <span className={cn("min-w-0", breakAll ? "break-all" : "break-words")}>{value}</span>
         </span>
       </dd>
     </div>

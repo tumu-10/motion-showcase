@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PayFlow } from "@/components/tenant/PayFlow";
 
@@ -53,7 +53,7 @@ describe("tenant bank-transfer options", () => {
         rentPeriod="2026-11"
         defaultPhone="0772 000 111"
         paymentDetails={{
-          mobileMoneyEnabled: false,
+          mobileMoneyEnabled: true,
           bankEnabled: true,
           bankName: "Diamond Trust Bank",
           bankAccountName: "Kampala Homes",
@@ -78,6 +78,7 @@ describe("tenant bank-transfer options", () => {
     for (const [option, logoAlt] of banks) {
       const bankButton = screen.getByRole("button", { name: `Paying from ${option}` });
       expect(within(bankButton).getByRole("img", { name: logoAlt })).toBeInTheDocument();
+      expect(bankButton).not.toHaveTextContent(option);
     }
 
     expect(screen.getByRole("button", { name: "Paying from DTB" })).toHaveAttribute(
@@ -88,5 +89,15 @@ describe("tenant bank-transfer options", () => {
     expect(screen.getByText("1234567890123456").parentElement?.parentElement).toHaveClass(
       "min-w-0",
     );
+
+    fireEvent.click(screen.getByRole("button", { name: "Mobile money" }));
+    const mobileChoice = screen.getByRole("button", { name: "MTN Mobile Money" });
+    expect(within(mobileChoice).getByRole("img", { name: "MTN Mobile Money" })).toBeInTheDocument();
+    expect(mobileChoice).not.toHaveTextContent("MTN MoMo");
+
+    fireEvent.click(screen.getByRole("button", { name: "Card" }));
+    const cardChoice = screen.getByRole("button", { name: "Pay with Visa" });
+    expect(within(cardChoice).getByRole("img", { name: "Visa" })).toBeInTheDocument();
+    expect(cardChoice).not.toHaveTextContent("Visa");
   }, 15_000);
 });
