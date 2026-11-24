@@ -16,11 +16,7 @@ export function LogoMark({
 }: LogoMarkProps) {
   const image = (
     <img
-      src={
-        tone === "onDeep"
-          ? "/propatiz-logo-transparent-light-text.svg"
-          : "/propatiz-logo-transparent-dark-text.svg"
-      }
+      src={tone === "onDeep" ? "/propatiz-mark-on-navy.svg" : "/propatiz-mark.svg"}
       alt=""
       className="size-full object-contain"
       draggable={false}

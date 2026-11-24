@@ -48,7 +48,11 @@ export function DashShell<T extends string>({
   const sidebar = (layoutKey: string, onPick?: () => void) => (
     <div className="flex h-full min-h-0 flex-col gap-6 overflow-hidden p-5">
       <div className="shrink-0">
-        <Logo tone="onDeep" />
+        <img
+          src="/propatiz-logo-horizontal-on-navy.svg"
+          alt="Propatiz"
+          className="block h-auto w-full max-w-[14rem]"
+        />
       </div>
       <nav
         className="scrollbar-hidden min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain pr-1"
