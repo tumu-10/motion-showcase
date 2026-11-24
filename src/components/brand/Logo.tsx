@@ -1,11 +1,30 @@
 import { motion } from "motion/react";
 import { cn } from "@/lib/utils";
 
-type LogoMarkProps = { className?: string; animate?: boolean; delay?: number };
+type LogoMarkProps = {
+  className?: string;
+  animate?: boolean;
+  delay?: number;
+  tone?: "default" | "onDeep";
+};
 
-export function LogoMark({ className, animate = false, delay = 0 }: LogoMarkProps) {
+export function LogoMark({
+  className,
+  animate = false,
+  delay = 0,
+  tone = "default",
+}: LogoMarkProps) {
   const image = (
-    <img src="/favicon.png" alt="" className="size-full object-cover" draggable={false} />
+    <img
+      src={
+        tone === "onDeep"
+          ? "/propatiz-logo-transparent-light-text.svg"
+          : "/propatiz-logo-transparent-dark-text.svg"
+      }
+      alt=""
+      className="size-full object-contain"
+      draggable={false}
+    />
   );
 
   if (!animate) {
@@ -47,7 +66,7 @@ export function Logo({
         className,
       )}
     >
-      <LogoMark className="size-8" />
+      <LogoMark className="size-8" tone={tone} />
       Propatiz
     </span>
   );

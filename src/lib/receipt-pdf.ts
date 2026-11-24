@@ -296,7 +296,7 @@ export async function embedReceiptLogo(pdf: PDFDocument, branding: ReceiptBrandi
   const response =
     branding.logoChoice === "custom" && branding.customLogoDataUrl
       ? await fetch(branding.customLogoDataUrl)
-      : await fetch("/propatiz-logo.svg");
+      : await fetch("/propatiz-logo-transparent-dark-text.svg");
   if (!response.ok) throw new Error("Could not load the selected receipt logo.");
   const blob = await response.blob();
   const image = new Image();

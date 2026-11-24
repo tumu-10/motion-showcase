@@ -9,7 +9,7 @@ export async function createReceiptImage({ receipt, branding }: ReceiptBundle) {
   const logo =
     branding.logoChoice === "custom" && branding.customLogoDataUrl
       ? branding.customLogoDataUrl
-      : "/propatiz-logo.svg";
+      : "/propatiz-logo-transparent-dark-text.svg";
   const verifyUrl = `${window.location.origin}/verify?ref=${encodeURIComponent(receipt.receiptNumber)}`;
   const hasMockFiscalQr = receipt.efris.status === "issued" && !!receipt.efris.qrPayload;
   const qr = await QRCode.toDataURL(

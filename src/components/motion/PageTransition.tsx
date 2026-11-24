@@ -71,7 +71,7 @@ export function PageTransitionProvider({ children }: { children: ReactNode }) {
         <div className="pt-accent absolute inset-0 bg-accent" style={{ transform: "translateY(100%)" }} />
         <div className="pt-deep deep-panel absolute inset-0 flex items-center justify-center" style={{ transform: "translateY(100%)" }}>
           <div className="pt-content flex flex-col items-center gap-4 opacity-0">
-            <LogoMark className="size-12 text-on-deep" />
+            <LogoMark className="size-12 text-on-deep" tone="onDeep" />
             <span className="text-eyebrow text-on-deep-muted">{label}</span>
           </div>
         </div>

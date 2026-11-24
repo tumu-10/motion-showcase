@@ -73,7 +73,7 @@ export function ReceiptSettings({
   const logo =
     branding.logoChoice === "custom" && branding.customLogoDataUrl
       ? branding.customLogoDataUrl
-      : "/propatiz-logo.svg";
+      : "/propatiz-logo-transparent-dark-text.svg";
   const landlordBankBrand = getBankBrand(paymentDetails.bankName);
 
   async function uploadLogo(file: File | undefined) {

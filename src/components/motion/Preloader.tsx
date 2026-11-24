@@ -45,7 +45,7 @@ export function Preloader() {
     >
       <div className="flex flex-1 flex-col items-center justify-center gap-6">
         <motion.div
-          className="overflow-hidden rounded-[2rem] shadow-lift"
+          className="flex items-center justify-center"
           initial={{
             opacity: 0,
             y: 24,
@@ -56,9 +56,9 @@ export function Preloader() {
           transition={{ duration: 1, delay: 0.15, ease: ease.outExpo }}
         >
           <img
-            src="/favicon.png"
-            alt="Propatiz — Buy and rent now"
-            className="size-40 object-cover sm:size-48"
+            src="/propatiz-logo-transparent-light-text.svg"
+            alt="Propatiz"
+            className="size-40 object-contain sm:size-48"
             draggable={false}
           />
         </motion.div>

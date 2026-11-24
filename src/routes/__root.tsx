@@ -106,7 +106,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         rel: "stylesheet",
         href: appCss,
       },
-      { rel: "icon", href: "/favicon.png", type: "image/png" },
+      { rel: "icon", href: "/propatiz-logo-transparent-dark-text.svg", type: "image/svg+xml" },
+      { rel: "icon", href: "/propatiz-logo.png", type: "image/png" },
+      { rel: "apple-touch-icon", href: "/propatiz-logo.png" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
