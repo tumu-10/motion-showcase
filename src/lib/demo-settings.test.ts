@@ -5,10 +5,13 @@ import {
   defaultTenantDemoSettings,
   readAdminDemoSettings,
   readLandlordDemoSettings,
+  readLandlordPaymentDetails,
   readTenantDemoSettings,
   saveAdminDemoSettings,
   saveLandlordDemoSettings,
+  saveLandlordPaymentDetails,
   saveTenantDemoSettings,
+  validateLandlordPaymentDetails,
 } from "./demo-settings";
 
 afterEach(() => localStorage.clear());
@@ -35,6 +38,39 @@ describe("role demo settings", () => {
     expect(readTenantDemoSettings()).toEqual(tenant);
     expect(readLandlordDemoSettings()).toEqual(landlord);
     expect(readAdminDemoSettings()).toEqual(admin);
+  });
+
+  it("saves landlord mobile-money and bank receiving details for tenant payment instructions", () => {
+    const details = {
+      mobileMoneyEnabled: true,
+      mobileMoneyName: "Kampala Homes",
+      mobileMoneyNumber: "+256 772 123 456",
+      bankEnabled: true,
+      bankName: "Stanbic Bank",
+      bankAccountName: "Kampala Homes Ltd",
+      bankAccountNumber: "9030012345678",
+    };
+
+    expect(saveLandlordPaymentDetails(details)).toEqual(details);
+    expect(readLandlordPaymentDetails()).toEqual(details);
+  });
+
+  it("rejects invalid recipient numbers and incomplete enabled bank details", () => {
+    expect(() =>
+      validateLandlordPaymentDetails({
+        mobileMoneyEnabled: true,
+        mobileMoneyNumber: "0123",
+        bankEnabled: false,
+      }),
+    ).toThrow("Enter a valid MTN or Airtel number");
+    expect(() =>
+      validateLandlordPaymentDetails({
+        mobileMoneyEnabled: false,
+        bankEnabled: true,
+        bankName: "Stanbic Bank",
+        bankAccountNumber: "9030012345678",
+      }),
+    ).toThrow("Complete the bank name, account name, and account number.");
   });
 
   it("rejects invalid saved values instead of using them", () => {

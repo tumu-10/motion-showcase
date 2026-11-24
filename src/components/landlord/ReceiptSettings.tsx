@@ -5,7 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { saveLandlordDemoSettings } from "@/lib/demo-settings";
+import {
+  defaultLandlordPaymentDetails,
+  readLandlordPaymentDetails,
+  saveLandlordDemoSettings,
+  saveLandlordPaymentDetails,
+} from "@/lib/demo-settings";
+import type { LandlordPaymentDetails } from "@/lib/sample-data";
 import {
   defaultReceiptBranding,
   getReceiptBranding,
@@ -24,6 +30,10 @@ export function ReceiptSettings({
   const [branding, setBranding] = useState<ReceiptBranding>(defaultReceiptBranding);
   const [dueDayDraft, setDueDayDraft] = useState(String(defaultRentDueDay));
   const [loaded, setLoaded] = useState(false);
+  const [paymentDetails, setPaymentDetails] = useState<LandlordPaymentDetails>(
+    defaultLandlordPaymentDetails,
+  );
+  const [paymentDetailsLoaded, setPaymentDetailsLoaded] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -39,6 +49,19 @@ export function ReceiptSettings({
       });
     } finally {
       setLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      setPaymentDetails(readLandlordPaymentDetails());
+    } catch (error) {
+      console.error("Could not load landlord payment details.", error);
+      toast.error("Landlord payment details could not be loaded.", {
+        description: error instanceof Error ? error.message : "Check browser storage and retry.",
+      });
+    } finally {
+      setPaymentDetailsLoaded(true);
     }
   }, []);
 
@@ -91,6 +114,20 @@ export function ReceiptSettings({
     }
   }
 
+  function savePaymentDetails() {
+    try {
+      setPaymentDetails(saveLandlordPaymentDetails(paymentDetails));
+      toast.success("Rent collection details saved", {
+        description: "Tenants will see these payment instructions in the rent payment form.",
+      });
+    } catch (error) {
+      toast.error("Rent collection details could not be saved.", {
+        description:
+          error instanceof Error ? error.message : "Check the payment details and retry.",
+      });
+    }
+  }
+
   return (
     <div className="space-y-6">
       <PageHeading eyebrow="Landlord workspace" title="Settings" />
@@ -121,6 +158,133 @@ export function ReceiptSettings({
           disabled={!loaded}
         >
           Save default
+        </Button>
+      </section>
+      <section className="surface space-y-5 p-5 sm:p-6">
+        <div>
+          <h2 className="text-lg font-bold text-primary-deep">Rent collection details</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Tenants see these receiving account details before submitting a rent payment.
+          </p>
+        </div>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="space-y-4 rounded-xl border border-border bg-secondary/30 p-4">
+            <label className="flex min-h-11 items-center gap-3 text-sm font-semibold">
+              <Checkbox
+                checked={paymentDetails.mobileMoneyEnabled}
+                onCheckedChange={(checked) =>
+                  setPaymentDetails((current) => ({
+                    ...current,
+                    mobileMoneyEnabled: checked === true,
+                  }))
+                }
+              />
+              Accept MTN or Airtel Mobile Money
+            </label>
+            {paymentDetails.mobileMoneyEnabled && (
+              <div className="grid gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="landlord-payment-momo-name">Registered account name</Label>
+                  <Input
+                    id="landlord-payment-momo-name"
+                    className="min-h-11"
+                    value={paymentDetails.mobileMoneyName ?? ""}
+                    onChange={(event) =>
+                      setPaymentDetails((current) => ({
+                        ...current,
+                        mobileMoneyName: event.target.value,
+                      }))
+                    }
+                    autoComplete="name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="landlord-payment-momo-number">
+                    Receiving mobile money number
+                  </Label>
+                  <Input
+                    id="landlord-payment-momo-number"
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel"
+                    className="figure min-h-11"
+                    value={paymentDetails.mobileMoneyNumber ?? ""}
+                    onChange={(event) =>
+                      setPaymentDetails((current) => ({
+                        ...current,
+                        mobileMoneyNumber: event.target.value,
+                      }))
+                    }
+                    placeholder="e.g. 0772 123 456"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="space-y-4 rounded-xl border border-border bg-secondary/30 p-4">
+            <label className="flex min-h-11 items-center gap-3 text-sm font-semibold">
+              <Checkbox
+                checked={paymentDetails.bankEnabled}
+                onCheckedChange={(checked) =>
+                  setPaymentDetails((current) => ({ ...current, bankEnabled: checked === true }))
+                }
+              />
+              Accept bank transfers
+            </label>
+            {paymentDetails.bankEnabled && (
+              <div className="grid gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="landlord-payment-bank-name">Bank name</Label>
+                  <Input
+                    id="landlord-payment-bank-name"
+                    className="min-h-11"
+                    value={paymentDetails.bankName ?? ""}
+                    onChange={(event) =>
+                      setPaymentDetails((current) => ({ ...current, bankName: event.target.value }))
+                    }
+                    placeholder="e.g. Stanbic Bank Uganda"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="landlord-payment-bank-account-name">Account name</Label>
+                  <Input
+                    id="landlord-payment-bank-account-name"
+                    className="min-h-11"
+                    value={paymentDetails.bankAccountName ?? ""}
+                    onChange={(event) =>
+                      setPaymentDetails((current) => ({
+                        ...current,
+                        bankAccountName: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="landlord-payment-bank-account-number">Account number</Label>
+                  <Input
+                    id="landlord-payment-bank-account-number"
+                    className="figure min-h-11"
+                    value={paymentDetails.bankAccountNumber ?? ""}
+                    onChange={(event) =>
+                      setPaymentDetails((current) => ({
+                        ...current,
+                        bankAccountNumber: event.target.value,
+                      }))
+                    }
+                    autoComplete="off"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+        <Button
+          type="button"
+          className="min-h-11"
+          onClick={savePaymentDetails}
+          disabled={!paymentDetailsLoaded}
+        >
+          Save rent collection details
         </Button>
       </section>
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(20rem,0.8fr)]">

@@ -12,6 +12,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { validateLandlordPaymentDetails } from "@/lib/demo-settings";
 import {
   PROPERTY_TYPE_LABELS,
   type Landlord,
@@ -203,6 +204,15 @@ export function CreateLandlordDialog({
     );
     const labels = unitRents.map((unit) => unit.unit.toLowerCase());
     const phoneDigits = phone.replace(/\D/g, "");
+    const paymentDetails = {
+      mobileMoneyEnabled,
+      ...(mobileMoneyName.trim() ? { mobileMoneyName: mobileMoneyName.trim() } : {}),
+      ...(mobileMoneyNumber.trim() ? { mobileMoneyNumber: mobileMoneyNumber.trim() } : {}),
+      bankEnabled,
+      ...(bankName.trim() ? { bankName: bankName.trim() } : {}),
+      ...(bankAccountName.trim() ? { bankAccountName: bankAccountName.trim() } : {}),
+      ...(bankAccountNumber.trim() ? { bankAccountNumber: bankAccountNumber.trim() } : {}),
+    };
 
     if (!name.trim() || !contact.trim() || !propertyName.trim() || !phoneDigits) {
       toast.error("Complete the landlord, contact, phone, and property name fields.");
@@ -212,16 +222,13 @@ export function CreateLandlordDialog({
       toast.error("Enter a valid phone contact with at least 9 digits.");
       return;
     }
-    if (!mobileMoneyEnabled && !bankEnabled) {
-      toast.error("Enable at least one rent collection method.");
-      return;
-    }
-    if (mobileMoneyEnabled && !mobileMoneyNumber.trim()) {
-      toast.error("Enter the mobile money number tenants should pay.");
-      return;
-    }
-    if (bankEnabled && (!bankName.trim() || !bankAccountName.trim() || !bankAccountNumber.trim())) {
-      toast.error("Complete the bank name, account name, and account number.");
+    try {
+      validateLandlordPaymentDetails(paymentDetails);
+    } catch (error) {
+      toast.error("Payment details are incomplete.", {
+        description:
+          error instanceof Error ? error.message : "Check the payment details and retry.",
+      });
       return;
     }
     if (
@@ -280,15 +287,7 @@ export function CreateLandlordDialog({
       name: name.trim(),
       contact: contact.trim(),
       phone: phone.trim(),
-      paymentDetails: {
-        mobileMoneyEnabled,
-        ...(mobileMoneyName.trim() ? { mobileMoneyName: mobileMoneyName.trim() } : {}),
-        ...(mobileMoneyNumber.trim() ? { mobileMoneyNumber: mobileMoneyNumber.trim() } : {}),
-        bankEnabled,
-        ...(bankName.trim() ? { bankName: bankName.trim() } : {}),
-        ...(bankAccountName.trim() ? { bankAccountName: bankAccountName.trim() } : {}),
-        ...(bankAccountNumber.trim() ? { bankAccountNumber: bankAccountNumber.trim() } : {}),
-      },
+      paymentDetails,
       subscriptionPlan,
       subscriptionPaidAmount: 0,
       propertyName: propertyName.trim(),

@@ -9,6 +9,36 @@ const storageKey = "propatiz-demo-home-service-providers";
 
 export type NewHomeServiceProvider = Omit<DemoHomeServiceProvider, "id" | "rating" | "ratingCount">;
 
+export async function resizeHomeServiceProviderImage(file: File): Promise<string> {
+  if (file.size > 3 * 1024 * 1024) throw new Error("Choose an image smaller than 3 MB.");
+  if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+    throw new Error("Upload a JPG, PNG, or WebP image.");
+  }
+
+  const image = new Image();
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    image.src = objectUrl;
+    await image.decode();
+    const scale = Math.min(1, 640 / Math.max(image.naturalWidth, image.naturalHeight));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("This browser cannot resize the provider image.");
+    context.fillStyle = "#fff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    const imageDataUrl = canvas.toDataURL("image/jpeg", 0.82);
+    if (imageDataUrl.length > 1_000_000) {
+      throw new Error("This image is too detailed to save. Choose a smaller image.");
+    }
+    return imageDataUrl;
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
 export function readHomeServiceProviders(): DemoHomeServiceProvider[] {
   if (typeof localStorage === "undefined") return demoHomeServiceProviders;
   const saved = localStorage.getItem(storageKey);
@@ -45,6 +75,9 @@ export function createHomeServiceProvider(input: NewHomeServiceProvider) {
     throw new Error("Enter valid whole-UGX prices with the maximum at least the minimum.");
   }
   if (!input.priceUnit.trim()) throw new Error("Choose how the service is priced.");
+  if (input.imageDataUrl && !isProviderImageDataUrl(input.imageDataUrl)) {
+    throw new Error("Choose a valid resized provider image.");
+  }
 
   const providers = readHomeServiceProviders();
   if (
@@ -89,6 +122,9 @@ function isHomeServiceProvider(value: unknown): value is DemoHomeServiceProvider
     Number.isSafeInteger(provider["maximumPrice"]) &&
     provider["maximumPrice"] >= provider["minimumPrice"] &&
     typeof provider["priceUnit"] === "string" &&
+    (provider["imageDataUrl"] === undefined ||
+      (typeof provider["imageDataUrl"] === "string" &&
+        isProviderImageDataUrl(provider["imageDataUrl"]))) &&
     typeof provider["rating"] === "number" &&
     Number.isFinite(provider["rating"]) &&
     provider["rating"] >= 0 &&
@@ -96,6 +132,10 @@ function isHomeServiceProvider(value: unknown): value is DemoHomeServiceProvider
     Number.isInteger(provider["ratingCount"]) &&
     provider["ratingCount"] >= 0
   );
+}
+
+function isProviderImageDataUrl(value: string) {
+  return value.length <= 1_000_000 && value.startsWith("data:image/jpeg;base64,");
 }
 
 function isHomeServiceId(value: unknown): value is HomeServiceId {

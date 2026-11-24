@@ -13,9 +13,11 @@ describe("saved home-service providers", () => {
       minimumPrice: 25_000,
       maximumPrice: 80_000,
       priceUnit: "per visit",
+      imageDataUrl: "data:image/jpeg;base64,ZmFrZQ==",
     });
 
     expect(provider.ratingCount).toBe(0);
+    expect(provider.imageDataUrl).toBe("data:image/jpeg;base64,ZmFrZQ==");
     expect(readHomeServiceProviders()).toEqual([...demoHomeServiceProviders, provider]);
   });
 

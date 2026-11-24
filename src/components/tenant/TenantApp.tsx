@@ -71,6 +71,7 @@ import { useRentDemoData } from "@/lib/useRentDemoData";
 import { createNotification } from "@/lib/notifications";
 import {
   defaultTenantDemoSettings,
+  readLandlordPaymentDetails,
   readTenantDemoSettings,
   saveTenantDemoSettings,
   type TenantPaymentPreference,
@@ -95,6 +96,7 @@ import {
   ledger as initialLedger,
   tenantPayments,
   tenantProfile,
+  type LandlordPaymentDetails,
   type LedgerEntry,
   type Listing,
   type Complaint,
@@ -168,6 +170,9 @@ async function fetchTenantHome() {
 export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void }) {
   const { data: rentData, setData: setRentData, loaded: rentDataLoaded } = useRentDemoData();
   const [serviceProviders, setServiceProviders] = useState(demoHomeServiceProviders);
+  const [paymentDetails, setPaymentDetails] = useState<LandlordPaymentDetails>(
+    tenantProfile.paymentDetails,
+  );
   const [tab, setTab] = useState<Tab>("home");
   const [tenantSettings, setTenantSettings] = useState(defaultTenantDemoSettings);
   const [tenantSettingsLoaded, setTenantSettingsLoaded] = useState(false);
@@ -262,6 +267,17 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
       });
     } finally {
       setTenantSettingsLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      setPaymentDetails(readLandlordPaymentDetails());
+    } catch (error) {
+      console.error("Could not load landlord payment details.", error);
+      toast.error("Landlord payment instructions could not be loaded.", {
+        description: error instanceof Error ? error.message : "Check landlord settings and retry.",
+      });
     }
   }, []);
 
@@ -737,7 +753,7 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
           balance={nextRentBalance}
           rentPeriod={nextRentPeriod}
           defaultPhone={tenantProfile.phone}
-          paymentDetails={tenantProfile.paymentDetails}
+          paymentDetails={paymentDetails}
           preferredPaymentMethod={tenantSettings.preferredPaymentMethod}
           onPaid={handlePaid}
           onOpenServices={() => {
@@ -1228,10 +1244,20 @@ function ServicesTab({
                   const preferred = preferredProviderIds.includes(provider.id);
                   return (
                     <li key={provider.id} className="alive-card surface min-w-0 space-y-3 p-4">
-                      <div className="flex flex-wrap items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <h3 className="break-words font-bold">{provider.name}</h3>
-                          <p className="mt-1 text-sm text-muted-foreground">{provider.area}</p>
+                      <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
+                        <div className="flex min-w-0 items-center gap-3">
+                          {provider.imageDataUrl && (
+                            <img
+                              src={provider.imageDataUrl}
+                              alt={provider.name}
+                              loading="lazy"
+                              className="size-14 shrink-0 rounded-lg border object-cover"
+                            />
+                          )}
+                          <div className="min-w-0">
+                            <h3 className="break-words font-bold">{provider.name}</h3>
+                            <p className="mt-1 text-sm text-muted-foreground">{provider.area}</p>
+                          </div>
                         </div>
                         <span className="rounded-full bg-secondary px-2.5 py-1 text-[0.6875rem] font-semibold">
                           {provider.ratingCount > 0 ? "Demo provider" : "Listed provider"}

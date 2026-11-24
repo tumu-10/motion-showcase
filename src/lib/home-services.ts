@@ -23,6 +23,7 @@ export type DemoHomeServiceProvider = {
   minimumPrice: number;
   maximumPrice: number;
   priceUnit: string;
+  imageDataUrl?: string | undefined;
   rating: number;
   ratingCount: number;
 };

@@ -1,4 +1,9 @@
-import type { SubscriptionPlan } from "@/lib/sample-data";
+import { detectNetwork, normalizeUgPhone } from "@/lib/rent";
+import {
+  tenantProfile,
+  type LandlordPaymentDetails,
+  type SubscriptionPlan,
+} from "@/lib/sample-data";
 
 export type TenantPaymentPreference = "mobile" | "bank" | "visa";
 
@@ -31,8 +36,13 @@ export const defaultAdminDemoSettings: AdminDemoSettings = {
 const storageKeys = {
   tenant: "propatiz-demo-tenant-settings",
   landlord: "propatiz-demo-landlord-settings",
+  landlordPayments: "propatiz-demo-landlord-payment-details",
   admin: "propatiz-demo-admin-settings",
 } as const;
+
+export const defaultLandlordPaymentDetails: LandlordPaymentDetails = {
+  ...tenantProfile.paymentDetails,
+};
 
 function readStoredSettings<T>(key: string, fallback: T): unknown {
   if (typeof localStorage === "undefined") return fallback;
@@ -90,6 +100,87 @@ export function saveLandlordDemoSettings(settings: LandlordDemoSettings): Landlo
     throw new Error("Choose a rent due day from 1 to 31.");
   }
   return saveStoredSettings(storageKeys.landlord, settings);
+}
+
+export function readLandlordPaymentDetails(): LandlordPaymentDetails {
+  const saved = readStoredSettings(storageKeys.landlordPayments, defaultLandlordPaymentDetails);
+  if (!isRecord(saved)) throw new Error("Saved landlord payment details have an invalid shape.");
+  if (
+    typeof saved["mobileMoneyEnabled"] !== "boolean" ||
+    typeof saved["bankEnabled"] !== "boolean"
+  ) {
+    throw new Error("Saved landlord payment method settings are invalid.");
+  }
+  const fields = [
+    "mobileMoneyName",
+    "mobileMoneyNumber",
+    "bankName",
+    "bankAccountName",
+    "bankAccountNumber",
+  ];
+  if (fields.some((field) => saved[field] !== undefined && typeof saved[field] !== "string")) {
+    throw new Error("Saved landlord payment details contain an invalid value.");
+  }
+  const details: LandlordPaymentDetails = {
+    mobileMoneyEnabled: saved["mobileMoneyEnabled"],
+    ...(typeof saved["mobileMoneyName"] === "string"
+      ? { mobileMoneyName: saved["mobileMoneyName"] }
+      : {}),
+    ...(typeof saved["mobileMoneyNumber"] === "string"
+      ? { mobileMoneyNumber: saved["mobileMoneyNumber"] }
+      : {}),
+    bankEnabled: saved["bankEnabled"],
+    ...(typeof saved["bankName"] === "string" ? { bankName: saved["bankName"] } : {}),
+    ...(typeof saved["bankAccountName"] === "string"
+      ? { bankAccountName: saved["bankAccountName"] }
+      : {}),
+    ...(typeof saved["bankAccountNumber"] === "string"
+      ? { bankAccountNumber: saved["bankAccountNumber"] }
+      : {}),
+  };
+  validateLandlordPaymentDetails(details);
+  return details;
+}
+
+export function validateLandlordPaymentDetails(details: LandlordPaymentDetails) {
+  if (!details.mobileMoneyEnabled && !details.bankEnabled) {
+    throw new Error("Enable at least one rent collection method.");
+  }
+  if (details.mobileMoneyEnabled) {
+    const number = details.mobileMoneyNumber?.trim() ?? "";
+    if (!number) throw new Error("Enter the mobile money number tenants should pay.");
+    if (!normalizeUgPhone(number) || !detectNetwork(number)) {
+      throw new Error("Enter a valid MTN or Airtel number, such as 0772 123 456.");
+    }
+  }
+  if (
+    details.bankEnabled &&
+    (!details.bankName?.trim() ||
+      !details.bankAccountName?.trim() ||
+      !details.bankAccountNumber?.trim())
+  ) {
+    throw new Error("Complete the bank name, account name, and account number.");
+  }
+}
+
+export function saveLandlordPaymentDetails(
+  details: LandlordPaymentDetails,
+): LandlordPaymentDetails {
+  validateLandlordPaymentDetails(details);
+  const saved: LandlordPaymentDetails = {
+    mobileMoneyEnabled: details.mobileMoneyEnabled,
+    ...(details.mobileMoneyName?.trim() ? { mobileMoneyName: details.mobileMoneyName.trim() } : {}),
+    ...(details.mobileMoneyNumber?.trim()
+      ? { mobileMoneyNumber: details.mobileMoneyNumber.trim() }
+      : {}),
+    bankEnabled: details.bankEnabled,
+    ...(details.bankName?.trim() ? { bankName: details.bankName.trim() } : {}),
+    ...(details.bankAccountName?.trim() ? { bankAccountName: details.bankAccountName.trim() } : {}),
+    ...(details.bankAccountNumber?.trim()
+      ? { bankAccountNumber: details.bankAccountNumber.trim() }
+      : {}),
+  };
+  return saveStoredSettings(storageKeys.landlordPayments, saved);
 }
 
 export function readAdminDemoSettings(): AdminDemoSettings {

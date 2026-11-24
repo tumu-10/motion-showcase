@@ -175,6 +175,14 @@ export function HomeServicesManagement({
                     onChange={(event) => togglePreferred(provider.id, event.target.checked)}
                     aria-label={`Set ${provider.name} as preferred`}
                   />
+                  {provider.imageDataUrl && (
+                    <img
+                      src={provider.imageDataUrl}
+                      alt=""
+                      loading="lazy"
+                      className="size-12 shrink-0 rounded-lg border object-cover"
+                    />
+                  )}
                   <span className="min-w-0 flex-1">
                     <span className="flex flex-wrap items-center gap-2 font-semibold">
                       {provider.name}

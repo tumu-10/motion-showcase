@@ -1,9 +1,13 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createHomeServiceProvider, readHomeServiceProviders } from "@/lib/home-service-providers";
+import {
+  createHomeServiceProvider,
+  readHomeServiceProviders,
+  resizeHomeServiceProviderImage,
+} from "@/lib/home-service-providers";
 import {
   demoHomeServiceProviders,
   homeServiceCategories,
@@ -20,6 +24,9 @@ export function ServiceProvidersPanel() {
   const [minimumPrice, setMinimumPrice] = useState("");
   const [maximumPrice, setMaximumPrice] = useState("");
   const [priceUnit, setPriceUnit] = useState("per visit");
+  const [imageDataUrl, setImageDataUrl] = useState<string>();
+  const [imageLoading, setImageLoading] = useState(false);
+  const imageInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     try {
@@ -31,6 +38,21 @@ export function ServiceProvidersPanel() {
       });
     }
   }, []);
+
+  async function uploadImage(file: File | undefined) {
+    if (!file) return;
+    setImageLoading(true);
+    try {
+      setImageDataUrl(await resizeHomeServiceProviderImage(file));
+    } catch (error) {
+      toast.error("Provider image could not be added.", {
+        description: error instanceof Error ? error.message : "Choose another image and retry.",
+      });
+    } finally {
+      if (imageInput.current) imageInput.current.value = "";
+      setImageLoading(false);
+    }
+  }
 
   const addProvider = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -44,12 +66,14 @@ export function ServiceProvidersPanel() {
         minimumPrice: min,
         maximumPrice: max,
         priceUnit,
+        ...(imageDataUrl ? { imageDataUrl } : {}),
       });
       setProviders((current) => [...current, provider]);
       setName("");
       setArea("");
       setMinimumPrice("");
       setMaximumPrice("");
+      setImageDataUrl(undefined);
       toast.success("Service provider added", {
         description: `${provider.name} is now listed in the tenant services directory.`,
       });
@@ -161,9 +185,42 @@ export function ServiceProvidersPanel() {
             <option value="per item">Per item</option>
           </select>
         </div>
+        <div className="grid gap-2 lg:col-span-2">
+          <Label htmlFor="provider-image">Provider image (optional)</Label>
+          <div className="flex flex-wrap items-center gap-3">
+            <Input
+              ref={imageInput}
+              id="provider-image"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="min-h-11 min-w-0 flex-1"
+              onChange={(event) => void uploadImage(event.target.files?.[0])}
+            />
+            {imageDataUrl && (
+              <>
+                <img
+                  src={imageDataUrl}
+                  alt={`${name || "Provider"} preview`}
+                  className="size-16 rounded-lg border object-cover"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="min-h-11"
+                  onClick={() => setImageDataUrl(undefined)}
+                >
+                  Remove image
+                </Button>
+              </>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            JPG, PNG, or WebP up to 3 MB. Images are resized for the browser demo.
+          </p>
+        </div>
         <div className="flex items-end lg:col-span-2 lg:justify-end">
-          <Button type="submit" className="min-h-11 w-full sm:w-auto">
-            Add service provider
+          <Button type="submit" className="min-h-11 w-full sm:w-auto" disabled={imageLoading}>
+            {imageLoading ? "Preparing image..." : "Add service provider"}
           </Button>
         </div>
       </form>
@@ -185,11 +242,20 @@ export function ServiceProvidersPanel() {
                 key={provider.id}
                 className="flex flex-col gap-2 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5"
               >
-                <div className="min-w-0">
-                  <p className="font-semibold">{provider.name}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {category?.label} · {provider.area}
-                  </p>
+                <div className="flex min-w-0 items-center gap-3">
+                  {provider.imageDataUrl && (
+                    <img
+                      src={provider.imageDataUrl}
+                      alt=""
+                      className="size-12 shrink-0 rounded-lg border object-cover"
+                    />
+                  )}
+                  <div className="min-w-0">
+                    <p className="font-semibold">{provider.name}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {category?.label} · {provider.area}
+                    </p>
+                  </div>
                 </div>
                 <p className="figure text-sm font-semibold text-primary-deep">
                   {formatUGX(provider.minimumPrice)}–{formatUGX(provider.maximumPrice)}{" "}

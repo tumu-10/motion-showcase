@@ -97,6 +97,9 @@ export function PayFlow({
   const [agreed, setAgreed] = useState(false);
   const needsAgreement = amountMode === "full" && needsAdvanceAgreement(Number(monthsCovered));
   const [result, setResult] = useState<PaymentResult | null>(null);
+  const receivingNetwork = paymentDetails.mobileMoneyNumber
+    ? detectNetwork(paymentDetails.mobileMoneyNumber)
+    : null;
 
   const amount =
     amountMode === "full"
@@ -468,24 +471,42 @@ export function PayFlow({
             </fieldset>
 
             {method === "mobile" ? (
-              <div>
-                <Label htmlFor="phone">Mobile money number</Label>
-                <Input
-                  id="phone"
-                  type="tel"
-                  inputMode="tel"
-                  autoComplete="tel"
-                  value={phone}
-                  onChange={(e) => {
-                    setPhone(e.target.value);
-                    const d = detectNetwork(e.target.value);
-                    if (d) setNetwork(d);
-                  }}
-                  aria-invalid={!!errors.phone}
-                  aria-describedby="phone-error"
-                  className="figure mt-2"
-                />
-                <FieldError id="phone-error" message={errors.phone} />
+              <div className="min-w-0 space-y-4">
+                <div className="min-w-0 rounded-xl border border-primary/15 bg-primary-soft/60 p-4 text-sm">
+                  <p className="font-bold text-primary-deep">
+                    Send rent to this account
+                    {receivingNetwork ? ` · ${networkLabel[receivingNetwork]}` : ""}
+                  </p>
+                  <dl className="mt-3 min-w-0 space-y-2">
+                    <PaymentDetail
+                      label="Registered name"
+                      value={paymentDetails.mobileMoneyName ?? "Not provided"}
+                    />
+                    <PaymentDetail
+                      label="Mobile money number"
+                      value={paymentDetails.mobileMoneyNumber ?? "Not configured"}
+                    />
+                  </dl>
+                </div>
+                <div className="min-w-0">
+                  <Label htmlFor="phone">Your mobile money number</Label>
+                  <Input
+                    id="phone"
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel"
+                    value={phone}
+                    onChange={(e) => {
+                      setPhone(e.target.value);
+                      const d = detectNetwork(e.target.value);
+                      if (d) setNetwork(d);
+                    }}
+                    aria-invalid={!!errors.phone}
+                    aria-describedby="phone-error"
+                    className="figure mt-2 min-w-0"
+                  />
+                  <FieldError id="phone-error" message={errors.phone} />
+                </div>
               </div>
             ) : method === "bank" ? (
               <div className="rounded-xl border border-primary/15 bg-primary-soft/60 p-4 text-sm">
@@ -827,9 +848,9 @@ export function FieldError({ id, message }: { id: string; message?: string | und
 function PaymentDetail({ label, value }: { label: string; value?: string | undefined }) {
   if (!value) return null;
   return (
-    <div className="grid grid-cols-[7rem_minmax(0,1fr)] gap-2">
+    <div className="grid min-w-0 grid-cols-[7rem_minmax(0,1fr)] gap-2">
       <dt className="text-muted-foreground">{label}</dt>
-      <dd className="figure break-all text-right font-semibold">{value}</dd>
+      <dd className="figure min-w-0 break-all text-right font-semibold">{value}</dd>
     </div>
   );
 }

@@ -1320,14 +1320,24 @@ function LandlordList({
                       {l.phone}
                     </a>
                   )}
-                  {l.paymentDetails?.mobileMoneyNumber && (
+                  {l.paymentDetails?.mobileMoneyEnabled && l.paymentDetails.mobileMoneyNumber && (
                     <span className="mt-1 block text-xs text-muted-foreground">
-                      MoMo: {l.paymentDetails.mobileMoneyNumber}
+                      MoMo:{" "}
+                      {[l.paymentDetails.mobileMoneyName, l.paymentDetails.mobileMoneyNumber]
+                        .filter(Boolean)
+                        .join(" · ")}
                     </span>
                   )}
-                  {l.paymentDetails?.bankAccountNumber && (
+                  {l.paymentDetails?.bankEnabled && l.paymentDetails.bankAccountNumber && (
                     <span className="block text-xs text-muted-foreground">
-                      Bank: {l.paymentDetails.bankAccountNumber}
+                      Bank:{" "}
+                      {[
+                        l.paymentDetails.bankName,
+                        l.paymentDetails.bankAccountName,
+                        l.paymentDetails.bankAccountNumber,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
                     </span>
                   )}
                 </td>
