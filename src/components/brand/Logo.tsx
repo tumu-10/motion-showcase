@@ -5,7 +5,7 @@ type LogoMarkProps = {
   className?: string;
   animate?: boolean;
   delay?: number;
-  tone?: "default" | "onDeep";
+  tone?: "default" | "onDeep" | "onDeepTransparent";
 };
 
 export function LogoMark({
@@ -52,13 +52,13 @@ export function Logo({
   tone = "default",
 }: {
   className?: string;
-  tone?: "default" | "onDeep";
+  tone?: "default" | "onDeep" | "onDeepTransparent";
 }) {
   return (
     <span
       className={cn(
         "inline-flex items-center gap-2.5 font-display text-lg font-bold tracking-tight",
-        tone === "onDeep" ? "text-on-deep" : "text-primary-deep",
+        tone === "default" ? "text-primary-deep" : "text-on-deep",
         className,
       )}
     >
