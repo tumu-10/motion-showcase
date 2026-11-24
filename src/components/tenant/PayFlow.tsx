@@ -26,6 +26,7 @@ import { makePaymentReference, needsAdvanceAgreement } from "@/lib/rent";
 import { formatRentPeriodRange } from "@/lib/rent-accounting";
 import { ease } from "@/lib/motion";
 import { cn } from "@/lib/utils";
+import { BrandLogo, type PayBrand } from "@/components/payments/BrandLogo";
 import { mockPaymentProviders } from "@/lib/payment-provider";
 import type { LucideIcon } from "lucide-react";
 import type { TenantPaymentPreference } from "@/lib/demo-settings";
@@ -77,6 +78,9 @@ export function PayFlow({
   const [network, setNetwork] = useState<MobileNetwork>(detectNetwork(defaultPhone) ?? "mtn");
   const [method, setMethod] = useState<PaymentMethod>(preferredPaymentMethod);
   const [cardBrand, setCardBrand] = useState<"Visa" | "Mastercard">("Visa");
+  const [bankChoice, setBankChoice] = useState<"stanbic" | "hfb">(
+    /housing/i.test(paymentDetails.bankName ?? "") ? "hfb" : "stanbic",
+  );
   const [cardNumber, setCardNumber] = useState("");
   const [cardExpiry, setCardExpiry] = useState("");
   const [cardCvc, setCardCvc] = useState("");
@@ -382,22 +386,58 @@ export function PayFlow({
 
             <fieldset>
               <legend className="text-sm font-medium text-muted-foreground">Payment method</legend>
-              <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                {methods.map(([id, label, Icon]) => (
-                  <button
-                    key={id}
-                    type="button"
-                    aria-pressed={method === id}
-                    onClick={() => setMethod(id)}
-                    className={cn(
-                      "press flex min-h-20 min-w-0 flex-col items-center justify-center gap-1 rounded-lg border-2 px-2 text-center text-xs font-semibold sm:min-h-16",
-                      method === id ? "border-primary bg-primary-soft" : "border-border bg-card",
-                    )}
-                  >
-                    <Icon className="size-4" aria-hidden />
-                    {label}
-                  </button>
-                ))}
+              <div className="mt-2 grid grid-cols-1 gap-2">
+                {methods.map(([id, label]) => {
+                  const brands: PayBrand[] =
+                    id === "mobile"
+                      ? ["mtn", "airtel"]
+                      : id === "bank"
+                        ? ["stanbic", "hfb"]
+                        : ["visa", "mastercard"];
+                  const sub =
+                    id === "mobile"
+                      ? "Instant · PIN prompt"
+                      : id === "bank"
+                        ? "1–2 days · upload proof"
+                        : "Visa or Mastercard";
+                  const active = method === id;
+                  return (
+                    <motion.button
+                      key={id}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => setMethod(id)}
+                      whileTap={{ scale: 0.98 }}
+                      className={cn(
+                        "relative flex min-w-0 items-center gap-3 rounded-xl border-2 p-3 text-left transition-colors",
+                        active
+                          ? "border-primary bg-primary-soft shadow-sm"
+                          : "border-border bg-card hover:border-primary/40",
+                      )}
+                    >
+                      <span className="flex -space-x-2">
+                        {brands.map((b) => (
+                          <BrandLogo key={b} brand={b} className="h-7 w-10 ring-2 ring-card" />
+                        ))}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block text-sm font-bold">
+                          {id === "visa" ? "Card" : label}
+                        </span>
+                        <span className="block text-xs text-muted-foreground">{sub}</span>
+                      </span>
+                      <span
+                        aria-hidden
+                        className={cn(
+                          "absolute right-4 top-1/2 size-4 -translate-y-1/2 rounded-full border-2 transition-all",
+                          active
+                            ? "border-primary bg-primary shadow-[inset_0_0_0_3px_var(--card)]"
+                            : "border-input",
+                        )}
+                      />
+                    </motion.button>
+                  );
+                })}
               </div>
               {method === "mobile" && (
                 <div className="mt-3 grid grid-cols-2 gap-2">
@@ -408,15 +448,18 @@ export function PayFlow({
                       aria-pressed={network === n}
                       onClick={() => setNetwork(n)}
                       className={cn(
-                        "press flex min-h-16 flex-col items-start justify-center rounded-lg border-2 px-4 text-left",
+                        "press flex min-h-16 items-center gap-3 rounded-lg border-2 px-3 text-left",
                         network === n ? "border-primary bg-primary-soft" : "border-border bg-card",
                       )}
                     >
-                      <span className="text-sm font-bold">
-                        {n === "mtn" ? "MTN MoMo" : "Airtel Money"}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {n === "mtn" ? "076, 077, 078" : "070, 074, 075"}
+                      <BrandLogo brand={n} className="h-9 w-12" />
+                      <span className="flex flex-col">
+                        <span className="text-sm font-bold">
+                          {n === "mtn" ? "MTN MoMo" : "Airtel Money"}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {n === "mtn" ? "076, 077, 078" : "070, 074, 075"}
+                        </span>
                       </span>
                     </button>
                   ))}
@@ -446,9 +489,33 @@ export function PayFlow({
               </div>
             ) : method === "bank" ? (
               <div className="rounded-xl border border-primary/15 bg-primary-soft/60 p-4 text-sm">
-                <p className="font-bold text-primary-deep">Bank transfer details</p>
+                <p className="font-bold text-primary-deep">Choose your bank</p>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  {(["stanbic", "hfb"] as const).map((b) => (
+                    <button
+                      key={b}
+                      type="button"
+                      aria-pressed={bankChoice === b}
+                      onClick={() => setBankChoice(b)}
+                      className={cn(
+                        "press flex items-center gap-2 rounded-lg border-2 bg-card p-2 text-left text-xs font-semibold",
+                        bankChoice === b ? "border-primary" : "border-border",
+                      )}
+                    >
+                      <BrandLogo brand={b} className="h-8 w-10" />
+                      {b === "stanbic" ? "Stanbic Bank" : "Housing Finance Bank"}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-4 font-bold text-primary-deep">Transfer to</p>
                 <dl className="mt-2 space-y-2">
-                  <PaymentDetail label="Bank" value={paymentDetails.bankName} />
+                  <PaymentDetail
+                    label="Paying from"
+                    value={
+                      bankChoice === "stanbic" ? "Stanbic Bank Uganda" : "Housing Finance Bank"
+                    }
+                  />
+                  <PaymentDetail label="Landlord bank" value={paymentDetails.bankName} />
                   <PaymentDetail label="Account name" value={paymentDetails.bankAccountName} />
                   <PaymentDetail label="Account number" value={paymentDetails.bankAccountNumber} />
                 </dl>
@@ -485,12 +552,14 @@ export function PayFlow({
                       aria-pressed={cardBrand === brand}
                       onClick={() => setCardBrand(brand)}
                       className={cn(
-                        "rounded-lg border px-3 py-2 font-semibold",
-                        cardBrand === brand
-                          ? "border-primary bg-primary-soft"
-                          : "border-border bg-card",
+                        "press flex items-center justify-center gap-2 rounded-lg border-2 bg-card px-3 py-2 font-semibold",
+                        cardBrand === brand ? "border-primary" : "border-border",
                       )}
                     >
+                      <BrandLogo
+                        brand={brand === "Visa" ? "visa" : "mastercard"}
+                        className="h-7 w-11 border-0 shadow-none"
+                      />
                       {brand}
                     </button>
                   ))}
@@ -502,7 +571,13 @@ export function PayFlow({
                     inputMode="numeric"
                     autoComplete="off"
                     value={cardNumber}
-                    onChange={(event) => setCardNumber(event.target.value)}
+                    placeholder="1234 5678 9012 3456"
+                    onChange={(event) => {
+                      const digits = event.target.value.replace(/\D/g, "").slice(0, 19);
+                      setCardNumber(digits.replace(/(.{4})/g, "$1 ").trim());
+                      if (/^4/.test(digits)) setCardBrand("Visa");
+                      else if (/^(5[1-5]|2[2-7])/.test(digits)) setCardBrand("Mastercard");
+                    }}
                     className="mt-1"
                   />
                 </div>
