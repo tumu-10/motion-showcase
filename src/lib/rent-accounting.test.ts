@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { LedgerEntry, Unit } from "@/lib/sample-data";
 import {
+  allocateRentPayment,
   getNextUncoveredRentPeriod,
   getUnitAdvanceMonths,
   getUnitPeriodCredit,
@@ -125,5 +126,21 @@ describe("rent period accounting", () => {
     expect(getUnitPeriodCredit(unit, ledger, "2026-11")).toBe(1_000_000);
     expect(getUnitPeriodCredit(unit, ledger, "2026-12")).toBe(1_000_000);
     expect(getNextUncoveredRentPeriod(unit, ledger, "2026-11")).toBe("2027-01");
+  });
+
+  it("allocates a manual payment across the remaining rent and future months", () => {
+    const partial = payment({ id: "partial", amount: 400_000 });
+
+    expect(allocateRentPayment(unit, [partial], "2026-11", 1_600_000)).toEqual({
+      rentPeriod: "2026-11",
+      monthsCovered: 2,
+      coverageAmounts: [600_000, 1_000_000],
+    });
+  });
+
+  it("rejects manual payments above the supported coverage window", () => {
+    expect(() => allocateRentPayment(unit, [], "2026-11", 13_000_000)).toThrow(
+      "Payment exceeds the rent due for the next 12 months.",
+    );
   });
 });

@@ -47,6 +47,7 @@ import {
   getUnitPeriodCredit,
   getUnitRentChargeForMonths,
   localDateIso,
+  allocateRentPayment,
 } from "@/lib/rent-accounting";
 import { useRentDemoData } from "@/lib/useRentDemoData";
 import type { ReportKind } from "@/lib/reports";
@@ -682,6 +683,126 @@ function LandlordPage() {
     });
   };
 
+  const recordCashPayment = (unitId: string, amount: number, receivedAt: string) => {
+    const now = new Date();
+    const unit = units.find((item) => item.id === unitId);
+    if (!unit?.tenant) {
+      toast.error("Choose an occupied unit before recording rent.");
+      return false;
+    }
+    if (!Number.isSafeInteger(amount) || amount <= 0) {
+      toast.error("Enter a positive whole-UGX amount.");
+      return false;
+    }
+    const receivedDate = new Date(`${receivedAt}T12:00:00`);
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(receivedAt) ||
+      Number.isNaN(receivedDate.getTime()) ||
+      localDateIso(receivedDate) !== receivedAt ||
+      receivedAt > localDateIso(now)
+    ) {
+      toast.error("Choose a valid received date that is not in the future.");
+      return false;
+    }
+
+    const allocationPeriod = currentRentPeriod(receivedDate);
+    let coverage: ReturnType<typeof allocateRentPayment>;
+    try {
+      coverage = allocateRentPayment(unit, ledger, allocationPeriod, amount);
+    } catch (error) {
+      toast.error("Cash payment could not be recorded.", {
+        description:
+          error instanceof Error ? error.message : "Check the amount and outstanding rent.",
+      });
+      return false;
+    }
+
+    const reference = `CASH-${receivedAt.replace(/-/g, "")}-${Date.now().toString(36).toUpperCase()}`;
+    const entry: LedgerEntry = {
+      id: `cash-${reference}`,
+      date: new Intl.DateTimeFormat("en-UG", { day: "numeric", month: "short" }).format(
+        receivedDate,
+      ),
+      receivedAt,
+      tenant: unit.tenant,
+      unitId: unit.id,
+      unit: unit.unit,
+      amount,
+      method: "Cash",
+      reference,
+      status: "Confirmed",
+      ...coverage,
+    };
+    const createdAt = now.toISOString();
+    let notification: TenantNotification;
+    let landlordNotification: TenantNotification;
+    try {
+      notification = createNotification({
+        id: `cash-receipt:tenant:${entry.id}`,
+        unitId: unit.id,
+        unit: unit.unit,
+        audience: "tenant",
+        eventType: "receipt",
+        kind: entry.monthsCovered > 1 ? "advance" : "payment",
+        title: "Cash payment received",
+        message: `${formatUGX(amount)} recorded for ${formatRentPeriodRange(
+          entry.rentPeriod,
+          entry.monthsCovered,
+        )}. Receipt reference ${reference}.`,
+        createdAt,
+        read: false,
+      });
+      landlordNotification = createNotification({
+        id: `cash-payment:landlord:${entry.id}`,
+        unitId: unit.id,
+        unit: unit.unit,
+        audience: "landlord",
+        eventType: entry.monthsCovered > 1 ? "advance-received" : "payment-received",
+        kind: entry.monthsCovered > 1 ? "advance" : "payment",
+        title: "Cash rent payment recorded",
+        message: `${formatUGX(amount)} received from ${unit.tenant} · ${unit.property} · Unit ${unit.unit}.`,
+        createdAt,
+        read: false,
+      });
+    } catch (error) {
+      toast.error("Payment notifications could not be prepared.", {
+        description: error instanceof Error ? error.message : "Check notification settings.",
+      });
+      return false;
+    }
+
+    const nextLedger = [entry, ...ledger];
+    setRentData((current) => ({
+      ...current,
+      ledger: [entry, ...current.ledger],
+      units: current.units.map((currentUnit) =>
+        currentUnit.id === unit.id
+          ? {
+              ...currentUnit,
+              paid: getUnitPeriodCredit(currentUnit, nextLedger, period) >= currentUnit.rent,
+            }
+          : currentUnit,
+      ),
+      notifications: [notification, landlordNotification, ...current.notifications],
+    }));
+
+    try {
+      const balanceAfter = Math.max(
+        0,
+        unit.rent - getUnitPeriodCredit(unit, nextLedger, entry.rentPeriod),
+      );
+      issueRentReceipt(entry, unit.property, balanceAfter);
+    } catch (error) {
+      toast.error("Payment recorded, but its receipt could not be generated.", {
+        description: error instanceof Error ? error.message : "Open payment history to try again.",
+      });
+    }
+    toast.success("Cash payment recorded", {
+      description: `${formatUGX(amount)} for ${unit.tenant} · ${unit.unit}.`,
+    });
+    return true;
+  };
+
   const confirmPayment = (id: string) => {
     const pending = ledger.find((entry) => entry.id === id);
     if (!pending || pending.status !== "Pending") {
@@ -823,7 +944,12 @@ function LandlordPage() {
       )}
       {view === "complaints" && <ComplaintsView requests={requests} onAdvance={advance} />}
       {view === "payments" && (
-        <PaymentsView ledger={ledger} units={units} onConfirm={confirmPayment} />
+        <PaymentsView
+          ledger={ledger}
+          units={units}
+          onConfirm={confirmPayment}
+          onRecordCashPayment={recordCashPayment}
+        />
       )}
       {view === "calendar" && (
         <CalendarView events={landlordCalendarEvents(units, requests)} audience="landlord" />

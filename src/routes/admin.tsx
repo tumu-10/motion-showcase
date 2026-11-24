@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   Smartphone,
   Users,
+  Wrench,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
@@ -21,6 +22,7 @@ import heroKampala from "@/assets/hero-kampala.jpg";
 import listingHomes from "@/assets/listing-2.jpg";
 import { CountUp } from "@/components/shared/CountUp";
 import { CreateLandlordDialog } from "@/components/admin/CreateLandlordDialog";
+import { ServiceProvidersPanel } from "@/components/admin/ServiceProvidersPanel";
 import { Reveal } from "@/components/motion/Reveal";
 import { DashShell, PageHeading, type NavItem } from "@/components/shared/DashShell";
 import { SpotlightCard } from "@/components/shared/SpotlightCard";
@@ -106,7 +108,7 @@ export const Route = createFileRoute("/admin")({
   component: AdminPage,
 });
 
-type View = "overview" | "operations" | "payments" | "landlords" | "settings";
+type View = "overview" | "operations" | "payments" | "landlords" | "service-providers" | "settings";
 
 const verificationTone: Record<Landlord["verification"], Tone> = {
   Verified: "success",
@@ -140,6 +142,7 @@ function AdminPage() {
     { id: "operations", label: "Payment operations", icon: ClipboardCheck },
     { id: "payments", label: "Match payments", icon: Link2, badge: txns.length },
     { id: "landlords", label: "Landlords", icon: Building2, badge: pending },
+    { id: "service-providers", label: "Service providers", icon: Wrench },
     { id: "settings", label: "Settings", icon: Settings, mobileMore: true },
   ];
 
@@ -261,6 +264,7 @@ function AdminPage() {
           onRecordPayment={recordSubscriptionPayment}
         />
       )}
+      {view === "service-providers" && <ServiceProvidersPanel />}
       {view === "settings" && (
         <AdminSettingsPanel
           settings={adminSettings}

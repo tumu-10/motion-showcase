@@ -1,18 +1,18 @@
-import mtn from "@/assets/pay/mtn.jpg.asset.json";
-import airtel from "@/assets/pay/airtel.svg.asset.json";
-import visa from "@/assets/pay/visa.svg.asset.json";
-import mastercard from "@/assets/pay/mastercard.svg.asset.json";
-import stanbic from "@/assets/pay/stanbic.png.asset.json";
+import mtn from "@/assets/pay/mtn-momo.jpg";
+import airtel from "@/assets/pay/airtel.svg";
+import visa from "@/assets/pay/visa.svg";
+import mastercard from "@/assets/pay/mastercard.svg";
+import stanbic from "@/assets/pay/stanbic.png";
 import { cn } from "@/lib/utils";
 
 export type PayBrand = "mtn" | "airtel" | "visa" | "mastercard" | "stanbic" | "hfb";
 
 const src: Partial<Record<PayBrand, string>> = {
-  mtn: mtn.url,
-  airtel: airtel.url,
-  visa: visa.url,
-  mastercard: mastercard.url,
-  stanbic: stanbic.url,
+  mtn,
+  airtel,
+  visa,
+  mastercard,
+  stanbic,
 };
 const alt: Record<PayBrand, string> = {
   mtn: "MTN Mobile Money",

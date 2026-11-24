@@ -78,10 +78,12 @@ import {
 import {
   demoHomeServiceProviders,
   homeServiceCategories,
+  type DemoHomeServiceProvider,
   type HomeServiceId,
   type HomeServiceRequest,
   type MonthlyServiceCharge,
 } from "@/lib/home-services";
+import { readHomeServiceProviders } from "@/lib/home-service-providers";
 import { ease } from "@/lib/motion";
 import { quickActionImages, serviceImageById } from "@/lib/service-images";
 import { issueRentReceipt } from "@/lib/receipt-helpers";
@@ -165,6 +167,7 @@ async function fetchTenantHome() {
 
 export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void }) {
   const { data: rentData, setData: setRentData, loaded: rentDataLoaded } = useRentDemoData();
+  const [serviceProviders, setServiceProviders] = useState(demoHomeServiceProviders);
   const [tab, setTab] = useState<Tab>("home");
   const [tenantSettings, setTenantSettings] = useState(defaultTenantDemoSettings);
   const [tenantSettingsLoaded, setTenantSettingsLoaded] = useState(false);
@@ -259,6 +262,15 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
       });
     } finally {
       setTenantSettingsLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      setServiceProviders(readHomeServiceProviders());
+    } catch (error) {
+      console.error("Could not load service providers.", error);
+      toast.error("The service directory could not be loaded.");
     }
   }, []);
 
@@ -484,7 +496,7 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
 
   const requestHomeService = useCallback(
     (providerId: string) => {
-      const provider = demoHomeServiceProviders.find((item) => item.id === providerId);
+      const provider = serviceProviders.find((item) => item.id === providerId);
       const service = provider
         ? homeServiceCategories.find((item) => item.id === provider.serviceId)
         : undefined;
@@ -513,7 +525,7 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
         description: `${provider.name} is a demo provider. No external request was sent.`,
       });
     },
-    [setRentData, tenantUnit],
+    [serviceProviders, setRentData, tenantUnit],
   );
 
   return (
@@ -537,6 +549,7 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
           >
             {tab === "home" && (
               <HomeTab
+                serviceProviders={serviceProviders}
                 paid={paid}
                 activeTenant={activeTenant}
                 lastPayment={payments[0]}
@@ -612,12 +625,13 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
             )}
             {tab === "services" && (
               <ServicesTab
+                providers={serviceProviders}
                 serviceRequests={tenantServiceRequests}
                 preferredProviderIds={tenantServiceSettings?.preferredProviderIds ?? []}
                 onRequestQuote={requestHomeService}
                 onContactProvider={(providerName, channel) =>
                   toast.info(`${channel} is demo-only`, {
-                    description: `${providerName} is a demo provider. No call or message was sent.`,
+                    description: `No call or message was sent to ${providerName}.`,
                   })
                 }
               />
@@ -786,6 +800,7 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
 /* --------------------------------- Home tab -------------------------------- */
 
 function HomeTab({
+  serviceProviders,
   paid,
   activeTenant,
   lastPayment,
@@ -806,6 +821,7 @@ function HomeTab({
   onOpenServices,
   monthlyServiceCharge,
 }: {
+  serviceProviders: DemoHomeServiceProvider[];
   paid: boolean;
   activeTenant: boolean;
   lastPayment?: Payment | undefined;
@@ -1051,9 +1067,7 @@ function HomeTab({
                 className="scrollbar-hidden flex snap-x snap-mandatory gap-3 overflow-x-auto scroll-smooth pb-2 pl-5 pr-16"
               >
                 {homeServiceCategories.slice(0, 4).map((service, index) => {
-                  const provider = demoHomeServiceProviders.find(
-                    (item) => item.serviceId === service.id,
-                  );
+                  const provider = serviceProviders.find((item) => item.serviceId === service.id);
                   return (
                     <ImageActionCard
                       key={service.id}
@@ -1088,7 +1102,9 @@ function HomeTab({
                 </Button>
               )}
             </div>
-            <p className="text-xs text-muted-foreground">Demo providers and indicative prices.</p>
+            <p className="text-xs text-muted-foreground">
+              Indicative prices · contact actions are demo-only.
+            </p>
           </motion.section>
 
           {request && (
@@ -1133,11 +1149,13 @@ const serviceRequestStatusIcon: Record<HomeServiceRequest["status"], LucideIcon>
 };
 
 function ServicesTab({
+  providers,
   serviceRequests,
   preferredProviderIds,
   onRequestQuote,
   onContactProvider,
 }: {
+  providers: DemoHomeServiceProvider[];
   serviceRequests: HomeServiceRequest[];
   preferredProviderIds: string[];
   onRequestQuote: (providerId: string) => void;
@@ -1146,11 +1164,11 @@ function ServicesTab({
   return (
     <section className="space-y-5 p-5 pb-8">
       <header>
-        <p className="text-sm font-medium text-muted-foreground">Kampala · Demo directory</p>
+        <p className="text-sm font-medium text-muted-foreground">Kampala · Services directory</p>
         <h1 className="mt-1 text-2xl font-bold text-primary-deep">Services for your home</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Compare local providers and request a quote. These listings, ratings, and prices are all
-          demo data.
+          Compare local providers and request a quote. Prices are indicative and contacts remain
+          demo-only.
         </p>
       </header>
       {serviceRequests.length > 0 && (
@@ -1190,7 +1208,7 @@ function ServicesTab({
       <div className="space-y-6">
         {homeServiceCategories.map((service) => {
           const Icon = serviceIconById[service.id];
-          const providers = demoHomeServiceProviders
+          const providersForService = providers
             .filter((provider) => provider.serviceId === service.id)
             .sort(
               (left, right) =>
@@ -1203,10 +1221,10 @@ function ServicesTab({
                 icon={Icon}
                 image={serviceImageById[service.id]}
                 label={service.label}
-                providerCount={providers.length}
+                providerCount={providersForService.length}
               />
               <ul className="grid gap-3">
-                {providers.map((provider) => {
+                {providersForService.map((provider) => {
                   const preferred = preferredProviderIds.includes(provider.id);
                   return (
                     <li key={provider.id} className="alive-card surface min-w-0 space-y-3 p-4">
@@ -1216,7 +1234,7 @@ function ServicesTab({
                           <p className="mt-1 text-sm text-muted-foreground">{provider.area}</p>
                         </div>
                         <span className="rounded-full bg-secondary px-2.5 py-1 text-[0.6875rem] font-semibold">
-                          Demo provider
+                          {provider.ratingCount > 0 ? "Demo provider" : "Listed provider"}
                         </span>
                       </div>
                       <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
@@ -1226,8 +1244,9 @@ function ServicesTab({
                         <span className="text-xs text-muted-foreground">{provider.priceUnit}</span>
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        Demo rating {provider.rating.toFixed(1)} / 5 · {provider.ratingCount} demo
-                        ratings
+                        {provider.ratingCount > 0
+                          ? `Demo rating ${provider.rating.toFixed(1)} / 5 · ${provider.ratingCount} demo ratings`
+                          : "No ratings yet"}
                       </p>
                       {preferred && (
                         <p className="text-xs font-semibold text-success-ink">

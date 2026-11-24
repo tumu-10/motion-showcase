@@ -1,4 +1,4 @@
-import { Download } from "lucide-react";
+import { Download, Plus } from "lucide-react";
 import { motion } from "motion/react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -6,6 +6,7 @@ import { PageHeading } from "@/components/shared/DashShell";
 import { ReceiptActions } from "@/components/shared/ReceiptActions";
 import { Pill, type Tone } from "@/components/shared/StatusPill";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -20,6 +21,7 @@ import {
   currentRentPeriod,
   formatRentPeriodRange,
   getUnitPeriodCredit,
+  localDateIso,
 } from "@/lib/rent-accounting";
 import { issueRentReceipt } from "@/lib/receipt-helpers";
 import type { LedgerEntry, Unit } from "@/lib/sample-data";
@@ -73,15 +75,22 @@ export function PaymentsView({
   ledger,
   units,
   onConfirm,
+  onRecordCashPayment,
 }: {
   ledger: LedgerEntry[];
   units: Unit[];
   onConfirm: (id: string) => void;
+  onRecordCashPayment: (unitId: string, amount: number, receivedAt: string) => boolean;
 }) {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [property, setProperty] = useState("all");
   const [block, setBlock] = useState("all");
+  const [cashPaymentOpen, setCashPaymentOpen] = useState(false);
+  const [cashUnitId, setCashUnitId] = useState(units.find((unit) => unit.tenant)?.id ?? "");
+  const [cashAmount, setCashAmount] = useState("");
+  const [cashDate, setCashDate] = useState(localDateIso());
+  const occupiedUnits = units.filter((unit) => unit.tenant);
   const properties = [...new Set(units.map((unit) => unit.property))];
   const availableBlocks = [
     ...new Set(
@@ -110,10 +119,102 @@ export function PaymentsView({
   return (
     <>
       <PageHeading eyebrow={`${formatUGX(confirmed)} confirmed this month`} title="Payments">
-        <Button variant="outline" onClick={() => exportCsv(filteredLedger)}>
-          <Download /> Export CSV
-        </Button>
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+          <Button
+            type="button"
+            className="min-h-11"
+            disabled={occupiedUnits.length === 0}
+            onClick={() => setCashPaymentOpen(true)}
+          >
+            <Plus aria-hidden /> Record cash payment
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11"
+            onClick={() => exportCsv(filteredLedger)}
+          >
+            <Download aria-hidden /> Export CSV
+          </Button>
+        </div>
       </PageHeading>
+      <Dialog open={cashPaymentOpen} onOpenChange={setCashPaymentOpen}>
+        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] max-w-lg overflow-y-auto rounded-2xl bg-background p-5 sm:p-6">
+          <DialogTitle>Record a cash payment</DialogTitle>
+          <DialogDescription>
+            Confirm the cash received. A receipt will be added to the tenant’s in-app payment
+            history.
+          </DialogDescription>
+          <form
+            className="mt-4 space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const amount = Number(cashAmount);
+              if (!Number.isSafeInteger(amount) || amount <= 0) {
+                toast.error("Enter a positive whole-UGX amount.");
+                return;
+              }
+              if (onRecordCashPayment(cashUnitId, amount, cashDate)) {
+                setCashPaymentOpen(false);
+                setCashAmount("");
+                setCashDate(localDateIso());
+              }
+            }}
+          >
+            <label className="grid gap-1.5 text-sm font-medium">
+              Tenant and unit
+              <select
+                className="h-11 rounded-md border border-input bg-card px-3"
+                value={cashUnitId}
+                onChange={(event) => setCashUnitId(event.target.value)}
+                required
+              >
+                {occupiedUnits.map((unit) => (
+                  <option key={unit.id} value={unit.id}>
+                    {unit.tenant} · {unit.property} · Unit {unit.unit}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="grid gap-1.5 text-sm font-medium">
+              Amount received (UGX)
+              <Input
+                type="number"
+                min="1"
+                step="1"
+                inputMode="numeric"
+                className="h-11"
+                value={cashAmount}
+                onChange={(event) => setCashAmount(event.target.value)}
+                required
+              />
+            </label>
+            <label className="grid gap-1.5 text-sm font-medium">
+              Date received
+              <Input
+                type="date"
+                className="h-11"
+                value={cashDate}
+                onChange={(event) => setCashDate(event.target.value)}
+                required
+              />
+            </label>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-11"
+                onClick={() => setCashPaymentOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" className="min-h-11">
+                Record payment and receipt
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
       <section
         className="surface mb-5 grid gap-3 p-4 sm:grid-cols-2 sm:p-5 xl:grid-cols-4"
         aria-label="Filter payments"

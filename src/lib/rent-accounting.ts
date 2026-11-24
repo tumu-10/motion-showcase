@@ -101,6 +101,37 @@ export function getUnitRentChargeForMonths(
   }).reduce((sum, amount) => sum + amount, 0);
 }
 
+export function allocateRentPayment(
+  unit: Unit,
+  ledger: LedgerEntry[],
+  period: string,
+  amount: number,
+  maxMonths = 12,
+) {
+  if (!Number.isSafeInteger(amount) || amount <= 0) {
+    throw new Error("Enter a positive whole-UGX rent payment.");
+  }
+  if (!Number.isInteger(maxMonths) || maxMonths < 1) {
+    throw new Error("Rent coverage must include at least one month.");
+  }
+
+  const rentPeriod = getNextUncoveredRentPeriod(unit, ledger, period);
+  const coverageAmounts: number[] = [];
+  let remaining = amount;
+  for (let month = 0; month < maxMonths && remaining > 0; month += 1) {
+    const targetPeriod = addRentPeriodMonths(rentPeriod, month);
+    const outstanding = Math.max(0, unit.rent - getUnitPeriodCredit(unit, ledger, targetPeriod));
+    const covered = Math.min(outstanding, remaining);
+    coverageAmounts.push(covered);
+    remaining -= covered;
+  }
+  if (remaining > 0) {
+    throw new Error(`Payment exceeds the rent due for the next ${maxMonths} months.`);
+  }
+
+  return { rentPeriod, monthsCovered: coverageAmounts.length, coverageAmounts };
+}
+
 export function isUnitPrepaidForPeriod(unit: Unit, ledger: LedgerEntry[], period: string) {
   if (getUnitPeriodCredit(unit, ledger, period) < unit.rent) return false;
   const receivedBeforePeriod = ledger.some(

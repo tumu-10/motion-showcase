@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { BadgeCheck, CircleCheck, CircleHelp, Clock3, Wrench, type LucideIcon } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,6 +12,7 @@ import {
   type HomeServiceRequestStatus,
   type PropertyHomeServiceSettings,
 } from "@/lib/home-services";
+import { readHomeServiceProviders } from "@/lib/home-service-providers";
 
 const requestStatusClass: Record<HomeServiceRequestStatus, string> = {
   Requested: "bg-warning-soft text-warning-ink",
@@ -38,11 +40,21 @@ export function HomeServicesManagement({
 }) {
   const [property, setProperty] = useState(properties[0] ?? "");
   const [serviceFilter, setServiceFilter] = useState("all");
+  const [providers, setProviders] = useState(demoHomeServiceProviders);
   const currentSettings = settings.find((item) => item.property === property);
   const charge = currentSettings?.monthlyServiceCharge;
   const [chargeEnabled, setChargeEnabled] = useState(charge?.enabled ?? false);
   const [chargeLabel, setChargeLabel] = useState(charge?.label ?? "Garbage collection");
   const [chargeAmount, setChargeAmount] = useState(charge?.amount ? String(charge.amount) : "");
+
+  useEffect(() => {
+    try {
+      setProviders(readHomeServiceProviders());
+    } catch (error) {
+      console.error("Could not load service providers.", error);
+      toast.error("Service providers could not be loaded.");
+    }
+  }, []);
 
   useEffect(() => {
     if (!properties.includes(property)) setProperty(properties[0] ?? "");
@@ -55,7 +67,7 @@ export function HomeServicesManagement({
   }, [property, charge?.amount, charge?.enabled, charge?.label]);
 
   const preferredIds = currentSettings?.preferredProviderIds ?? [];
-  const visibleProviders = demoHomeServiceProviders.filter(
+  const visibleProviders = providers.filter(
     (provider) => serviceFilter === "all" || provider.serviceId === serviceFilter,
   );
   const propertyRequests = requests.filter((request) => request.property === property);
@@ -122,8 +134,7 @@ export function HomeServicesManagement({
 
       <div className="rounded-xl border border-primary/15 bg-primary-soft/60 p-4 text-sm text-primary-deep">
         <CircleHelp className="mr-2 inline size-4" aria-hidden />
-        Provider names, ratings, and prices are demo data. Call and WhatsApp actions do not contact
-        anyone.
+        Prices are indicative. Call and WhatsApp actions remain demo-only and do not contact anyone.
       </div>
 
       <section className="surface space-y-4 p-4 sm:p-5" aria-labelledby="preferred-providers-title">
