@@ -102,6 +102,7 @@ export function PayFlow({
     ? detectNetwork(paymentDetails.mobileMoneyNumber)
     : null;
   const landlordBankBrand = getBankBrand(paymentDetails.bankName);
+  const bankChoiceName = bankOptions.find((bank) => bank.brand === bankChoice)?.name;
 
   const amount =
     amountMode === "full"
@@ -509,22 +510,17 @@ export function PayFlow({
                       aria-pressed={bankChoice === brand}
                       onClick={() => setBankChoice(brand)}
                       className={cn(
-                        "press flex min-h-16 min-w-0 items-center justify-center rounded-xl border-2 bg-card p-2 transition-colors hover:border-primary/40",
+                        "press relative flex min-h-16 min-w-0 items-center justify-center overflow-hidden rounded-xl border-2 bg-white transition-colors hover:border-primary/40 sm:min-h-20",
                         bankChoice === brand && "border-primary bg-primary-soft shadow-sm",
                       )}
                     >
-                      <BrandLogo brand={brand} className="h-8 w-12" />
+                      <BrandLogo brand={brand} variant="fill" />
                     </button>
                   ))}
                 </div>
                 <p className="mt-4 font-bold text-primary-deep">Transfer to</p>
                 <dl className="mt-2 min-w-0 space-y-2">
-                  <div className="grid min-w-0 grid-cols-[7rem_minmax(0,1fr)] items-center gap-2">
-                    <dt className="text-muted-foreground">Paying from</dt>
-                    <dd className="flex min-w-0 justify-end">
-                      <BrandLogo brand={bankChoice} className="h-7 w-10" />
-                    </dd>
-                  </div>
+                  <PaymentDetail label="Paying from" value={bankChoiceName} brand={bankChoice} />
                   <PaymentDetail
                     label="Landlord bank"
                     value={paymentDetails.bankName}

@@ -77,7 +77,8 @@ describe("tenant bank-transfer options", () => {
 
     for (const [option, logoAlt] of banks) {
       const bankButton = screen.getByRole("button", { name: `Paying from ${option}` });
-      expect(within(bankButton).getByRole("img", { name: logoAlt })).toBeInTheDocument();
+      const bankLogo = within(bankButton).getByRole("img", { name: logoAlt });
+      expect(bankLogo).toHaveClass("h-full", "w-full", "object-contain");
       expect(bankButton).not.toHaveTextContent(option);
     }
 
@@ -86,6 +87,7 @@ describe("tenant bank-transfer options", () => {
       "true",
     );
     expect(screen.getByText("1234567890123456")).toHaveClass("break-all");
+    expect(screen.getByText("DTB")).toBeInTheDocument();
     expect(screen.getByText("1234567890123456").parentElement?.parentElement).toHaveClass(
       "min-w-0",
     );
