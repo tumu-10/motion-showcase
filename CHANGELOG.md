@@ -16,6 +16,8 @@
   rent-period labels current, and improved reduced-motion navigation and focus behavior.
 - **Public pages** (`67148f5`): added shared page reveals, made WhatsApp hover motion respect the
   reduced-motion preference and stabilized shared motion initial styles for server rendering.
+- **Motion consistency and documentation** (`f7eb4e4`): aligned reveal timing with shared tokens,
+  stabilized preloader, hero and rent-ring initial styles, and documented motion practices.
 
 ## Validation
 
