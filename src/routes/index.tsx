@@ -11,8 +11,15 @@ import {
   Smartphone,
   Wrench,
 } from "lucide-react";
-import { AnimatePresence, motion, useScroll, useSpring, useTransform } from "motion/react";
-import { useRef, useState } from "react";
+import {
+  AnimatePresence,
+  motion,
+  useReducedMotion,
+  useScroll,
+  useSpring,
+  useTransform,
+} from "motion/react";
+import { useRef, useState, type KeyboardEvent } from "react";
 import heroImg from "@/assets/hero-kampala-optimized.jpg";
 import { TransitionLink, type AppPath } from "@/components/motion/PageTransition";
 import { Reveal, SplitHeading } from "@/components/motion/Reveal";
@@ -23,7 +30,7 @@ import { RentStatusPill, SampleTag } from "@/components/shared/StatusPill";
 import { buttonVariants } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { DUE_SOON_DAYS, formatUGX, getRentStatus } from "@/lib/rent";
-import { ease, entryDelay } from "@/lib/motion";
+import { duration, ease, entryDelay } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/")({
@@ -73,6 +80,7 @@ function Hero() {
   const ref = useRef<HTMLElement>(null);
   const { scrollYProgress } = useScroll({ target: ref, offset: ["start start", "end start"] });
   const imgY = useTransform(scrollYProgress, [0, 1], ["0%", "12%"]);
+  const reduceMotion = useReducedMotion();
   const [delay] = useState(() => entryDelay());
 
   return (
@@ -122,7 +130,11 @@ function Hero() {
             className="relative aspect-[4/5] overflow-hidden rounded-2xl sm:aspect-[5/4] lg:aspect-[4/5]"
             initial={false}
             animate={{ clipPath: "inset(0% 0% 0% 0% round 24px)" }}
-            transition={{ duration: 0.9, ease: ease.outExpo, delay: delay + 0.1 }}
+            transition={{
+              duration: reduceMotion ? 0 : duration.page,
+              ease: ease.outExpo,
+              delay: reduceMotion ? 0 : delay + 0.1,
+            }}
           >
             <motion.img
               src={heroImg}
@@ -131,10 +143,14 @@ function Hero() {
               height={690}
               loading="eager"
               fetchPriority="high"
-              style={{ y: imgY }}
+              style={{ y: reduceMotion ? 0 : imgY }}
               initial={false}
-              animate={{ scale: 1.08 }}
-              transition={{ duration: 1.2, ease: ease.outExpo, delay: delay + 0.1 }}
+              animate={{ scale: reduceMotion ? 1 : 1.08 }}
+              transition={{
+                duration: reduceMotion ? 0 : duration.slow * 2,
+                ease: ease.outExpo,
+                delay: reduceMotion ? 0 : delay + 0.1,
+              }}
               className="h-full w-full object-cover"
             />
           </motion.div>
@@ -275,7 +291,22 @@ const roles: {
 
 function Roles() {
   const [active, setActive] = useState(0);
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const reduceMotion = useReducedMotion();
   const role = roles[active] ?? roles[0]!;
+
+  function handleTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, index: number) {
+    let next: number | null = null;
+    if (event.key === "ArrowRight") next = (index + 1) % roles.length;
+    if (event.key === "ArrowLeft") next = (index - 1 + roles.length) % roles.length;
+    if (event.key === "Home") next = 0;
+    if (event.key === "End") next = roles.length - 1;
+    if (next === null) return;
+    event.preventDefault();
+    setActive(next);
+    tabRefs.current[next]?.focus();
+  }
+
   return (
     <section id="roles" className="scroll-mt-20 border-t border-border bg-card py-20 lg:py-28">
       <div className="mx-auto max-w-7xl px-5 sm:px-8">
@@ -298,10 +329,16 @@ function Roles() {
               return (
                 <button
                   key={r.id}
+                  id={`role-tab-${r.id}`}
                   role="tab"
+                  tabIndex={selected ? 0 : -1}
                   aria-selected={selected}
-                  aria-controls={`role-panel-${r.id}`}
+                  aria-controls={selected ? `role-panel-${r.id}` : undefined}
+                  ref={(node) => {
+                    tabRefs.current[i] = node;
+                  }}
                   onClick={() => setActive(i)}
+                  onKeyDown={(event) => handleTabKeyDown(event, i)}
                   className={cn(
                     "relative flex min-h-14 shrink-0 items-center gap-3 rounded-lg px-4 py-3 text-left transition-colors",
                     selected ? "text-primary-foreground" : "text-foreground hover:bg-secondary",
@@ -311,7 +348,11 @@ function Roles() {
                     <motion.span
                       layoutId="role-indicator"
                       className="absolute inset-0 rounded-lg bg-primary"
-                      transition={{ type: "spring", stiffness: 380, damping: 34 }}
+                      transition={
+                        reduceMotion
+                          ? { duration: 0 }
+                          : { type: "spring", stiffness: 380, damping: 34 }
+                      }
                     />
                   )}
                   <Icon className="relative size-5 shrink-0" aria-hidden />
@@ -331,14 +372,19 @@ function Roles() {
             })}
           </div>
 
-          <div id={`role-panel-${role.id}`} role="tabpanel" className="min-h-[22rem]">
-            <AnimatePresence mode="wait">
+          <div
+            id={`role-panel-${role.id}`}
+            role="tabpanel"
+            aria-labelledby={`role-tab-${role.id}`}
+            className="min-h-[22rem]"
+          >
+            <AnimatePresence mode="wait" initial={false}>
               <motion.div
                 key={role.id}
-                initial={{ opacity: 0, y: 14 }}
+                initial={reduceMotion ? false : { opacity: 0, y: 14 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.35, ease: ease.outExpo }}
+                exit={reduceMotion ? undefined : { opacity: 0, y: -10 }}
+                transition={{ duration: reduceMotion ? 0 : duration.base, ease: ease.outExpo }}
               >
                 <ol className="divide-y divide-border border-y border-border">
                   {role.tasks.map((t, i) => {
@@ -346,9 +392,13 @@ function Roles() {
                     return (
                       <motion.li
                         key={t.title}
-                        initial={{ opacity: 0, x: 12 }}
+                        initial={reduceMotion ? false : { opacity: 0, x: 12 }}
                         animate={{ opacity: 1, x: 0 }}
-                        transition={{ duration: 0.4, ease: ease.outExpo, delay: 0.06 * i }}
+                        transition={{
+                          duration: reduceMotion ? 0 : duration.base,
+                          ease: ease.outExpo,
+                          delay: reduceMotion ? 0 : 0.06 * i,
+                        }}
                         className="grid grid-cols-[2.5rem_1fr] gap-4 py-6 sm:grid-cols-[3rem_14rem_1fr] sm:items-baseline"
                       >
                         <span className="figure text-sm font-semibold text-muted-foreground">
@@ -403,6 +453,7 @@ const flow = [
 
 function RentFlow() {
   const ref = useRef<HTMLDivElement>(null);
+  const reduceMotion = useReducedMotion();
   const { scrollYProgress } = useScroll({ target: ref, offset: ["start 70%", "end 60%"] });
   const fill = useSpring(scrollYProgress, { stiffness: 120, damping: 30 });
 
@@ -427,7 +478,7 @@ function RentFlow() {
           />
           <motion.div
             className="absolute left-[0.6875rem] top-2 w-0.5 origin-top bg-accent"
-            style={{ scaleY: fill, bottom: "0.5rem" }}
+            style={{ scaleY: reduceMotion ? scrollYProgress : fill, bottom: "0.5rem" }}
             aria-hidden
           />
           <ol className="space-y-14">
@@ -455,6 +506,7 @@ function RentFlow() {
 function StatusRule() {
   const [days, setDays] = useState(5);
   const [paid, setPaid] = useState(false);
+  const reduceMotion = useReducedMotion();
   const status = getRentStatus(days, paid);
   const caption = paid
     ? "Paid. Nothing to do until next month."
@@ -499,10 +551,13 @@ function StatusRule() {
                 <AnimatePresence mode="popLayout" initial={false}>
                   <motion.span
                     key={paid ? "paid" : days}
-                    initial={{ y: 16, opacity: 0 }}
+                    initial={reduceMotion ? false : { y: 16, opacity: 0 }}
                     animate={{ y: 0, opacity: 1 }}
-                    exit={{ y: -16, opacity: 0 }}
-                    transition={{ duration: 0.25, ease: ease.outExpo }}
+                    exit={reduceMotion ? undefined : { y: -16, opacity: 0 }}
+                    transition={{
+                      duration: reduceMotion ? 0 : duration.fast,
+                      ease: ease.outExpo,
+                    }}
                     className="figure block text-5xl font-bold"
                   >
                     {paid ? (
@@ -549,7 +604,7 @@ function StatusRule() {
                 onClick={() => setPaid((p) => !p)}
                 className={cn(
                   buttonVariants({ variant: paid ? "outline" : "default", size: "sm" }),
-                  "mt-6",
+                  "mt-6 min-h-11",
                 )}
               >
                 {paid ? "Undo payment" : "Mark as paid"}

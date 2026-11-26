@@ -22,9 +22,9 @@ export function SiteFooter() {
       <div className="mx-auto flex max-w-7xl flex-col gap-6 px-5 py-10 sm:px-8">
         <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <a href="/" aria-label="Propatiz home">
+            <TransitionLink to="/" aria-label="Propatiz home">
               <Logo />
-            </a>
+            </TransitionLink>
             <p className="mt-2 text-sm text-muted-foreground">A LandVille Ventures product.</p>
           </div>
           <nav

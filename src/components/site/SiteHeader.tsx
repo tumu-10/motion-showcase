@@ -1,13 +1,13 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { Menu } from "lucide-react";
-import { motion, useMotionValueEvent, useScroll } from "motion/react";
+import { motion, useMotionValueEvent, useReducedMotion, useScroll } from "motion/react";
 import { useState } from "react";
 import { Logo } from "@/components/brand/Logo";
 import { TransitionLink } from "@/components/motion/PageTransition";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
-import { ease, entryDelay } from "@/lib/motion";
+import { duration, ease, entryDelay } from "@/lib/motion";
 import { authStrings } from "@/lib/auth/strings";
 
 const anchors = [
@@ -19,6 +19,7 @@ const anchors = [
 export function SiteHeader() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const { scrollY } = useScroll();
+  const reduceMotion = useReducedMotion();
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
   const [delay] = useState(() => entryDelay());
@@ -26,18 +27,22 @@ export function SiteHeader() {
 
   return (
     <motion.header
-      initial={{ y: -24, opacity: 0 }}
+      initial={reduceMotion ? false : { y: -24, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
-      transition={{ duration: 0.7, ease: ease.outExpo, delay: delay + 0.1 }}
+      transition={{
+        duration: reduceMotion ? 0 : duration.page,
+        ease: ease.outExpo,
+        delay: reduceMotion ? 0 : delay + 0.1,
+      }}
       className={cn(
         "sticky top-0 z-[var(--z-header)] border-b transition-[background-color,border-color,box-shadow] duration-300",
         scrolled ? "border-border bg-background shadow-soft" : "border-transparent bg-background/0",
       )}
     >
       <div className="mx-auto flex h-18 max-w-7xl items-center justify-between gap-6 px-5 py-3 sm:px-8">
-        <a href="/" aria-label="Propatiz home">
+        <TransitionLink to="/" aria-label="Propatiz home">
           <Logo />
-        </a>
+        </TransitionLink>
         <nav className="hidden items-center gap-1 lg:flex" aria-label="Sections">
           {anchors.map((a) => (
             <a
@@ -87,7 +92,12 @@ export function SiteHeader() {
         </div>
         <Sheet open={open} onOpenChange={setOpen}>
           <SheetTrigger asChild>
-            <Button variant="outline" size="iconSm" className="lg:hidden" aria-label="Open menu">
+            <Button
+              variant="outline"
+              size="iconSm"
+              className="min-h-11 min-w-11 lg:hidden"
+              aria-label="Open menu"
+            >
               <Menu />
             </Button>
           </SheetTrigger>
