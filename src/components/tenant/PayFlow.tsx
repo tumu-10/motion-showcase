@@ -1,5 +1,5 @@
 import { Clock3, CreditCard, Landmark, Loader2, Receipt, Smartphone } from "lucide-react";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { BrandLogo, type PayBrand } from "@/components/payments/BrandLogo";
@@ -25,7 +25,7 @@ import {
 import type { LandlordPaymentDetails } from "@/lib/sample-data";
 import { makePaymentReference, needsAdvanceAgreement } from "@/lib/rent";
 import { formatRentPeriodRange } from "@/lib/rent-accounting";
-import { ease } from "@/lib/motion";
+import { duration, ease } from "@/lib/motion";
 import { createCheckout, isCheckoutConfigured } from "@/lib/checkout";
 import { cn } from "@/lib/utils";
 import { mockPaymentProviders } from "@/lib/payment-provider";
@@ -80,6 +80,7 @@ export function PayFlow({
   onOpenServices: () => void;
   onClose: () => void;
 }) {
+  const reduceMotion = useReducedMotion();
   const [step, setStep] = useState<Step>("form");
   const [amountMode, setAmountMode] = useState<"full" | "other">("full");
   const [monthsCovered, setMonthsCovered] = useState("1");
@@ -239,10 +240,10 @@ export function PayFlow({
             key="form"
             onSubmit={(event) => void submit(event)}
             noValidate
-            initial={{ opacity: 0, x: -24 }}
+            initial={reduceMotion ? false : { opacity: 0, x: -24 }}
             animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -24 }}
-            transition={{ duration: 0.3, ease: ease.outExpo }}
+            exit={reduceMotion ? undefined : { opacity: 0, x: -24 }}
+            transition={{ duration: reduceMotion ? 0 : duration.base, ease: ease.outExpo }}
             className="space-y-6"
           >
             <div>
@@ -270,7 +271,11 @@ export function PayFlow({
                       <motion.span
                         layoutId="amount-mode"
                         className="absolute inset-0 rounded-full bg-card shadow-soft"
-                        transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                        transition={
+                          reduceMotion
+                            ? { duration: 0 }
+                            : { type: "spring", stiffness: 420, damping: 34 }
+                        }
                       />
                     )}
                     <span className="relative">{m === "full" ? "Full rent" : "Part payment"}</span>
@@ -313,9 +318,10 @@ export function PayFlow({
               <AnimatePresence initial={false}>
                 {amountMode === "other" && (
                   <motion.div
-                    initial={{ height: 0, opacity: 0 }}
+                    initial={reduceMotion ? false : { height: 0, opacity: 0 }}
                     animate={{ height: "auto", opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
+                    exit={reduceMotion ? undefined : { height: 0, opacity: 0 }}
+                    transition={{ duration: reduceMotion ? 0 : duration.fast }}
                     className="overflow-hidden"
                   >
                     <div className="pt-4">
@@ -652,6 +658,7 @@ function Approve({
   onCancel: () => void;
   onDone: () => void;
 }) {
+  const reduceMotion = useReducedMotion();
   const [left, setLeft] = useState(APPROVE_SECONDS);
   const doneRef = useRef(onDone);
   doneRef.current = onDone;
@@ -665,18 +672,24 @@ function Approve({
   }, []);
   return (
     <motion.div
-      initial={{ opacity: 0, x: 24 }}
+      initial={reduceMotion ? false : { opacity: 0, x: 24 }}
       animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: 24 }}
-      transition={{ duration: 0.3, ease: ease.outExpo }}
+      exit={reduceMotion ? undefined : { opacity: 0, x: 24 }}
+      transition={{ duration: reduceMotion ? 0 : duration.base, ease: ease.outExpo }}
       className="flex flex-col items-center pt-6 text-center"
       aria-live="polite"
     >
       <div className="relative grid size-24 place-items-center">
         <motion.span
           className="absolute inset-0 rounded-full bg-primary-soft"
-          animate={{ scale: [1, 1.18, 1], opacity: [1, 0.5, 1] }}
-          transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+          animate={
+            reduceMotion ? { scale: 1, opacity: 1 } : { scale: [1, 1.18, 1], opacity: [1, 0.5, 1] }
+          }
+          transition={{
+            duration: reduceMotion ? 0 : 1.6,
+            repeat: reduceMotion ? 0 : Infinity,
+            ease: "easeInOut",
+          }}
         />
         <Smartphone className="relative size-10 text-primary" aria-hidden />
       </div>
@@ -694,9 +707,9 @@ function Approve({
       <div className="mt-8 h-2 w-full overflow-hidden rounded-full bg-muted">
         <motion.div
           className="h-full origin-left rounded-full bg-primary"
-          initial={{ scaleX: 0 }}
+          initial={reduceMotion ? false : { scaleX: 0 }}
           animate={{ scaleX: 1 }}
-          transition={{ duration: APPROVE_SECONDS, ease: "linear" }}
+          transition={{ duration: reduceMotion ? 0 : APPROVE_SECONDS, ease: "linear" }}
         />
       </div>
       <p className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">

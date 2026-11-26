@@ -1,6 +1,7 @@
 import { X } from "lucide-react";
-import { AnimatePresence, motion, useDragControls } from "motion/react";
+import { AnimatePresence, motion, useDragControls, useReducedMotion } from "motion/react";
 import { useEffect, type ReactNode } from "react";
+import { duration } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
 /** Bottom sheet that stays inside the app frame. Drag the handle down or press Escape to close. */
@@ -20,6 +21,7 @@ export function AppSheet({
   dismissible?: boolean;
 }) {
   const controls = useDragControls();
+  const reduceMotion = useReducedMotion();
   const onDeep = tone === "onDeep";
 
   useEffect(() => {
@@ -36,10 +38,10 @@ export function AppSheet({
           <motion.div
             key="overlay"
             className="absolute inset-0 z-30 bg-overlay"
-            initial={{ opacity: 0 }}
+            initial={reduceMotion ? false : { opacity: 0 }}
             animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.25 }}
+            exit={reduceMotion ? undefined : { opacity: 0 }}
+            transition={{ duration: reduceMotion ? 0 : duration.fast }}
             onClick={() => dismissible && onClose()}
           />
           <motion.div
@@ -51,10 +53,14 @@ export function AppSheet({
               "absolute inset-x-0 bottom-0 z-40 flex max-h-[94%] flex-col rounded-t-2xl shadow-lift",
               onDeep ? "deep-panel text-on-deep" : "bg-card",
             )}
-            initial={{ y: "100%" }}
+            initial={reduceMotion ? false : { y: "100%" }}
             animate={{ y: 0 }}
-            exit={{ y: "100%" }}
-            transition={{ type: "spring", damping: 36, stiffness: 360, mass: 0.9 }}
+            exit={reduceMotion ? undefined : { y: "100%" }}
+            transition={
+              reduceMotion
+                ? { duration: 0 }
+                : { type: "spring", damping: 36, stiffness: 360, mass: 0.9 }
+            }
             drag={dismissible ? "y" : false}
             dragListener={false}
             dragControls={controls}

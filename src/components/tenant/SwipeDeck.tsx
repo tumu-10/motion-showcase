@@ -145,7 +145,7 @@ function SwipeCard({
             whileTap={{ scale: 0.96 }}
             onClick={onView}
             onPointerDown={(e) => e.stopPropagation()}
-            className="absolute left-4 top-4 inline-flex h-10 items-center gap-1.5 rounded-full bg-card/95 px-3 text-sm font-semibold text-foreground shadow-soft backdrop-blur"
+            className="absolute left-4 top-4 inline-flex min-h-11 items-center gap-1.5 rounded-full bg-card/95 px-3 text-sm font-semibold text-foreground shadow-soft backdrop-blur"
             aria-label={`View details for ${item.title}`}
           >
             <Eye className="size-4" aria-hidden />

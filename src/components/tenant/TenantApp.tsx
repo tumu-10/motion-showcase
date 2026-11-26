@@ -36,7 +36,7 @@ import {
   Wrench,
   type LucideIcon,
 } from "lucide-react";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AppSheet } from "@/components/tenant/AppSheet";
@@ -90,7 +90,7 @@ import {
 } from "@/lib/home-services";
 import { homeServiceCategories } from "@/lib/home-service-categories";
 import { readHomeServiceProviders } from "@/lib/home-service-providers";
-import { ease } from "@/lib/motion";
+import { duration, ease } from "@/lib/motion";
 import { quickActionImages, serviceImageById } from "@/lib/service-images";
 import { issueTenantRentReceipt } from "@/lib/receipt-helpers";
 import { dataSource } from "@/lib/data-source";
@@ -174,10 +174,13 @@ async function fetchTenantHome() {
 }
 
 export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void }) {
+  const reduceMotion = useReducedMotion();
   const tenantProfile = dataSource.tenantProfile;
   const tenantUnitLabel = tenantProfile.unit.replace("Unit ", "");
   const { data: rentData, setData: setRentData, loaded: rentDataLoaded } = useRentDemoData();
-  const [serviceProviders, setServiceProviders] = useState(() => dataSource.demoHomeServiceProviders);
+  const [serviceProviders, setServiceProviders] = useState(
+    () => dataSource.demoHomeServiceProviders,
+  );
   const [paymentDetails, setPaymentDetails] = useState<LandlordPaymentDetails>(
     tenantProfile.paymentDetails,
   );
@@ -187,8 +190,8 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
   const moreActive = moreTabs.some((item) => item.id === tab);
   const [dir, setDir] = useState(1);
   const [paid, setPaid] = useState(false);
-  const [requests, setRequests] = useState<Complaint[]>(
-    () => dataSource.complaints.filter((m) => m.unit === tenantUnitLabel),
+  const [requests, setRequests] = useState<Complaint[]>(() =>
+    dataSource.complaints.filter((m) => m.unit === tenantUnitLabel),
   );
   const [activeTenant, setActiveTenant] = useState(true);
   const [notices, setNotices] = useState<TenantNotice[]>([]);
@@ -680,10 +683,10 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
               center: { x: 0, opacity: 1 },
               exit: (d: number) => ({ x: `${d * -18}%`, opacity: 0 }),
             }}
-            initial="enter"
+            initial={reduceMotion ? false : "enter"}
             animate="center"
-            exit="exit"
-            transition={{ duration: 0.38, ease: ease.outExpo }}
+            exit={reduceMotion ? undefined : "exit"}
+            transition={{ duration: reduceMotion ? 0 : duration.base, ease: ease.outExpo }}
             className="scrollbar-hidden absolute inset-0 overflow-y-auto overscroll-contain pb-[calc(5.25rem+env(safe-area-inset-bottom))]"
           >
             {tab === "home" && (
@@ -817,7 +820,11 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
                     layoutId="tenant-tab"
                     className="absolute inset-0 rounded-full bg-accent shadow-soft ring-2 ring-accent/25"
                     initial={false}
-                    transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                    transition={
+                      reduceMotion
+                        ? { duration: 0 }
+                        : { type: "spring", stiffness: 420, damping: 34 }
+                    }
                   />
                 )}
                 <Icon
@@ -838,7 +845,11 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
         <button
           onClick={() => setSheet("more")}
           aria-expanded={sheet === "more"}
-          aria-label="More tenant options"
+          aria-label={
+            unreadNotifications
+              ? `More tenant options, ${unreadNotifications} unread notifications`
+              : "More tenant options"
+          }
           className={cn(
             "group relative flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-lg text-[0.625rem] font-semibold transition-colors",
             moreActive ? "text-accent-foreground" : "text-on-deep-muted hover:text-accent",
@@ -850,7 +861,9 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
                 layoutId="tenant-tab"
                 className="absolute inset-0 rounded-full bg-accent shadow-soft ring-2 ring-accent/25"
                 initial={false}
-                transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                transition={
+                  reduceMotion ? { duration: 0 } : { type: "spring", stiffness: 420, damping: 34 }
+                }
               />
             )}
             <MoreHorizontal
@@ -910,9 +923,10 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
                   go(item.id);
                   setSheet(null);
                 }}
-                whileHover={{ x: 3, scale: 1.01 }}
-                whileTap={{ scale: 0.98 }}
-                transition={{ duration: 0.18, ease: ease.outExpo }}
+                {...(!reduceMotion
+                  ? { whileHover: { x: 3, scale: 1.01 }, whileTap: { scale: 0.98 } }
+                  : {})}
+                transition={{ duration: reduceMotion ? 0 : duration.fast, ease: ease.outExpo }}
                 className={cn(
                   "group flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold transition-colors",
                   active
@@ -2490,7 +2504,7 @@ function HomesTab({ onInterested }: { onInterested: () => void }) {
           size="sm"
           variant={showFavorites ? "outline" : "default"}
           aria-pressed={!showFavorites}
-          className="w-full"
+          className="min-h-11 w-full"
           onClick={() => setShowFavorites(false)}
         >
           <Search className="size-4" aria-hidden />
@@ -2500,7 +2514,7 @@ function HomesTab({ onInterested }: { onInterested: () => void }) {
           size="sm"
           variant={showFavorites ? "default" : "outline"}
           aria-pressed={showFavorites}
-          className="w-full"
+          className="min-h-11 w-full"
           onClick={() => setShowFavorites(true)}
         >
           <Heart className="size-4" aria-hidden />
@@ -2523,7 +2537,7 @@ function HomesTab({ onInterested }: { onInterested: () => void }) {
               <p className="mt-1 text-sm text-muted-foreground">
                 Save homes with the heart button and they’ll be waiting here.
               </p>
-              <Button size="sm" className="mt-4" onClick={() => setShowFavorites(false)}>
+              <Button size="sm" className="mt-4 min-h-11" onClick={() => setShowFavorites(false)}>
                 Browse homes
               </Button>
             </div>
@@ -2558,7 +2572,7 @@ function HomesTab({ onInterested }: { onInterested: () => void }) {
                               type="button"
                               aria-label={`Remove ${item.title} from favorites`}
                               onClick={() => toggleFavorite(item)}
-                              className="press -mr-1 -mt-1 grid size-8 shrink-0 place-items-center rounded-full text-primary"
+                              className="press -mr-1 -mt-1 grid size-11 shrink-0 place-items-center rounded-full text-primary"
                             >
                               <Heart className="size-4 fill-current" aria-hidden />
                             </button>
@@ -2576,7 +2590,7 @@ function HomesTab({ onInterested }: { onInterested: () => void }) {
                         <Button
                           size="sm"
                           variant="outline"
-                          className="w-full"
+                          className="min-h-11 w-full"
                           onClick={() => setViewingListing(item)}
                         >
                           <Eye className="size-4" aria-hidden />
@@ -2584,7 +2598,7 @@ function HomesTab({ onInterested }: { onInterested: () => void }) {
                         </Button>
                         <Button
                           size="sm"
-                          className="w-full"
+                          className="min-h-11 w-full"
                           disabled={requested}
                           aria-label={`Request viewing for ${item.title}`}
                           onClick={() => requestViewing(item)}
@@ -2607,7 +2621,7 @@ function HomesTab({ onInterested }: { onInterested: () => void }) {
               <Select value={area} onValueChange={setArea}>
                 <SelectTrigger
                   aria-label="Location"
-                  className="h-10 rounded-xl bg-card [&>svg]:transition-transform [&>svg]:duration-200 data-[state=open]:[&>svg]:rotate-180"
+                  className="h-11 rounded-xl bg-card [&>svg]:transition-transform [&>svg]:duration-200 data-[state=open]:[&>svg]:rotate-180"
                 >
                   <SelectValue />
                 </SelectTrigger>
@@ -2627,7 +2641,7 @@ function HomesTab({ onInterested }: { onInterested: () => void }) {
               <Select value={budget} onValueChange={setBudget}>
                 <SelectTrigger
                   aria-label="Budget"
-                  className="h-10 rounded-xl bg-card px-2 [&>svg]:transition-transform [&>svg]:duration-200 data-[state=open]:[&>svg]:rotate-180"
+                  className="h-11 rounded-xl bg-card px-2 [&>svg]:transition-transform [&>svg]:duration-200 data-[state=open]:[&>svg]:rotate-180"
                 >
                   <SelectValue>{selectedBudget?.triggerLabel}</SelectValue>
                 </SelectTrigger>
@@ -2646,7 +2660,7 @@ function HomesTab({ onInterested }: { onInterested: () => void }) {
               <Select value={bedrooms} onValueChange={setBedrooms}>
                 <SelectTrigger
                   aria-label="Bedrooms"
-                  className="h-10 rounded-xl bg-card px-2 [&>svg]:transition-transform [&>svg]:duration-200 data-[state=open]:[&>svg]:rotate-180"
+                  className="h-11 rounded-xl bg-card px-2 [&>svg]:transition-transform [&>svg]:duration-200 data-[state=open]:[&>svg]:rotate-180"
                 >
                   <SelectValue>{selectedBedrooms?.triggerLabel}</SelectValue>
                 </SelectTrigger>

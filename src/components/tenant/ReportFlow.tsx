@@ -10,14 +10,14 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useState } from "react";
 import { AnimatedCheck } from "@/components/shared/AnimatedCheck";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { FieldError } from "@/components/tenant/PayFlow";
-import { ease } from "@/lib/motion";
+import { duration, ease } from "@/lib/motion";
 import { queueOfflineComplaint } from "@/lib/offline-queue";
 import { cn } from "@/lib/utils";
 
@@ -48,6 +48,7 @@ export function ReportFlow({
   onSubmitted: (r: ReportInput) => void;
   onClose: () => void;
 }) {
+  const reduceMotion = useReducedMotion();
   const [category, setCategory] = useState<string | null>(null);
   const [urgency, setUrgency] = useState<(typeof urgencies)[number]>("Normal");
   const [description, setDescription] = useState("");
@@ -113,7 +114,7 @@ export function ReportFlow({
   if (state === "sent") {
     return (
       <motion.div
-        initial={{ opacity: 0 }}
+        initial={reduceMotion ? false : { opacity: 0 }}
         animate={{ opacity: 1 }}
         className="flex flex-col items-center pt-4 text-center"
       >
@@ -152,9 +153,13 @@ export function ReportFlow({
                   setCategory(c.id);
                   setErrors((er) => ({ ...er, category: undefined }));
                 }}
-                initial={{ opacity: 0, y: 8 }}
+                initial={reduceMotion ? false : { opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.03 * i, duration: 0.3, ease: ease.outExpo }}
+                transition={{
+                  delay: reduceMotion ? 0 : 0.03 * i,
+                  duration: reduceMotion ? 0 : duration.fast,
+                  ease: ease.outExpo,
+                }}
                 className={cn(
                   "press flex min-h-20 flex-col items-center justify-center gap-1.5 rounded-lg border-2 text-sm font-semibold",
                   selected
@@ -245,7 +250,7 @@ export function ReportFlow({
                   setPhoto(null);
                   setPhotoFile(null);
                 }}
-                className="absolute right-2 top-2 grid size-10 place-items-center rounded-full bg-card shadow-soft"
+                className="absolute right-2 top-2 grid size-11 place-items-center rounded-full bg-card shadow-soft"
                 aria-label="Remove photo"
               >
                 <X className="size-4" />

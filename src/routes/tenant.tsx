@@ -1,14 +1,14 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowLeft, Check, CircleUserRound } from "lucide-react";
 import { TransitionLink } from "@/components/motion/PageTransition";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useCallback, useState } from "react";
 import { Logo } from "@/components/brand/Logo";
 import { Reveal } from "@/components/motion/Reveal";
 import { DemoSwitcher } from "@/components/shared/DemoSwitcher";
 import { SampleTag } from "@/components/shared/StatusPill";
 import { TenantApp, type TenantTask } from "@/components/tenant/TenantApp";
-import { ease } from "@/lib/motion";
+import { duration, ease } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import { requireRole } from "@/lib/auth/route-guards";
 import { authService } from "@/lib/auth/auth-service";
@@ -56,6 +56,7 @@ const tasks: { id: TenantTask; title: string; hint: string }[] = [
 
 function TenantPage() {
   const [done, setDone] = useState<TenantTask[]>([]);
+  const reduceMotion = useReducedMotion();
   const signedIn = !!authService.getSession();
   const onTaskDone = useCallback(
     (t: TenantTask) => setDone((d) => (d.includes(t) ? d : [...d, t])),
@@ -86,9 +87,13 @@ function TenantPage() {
 
         <motion.div
           className="relative flex h-dvh w-full flex-col overflow-hidden bg-foreground lg:h-[min(860px,calc(100dvh-5rem))] lg:w-[min(400px,calc(46dvh-2.3rem))] lg:rounded-[3rem] lg:border-[8px] lg:border-[#1b2b30] lg:shadow-device lg:ring-1 lg:ring-inset lg:ring-white/10"
-          initial={{ opacity: 0, y: 40 }}
+          initial={reduceMotion ? false : { opacity: 0, y: 40 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.9, ease: ease.outExpo, delay: 0.25 }}
+          transition={{
+            duration: reduceMotion ? 0 : duration.page,
+            ease: ease.outExpo,
+            delay: reduceMotion ? 0 : 0.25,
+          }}
         >
           <span
             className="pointer-events-none absolute left-0 top-[24%] z-10 hidden h-10 w-[5px] rounded-l-sm bg-[#526166] shadow-[inset_1px_0_1px_#aab4b6] lg:block"
