@@ -9,6 +9,7 @@ export const duration = { fast: 0.18, base: 0.32, slow: 0.6, page: 0.7 };
 
 /** Preloader length on a full page load, in ms. Content reveals once it lifts. */
 export const PRELOADER_MS = 800;
+export const PRELOADER_LEAVE_MS = 350;
 
 // Timestamp (performance.now) when page content becomes visible.
 let revealAt = typeof performance !== "undefined" ? performance.now() + PRELOADER_MS : 0;

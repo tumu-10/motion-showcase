@@ -1,6 +1,6 @@
 import { animate, motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
-import { ease, PRELOADER_MS, setRevealAt } from "@/lib/motion";
+import { ease, PRELOADER_LEAVE_MS, PRELOADER_MS, setRevealAt } from "@/lib/motion";
 
 /** Full-screen brand loader shown once per full page load. */
 export function Preloader() {
@@ -11,15 +11,16 @@ export function Preloader() {
   useEffect(() => {
     document.documentElement.style.overflow = "hidden";
     const total = reduce ? 250 : PRELOADER_MS;
+    const leaveDuration = reduce ? 200 : PRELOADER_LEAVE_MS;
     if (reduce) setRevealAt(total);
     const counter = animate(0, 100, {
-      duration: (total - 350) / 1000,
+      duration: Math.max(total - leaveDuration, 0) / 1000,
       ease: [0.65, 0, 0.35, 1],
       onUpdate: (v) => {
         if (countRef.current) countRef.current.textContent = String(Math.round(v)).padStart(2, "0");
       },
     });
-    const leave = window.setTimeout(() => setPhase("leaving"), total - 350);
+    const leave = window.setTimeout(() => setPhase("leaving"), total - leaveDuration);
     return () => {
       counter.stop();
       window.clearTimeout(leave);
@@ -35,7 +36,10 @@ export function Preloader() {
       className="deep-panel fixed inset-0 z-[var(--z-preloader)] flex flex-col"
       initial={{ y: 0 }}
       animate={phase === "leaving" ? { y: "-100%" } : { y: 0 }}
-      transition={{ duration: reduce ? 0.2 : 0.8, ease: ease.inOutQuart }}
+      transition={{
+        duration: (reduce ? 200 : PRELOADER_LEAVE_MS) / 1000,
+        ease: ease.inOutQuart,
+      }}
       onAnimationComplete={() => {
         if (phase === "leaving") {
           document.documentElement.style.overflow = "";
@@ -81,7 +85,10 @@ export function Preloader() {
         className="h-1 origin-left bg-accent"
         initial={{ scaleX: 0 }}
         animate={{ scaleX: 1 }}
-        transition={{ duration: (PRELOADER_MS - 350) / 1000, ease: [0.65, 0, 0.35, 1] }}
+        transition={{
+          duration: reduce ? 0 : (PRELOADER_MS - PRELOADER_LEAVE_MS) / 1000,
+          ease: [0.65, 0, 0.35, 1],
+        }}
       />
     </motion.div>
   );
