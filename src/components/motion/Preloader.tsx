@@ -21,9 +21,14 @@ export function Preloader() {
       },
     });
     const leave = window.setTimeout(() => setPhase("leaving"), total - leaveDuration);
+    const finish = window.setTimeout(() => {
+      document.documentElement.style.overflow = "";
+      setPhase("done");
+    }, total);
     return () => {
       counter.stop();
       window.clearTimeout(leave);
+      window.clearTimeout(finish);
     };
   }, [reduce]);
 
@@ -39,12 +44,6 @@ export function Preloader() {
       transition={{
         duration: (reduce ? 200 : PRELOADER_LEAVE_MS) / 1000,
         ease: ease.inOutQuart,
-      }}
-      onAnimationComplete={() => {
-        if (phase === "leaving") {
-          document.documentElement.style.overflow = "";
-          setPhase("done");
-        }
       }}
     >
       <div className="flex flex-1 flex-col items-center justify-center gap-6">
