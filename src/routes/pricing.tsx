@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { ArrowRight, Check } from "lucide-react";
 import { TransitionLink } from "@/components/motion/PageTransition";
+import { Reveal } from "@/components/motion/Reveal";
 import { PublicSiteLayout } from "@/components/site/PublicSiteLayout";
 import { buttonVariants } from "@/components/ui/button";
 import { getWhatsAppHref } from "@/lib/contact";
@@ -23,14 +24,16 @@ function PricingPage() {
   return (
     <PublicSiteLayout>
       <section className="mx-auto max-w-5xl px-5 py-12 sm:px-8 sm:py-16">
-        <p className="text-eyebrow text-primary">Simple pricing</p>
-        <h1 className="mt-3 text-display text-primary-deep">
-          Start small. Grow with your properties.
-        </h1>
-        <p className="mt-4 max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
-          Straightforward plans for landlords and property managers. Pilot prices are placeholders
-          and may change.
-        </p>
+        <Reveal>
+          <p className="text-eyebrow text-primary">Simple pricing</p>
+          <h1 className="mt-3 text-display text-primary-deep">
+            Start small. Grow with your properties.
+          </h1>
+          <p className="mt-4 max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
+            Straightforward plans for landlords and property managers. Pilot prices are placeholders
+            and may change.
+          </p>
+        </Reveal>
 
         <div className="mt-8 grid gap-5 md:grid-cols-3">
           <article className="flex flex-col rounded-2xl border border-border bg-card p-6 shadow-soft">

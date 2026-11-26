@@ -15,9 +15,13 @@ export function Reveal({ delay = 0, y = 18, children, ...rest }: RevealProps) {
   return (
     <motion.div
       ref={ref}
-      initial={reduce ? false : { opacity: 0, y }}
+      initial={{ opacity: 0, y }}
       animate={inView ? { opacity: 1, y: 0 } : {}}
-      transition={{ duration: 0.7, ease: ease.outExpo, delay: inView ? entryDelay() + delay : 0 }}
+      transition={{
+        duration: reduce ? 0 : 0.7,
+        ease: ease.outExpo,
+        delay: !reduce && inView ? entryDelay() + delay : 0,
+      }}
       {...rest}
     >
       {children}
@@ -51,9 +55,13 @@ export function SplitHeading({
         <span key={i} aria-hidden className="inline-block overflow-hidden pb-[0.08em] align-bottom">
           <motion.span
             className="inline-block"
-            initial={reduce || !animateOnLoad ? false : { y: "110%" }}
+            initial={!animateOnLoad ? false : { y: "110%" }}
             animate={inView ? { y: "0%" } : {}}
-            transition={{ duration: 0.85, ease: ease.outExpo, delay: start + i * 0.06 }}
+            transition={{
+              duration: reduce ? 0 : 0.85,
+              ease: ease.outExpo,
+              delay: !reduce ? start + i * 0.06 : 0,
+            }}
           >
             {w}
             {i < words.length - 1 ? "\u00a0" : ""}

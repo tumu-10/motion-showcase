@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { LockKeyhole, ReceiptText, ShieldCheck } from "lucide-react";
+import { Reveal } from "@/components/motion/Reveal";
 import { PublicSiteLayout } from "@/components/site/PublicSiteLayout";
 
 export const Route = createFileRoute("/trust")({
@@ -57,12 +58,16 @@ function TrustPage() {
   return (
     <PublicSiteLayout>
       <section className="mx-auto max-w-5xl px-5 py-12 sm:px-8 sm:py-16">
-        <p className="text-eyebrow text-primary">Trust &amp; safety</p>
-        <h1 className="mt-3 text-display text-primary-deep">Clear records. Honest protections.</h1>
-        <p className="mt-4 max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
-          Propatiz is currently a front-end prototype. Here is what the product is designed to
-          support and what is not yet active.
-        </p>
+        <Reveal>
+          <p className="text-eyebrow text-primary">Trust &amp; safety</p>
+          <h1 className="mt-3 text-display text-primary-deep">
+            Clear records. Honest protections.
+          </h1>
+          <p className="mt-4 max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
+            Propatiz is currently a front-end prototype. Here is what the product is designed to
+            support and what is not yet active.
+          </p>
+        </Reveal>
         <div className="mt-8 grid gap-4 md:grid-cols-3">
           {sections.map(({ title, icon: Icon, content }) => (
             <article

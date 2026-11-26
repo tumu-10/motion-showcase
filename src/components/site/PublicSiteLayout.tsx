@@ -2,6 +2,7 @@ import { MessageCircle } from "lucide-react";
 import type { ReactNode } from "react";
 import { Logo } from "@/components/brand/Logo";
 import { TransitionLink } from "@/components/motion/PageTransition";
+import { Reveal } from "@/components/motion/Reveal";
 import { SiteHeader } from "@/components/site/SiteHeader";
 import { getWhatsAppHref } from "@/lib/contact";
 
@@ -81,7 +82,7 @@ export function WhatsAppContact() {
       href={getWhatsAppHref()}
       target="_blank"
       rel="noreferrer noopener"
-      className="fixed bottom-4 right-4 z-40 inline-flex min-h-12 items-center gap-2 rounded-full bg-[#15803d] px-4 py-3 text-sm font-semibold text-white shadow-lg transition-transform duration-200 ease-out hover:scale-[1.03] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary sm:bottom-6 sm:right-6"
+      className="fixed bottom-4 right-4 z-40 inline-flex min-h-12 items-center gap-2 rounded-full bg-[#15803d] px-4 py-3 text-sm font-semibold text-white shadow-lg transition-transform duration-200 ease-out motion-safe:hover:scale-[1.03] motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary sm:bottom-6 sm:right-6"
       aria-label="Chat with us on WhatsApp"
     >
       <MessageCircle aria-hidden="true" className="size-5" />

@@ -27,7 +27,7 @@ export function SiteHeader() {
 
   return (
     <motion.header
-      initial={reduceMotion ? false : { y: -24, opacity: 0 }}
+      initial={{ y: -24, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{
         duration: reduceMotion ? 0 : duration.page,

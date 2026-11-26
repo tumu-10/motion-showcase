@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { ArrowRight, CheckCircle2 } from "lucide-react";
 import { useState, type FormEvent, type ReactNode } from "react";
+import { Reveal } from "@/components/motion/Reveal";
 import { PublicSiteLayout } from "@/components/site/PublicSiteLayout";
 import { buttonVariants } from "@/components/ui/button";
 import {
@@ -142,14 +143,16 @@ function PilotPage() {
   return (
     <PublicSiteLayout>
       <section className="mx-auto max-w-3xl px-5 py-12 sm:px-8 sm:py-16">
-        <p className="text-eyebrow text-primary">Propatiz pilot</p>
-        <h1 className="mt-3 text-display text-primary-deep">
-          Help shape rent management in Uganda.
-        </h1>
-        <p className="mt-4 max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
-          Tell us a little about your rental setup. We’ll use your details to understand who the
-          pilot can serve.
-        </p>
+        <Reveal>
+          <p className="text-eyebrow text-primary">Propatiz pilot</p>
+          <h1 className="mt-3 text-display text-primary-deep">
+            Help shape rent management in Uganda.
+          </h1>
+          <p className="mt-4 max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
+            Tell us a little about your rental setup. We’ll use your details to understand who the
+            pilot can serve.
+          </p>
+        </Reveal>
 
         <form
           onSubmit={handleSubmit}
