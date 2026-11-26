@@ -1,4 +1,5 @@
 import { createInitialEfrisState, type EfrisProfile, type EfrisReceiptState } from "@/lib/efris";
+import { dataSource } from "@/lib/data-source";
 
 export type ReceiptBranding = {
   versionId: string;
@@ -15,20 +16,9 @@ export type ReceiptBranding = {
   watermarkEnabled: boolean;
 };
 
-export const defaultReceiptBranding: ReceiptBranding = {
-  versionId: "propatiz-default",
-  landlordName: "Kololo Heights Management",
-  landlordAddress: "Kololo, Kampala, Uganda",
-  landlordTin: "",
-  landlordType: "individual",
-  vatRegistered: false,
-  efrisEnrollmentStatus: "not-enrolled",
-  annualRentalIncomeUGX: null,
-  logoChoice: "propatiz",
-  customLogoDataUrl: null,
-  brandColor: "#103b43",
-  watermarkEnabled: true,
-};
+export function getDefaultReceiptBranding(): ReceiptBranding {
+  return { ...dataSource.defaultReceiptBranding };
+}
 
 const archiveKey = "propatiz-demo-receipt-archive";
 
@@ -75,6 +65,7 @@ export type ReceiptBundle = {
 function readArchive(): ReceiptArchive {
   const saved = localStorage.getItem(archiveKey);
   if (!saved) {
+    const defaultReceiptBranding = getDefaultReceiptBranding();
     return {
       currentBranding: defaultReceiptBranding,
       brandings: { [defaultReceiptBranding.versionId]: defaultReceiptBranding },
@@ -133,7 +124,7 @@ export function saveReceiptBranding(branding: Omit<ReceiptBranding, "versionId">
   return saved;
 }
 
-export function issueReceipt(content: ReceiptContent): ReceiptBundle {
+export function issueReceipt(content: ReceiptContent, receiptNumber?: string): ReceiptBundle {
   const archive = readArchive();
   const existing = archive.receipts.find(
     (receipt) =>
@@ -168,7 +159,7 @@ export function issueReceipt(content: ReceiptContent): ReceiptBundle {
   archive.brandings[branding.versionId] = branding;
   const efris = createInitialEfrisState(content, branding);
   const receipt: ReceiptRecord = {
-    receiptNumber: makeReceiptNumber(),
+    receiptNumber: receiptNumber ?? makeReceiptNumber(),
     status: "Valid",
     replacementReceiptNumber: null,
     cancellationReason: null,
@@ -179,6 +170,11 @@ export function issueReceipt(content: ReceiptContent): ReceiptBundle {
   archive.receipts.unshift(receipt);
   writeArchive(archive);
   return { receipt, branding };
+}
+
+export function issueTenantReceipt(content: ReceiptContent): ReceiptBundle {
+  const archive = readArchive();
+  return issueReceipt(content, makeTenantReceiptNumber(content.issuedAt, archive.receipts));
 }
 
 export function getReceiptBundle(receiptNumber: string): ReceiptBundle | null {
@@ -237,7 +233,10 @@ export function cancelAndReissueReceipt(receiptNumber: string, reason: string): 
   const cleanReason = reason.trim();
   if (!cleanReason) throw new Error("Enter a reason for cancelling and reissuing this receipt.");
 
-  const replacementNumber = makeReceiptNumber();
+  const replacementIssuedAt = new Date().toISOString();
+  const replacementNumber = /^PRP-\d{6}-\d{4,}$/.test(current.receiptNumber)
+    ? makeTenantReceiptNumber(replacementIssuedAt, archive.receipts)
+    : makeReceiptNumber();
   const replacementEfris = createInitialEfrisState(
     current.content,
     archive.brandings[current.brandingVersionId] ?? archive.currentBranding,
@@ -250,7 +249,7 @@ export function cancelAndReissueReceipt(receiptNumber: string, reason: string): 
     brandingVersionId: current.brandingVersionId,
     content: {
       ...current.content,
-      issuedAt: new Date().toISOString(),
+      issuedAt: replacementIssuedAt,
       efrisStatus: efrisStatusLabel(replacementEfris.status),
     },
     efris: replacementEfris,
@@ -272,7 +271,7 @@ export function cancelAndReissueReceipt(receiptNumber: string, reason: string): 
 }
 
 function normalizeBranding(value: ReceiptBranding): ReceiptBranding {
-  return { ...defaultReceiptBranding, ...value };
+  return { ...getDefaultReceiptBranding(), ...value };
 }
 
 function normalizeReceipt(record: ReceiptRecord, branding: ReceiptBranding): ReceiptRecord {
@@ -344,6 +343,22 @@ export async function resizeReceiptLogo(file: File): Promise<string> {
   } finally {
     URL.revokeObjectURL(objectUrl);
   }
+}
+
+function makeTenantReceiptNumber(issuedAtValue: string, receipts: ReceiptRecord[]) {
+  const issuedAt = new Date(issuedAtValue);
+  if (Number.isNaN(issuedAt.getTime())) {
+    throw new RangeError("Receipt issue dates must be valid dates.");
+  }
+  const month = `${issuedAt.getUTCFullYear()}${String(issuedAt.getUTCMonth() + 1).padStart(2, "0")}`;
+  const prefix = `PRP-${month}-`;
+  const usedNumbers = receipts.flatMap((receipt) => {
+    if (!receipt.receiptNumber.startsWith(prefix)) return [];
+    const sequence = Number(receipt.receiptNumber.slice(prefix.length));
+    return Number.isInteger(sequence) ? [sequence] : [];
+  });
+  const nextNumber = Math.max(0, ...usedNumbers) + 1;
+  return `${prefix}${String(nextNumber).padStart(4, "0")}`;
 }
 
 function makeReceiptNumber() {

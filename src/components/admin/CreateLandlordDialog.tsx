@@ -15,12 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { BrandLogo } from "@/components/payments/BrandLogo";
 import { validateLandlordPaymentDetails } from "@/lib/demo-settings";
 import { bankOptions, getBankBrand } from "@/lib/payment-banks";
-import {
-  PROPERTY_TYPE_LABELS,
-  type Landlord,
-  type PropertyType,
-  type SubscriptionPlan,
-} from "@/lib/sample-data";
+import { type Landlord, type PropertyType, type SubscriptionPlan } from "@/lib/sample-data";
 
 type DraftUnit = {
   id: string;

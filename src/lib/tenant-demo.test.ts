@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  readTenantMoveInChecklist,
   readTenantNotices,
   saveTenantNotice,
+  updateTenantMoveInChecklistItem,
   updateTenantNoticeResponse,
   type TenantNotice,
 } from "./tenant-demo";
@@ -46,6 +48,38 @@ describe("tenant notice storage", () => {
         reason: "Non-payment",
       },
     ]);
+  });
+
+  describe("tenant move-in checklist storage", () => {
+    it("starts with the sample checklist and persists completion notes and a photo", () => {
+      const [first] = readTenantMoveInChecklist();
+      if (!first) throw new Error("Sample move-in checklist is required.");
+      const photo = "data:image/png;base64,aGVsbG8=";
+
+      const updated = updateTenantMoveInChecklistItem(first.id, {
+        checked: true,
+        note: "One key received",
+        photoDataUrl: photo,
+      });
+
+      expect(updated[0]).toMatchObject({
+        checked: true,
+        note: "One key received",
+        photoDataUrl: photo,
+      });
+      expect(readTenantMoveInChecklist()).toEqual(updated);
+    });
+
+    it("rejects unknown checklist items and non-image photos", () => {
+      expect(() => updateTenantMoveInChecklistItem("unknown", { checked: true })).toThrow(
+        /no longer available/i,
+      );
+      const [first] = readTenantMoveInChecklist();
+      if (!first) throw new Error("Sample move-in checklist is required.");
+      expect(() =>
+        updateTenantMoveInChecklistItem(first.id, { photoDataUrl: "data:text/html;base64,abc" }),
+      ).toThrow(/JPG or PNG/i);
+    });
   });
 
   it("keeps multiple notices and persists tenant responses", () => {

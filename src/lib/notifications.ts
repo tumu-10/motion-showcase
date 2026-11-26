@@ -53,16 +53,16 @@ export const mockNotificationAdapters: Record<NotificationChannel, MockNotificat
     channel: "sms",
     deliver: () => ({
       channel: "sms",
-      status: "mocked",
-      note: "Mock SMS only; no message was sent.",
+      status: "disabled",
+      note: "SMS delivery is not configured; no message was sent.",
     }),
   },
   whatsapp: {
     channel: "whatsapp",
     deliver: () => ({
       channel: "whatsapp",
-      status: "mocked",
-      note: "Mock WhatsApp only; no message was sent.",
+      status: "disabled",
+      note: "WhatsApp delivery is not configured; no message was sent.",
     }),
   },
 };
@@ -110,6 +110,89 @@ export function createNotification(
         },
   );
   return { ...notification, audience, delivery };
+}
+
+export function sendNotification(
+  userId: string,
+  channel: NotificationChannel,
+  template: string,
+  data: Omit<NotificationInput, "id"> & { id?: string | undefined },
+): NotificationDelivery {
+  const cleanUserId = userId.trim();
+  const cleanTemplate = template.trim();
+  if (!cleanUserId) throw new Error("A recipient is required to send a notification.");
+  if (!cleanTemplate) throw new Error("A notification template is required.");
+  if (channel !== "in-app") {
+    return mockNotificationAdapters[channel].deliver({
+      ...data,
+      id: data.id ?? `${cleanTemplate}:${cleanUserId}:${Date.now()}`,
+    });
+  }
+  if (typeof localStorage === "undefined") {
+    throw new Error("In-app notifications can only be saved in the browser demo.");
+  }
+
+  const result = readRentDemoState();
+  if (result.error) throw result.error;
+  const input: NotificationInput = {
+    ...data,
+    id: data.id ?? `${cleanTemplate}:${cleanUserId}:${Date.now()}`,
+  };
+  if (result.state.notifications.some((notification) => notification.id === input.id)) {
+    return {
+      channel: "in-app",
+      status: "mocked",
+      note: "This notification is already in the local notification centre.",
+    };
+  }
+  const notification: TenantNotification = {
+    ...input,
+    audience: input.audience ?? "tenant",
+    delivery: [mockNotificationAdapters["in-app"].deliver(input)],
+  };
+  writeRentDemoState({
+    ...result.state,
+    notifications: [notification, ...result.state.notifications],
+  });
+  return notification.delivery[0]!;
+}
+
+export function buildTenantRentDueNotification(
+  unit: Unit,
+  balance: number,
+  now = new Date(),
+): NotificationInput | null {
+  if (!unit.tenant || balance <= 0) return null;
+  const dueDay = unit.dueDay;
+  if (!dueDay || !Number.isInteger(dueDay) || dueDay < 1 || dueDay > 31) return null;
+  const daysUntilDue = getDaysUntilDue(now, dueDay);
+  if (daysUntilDue !== 7 && daysUntilDue !== 0 && daysUntilDue >= 0) return null;
+
+  const eventType: NotificationEventType = daysUntilDue < 0 ? "rent-overdue" : "rent-due-soon";
+  const title =
+    daysUntilDue < 0
+      ? "Rent overdue"
+      : daysUntilDue === 0
+        ? "Rent due today"
+        : "Rent due in 7 days";
+  const period = currentRentPeriod(now);
+  return {
+    id: `tenant-rent-due:${unit.id}:${period}:${eventType}`,
+    audience: "tenant",
+    eventType,
+    unitId: unit.id,
+    unit: unit.unit,
+    kind: "rent",
+    title,
+    message:
+      daysUntilDue < 0
+        ? `Rent of ${formatUGX(balance)} for ${unit.property} · Unit ${unit.unit} is overdue.`
+        : `Rent of ${formatUGX(balance)} for ${unit.property} · Unit ${unit.unit} is ${
+            daysUntilDue === 0 ? "due today." : "due in 7 days."
+          }`,
+    createdAt: now.toISOString(),
+    read: false,
+  };
 }
 
 export function runReminderJob(now = new Date(), suppliedState?: RentDemoState): ReminderJobResult {

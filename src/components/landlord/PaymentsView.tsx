@@ -327,6 +327,16 @@ export function PaymentsView({
                   View bank transfer proof
                 </a>
               )}
+              {entry.receiptPhotoDataUrl && (
+                <a
+                  href={entry.receiptPhotoDataUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-3 inline-flex text-sm font-semibold text-primary underline"
+                >
+                  View cash receipt photo
+                </a>
+              )}
               {entry.status === "Confirmed" && (
                 <div className="mt-4">
                   <ReceiptActions getBundle={() => receiptFor(entry, ledger, units)} />
@@ -390,6 +400,16 @@ export function PaymentsView({
                       className="mt-1 block text-xs font-semibold text-primary underline"
                     >
                       View bank proof
+                    </a>
+                  )}
+                  {l.receiptPhotoDataUrl && (
+                    <a
+                      href={l.receiptPhotoDataUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-1 block text-xs font-semibold text-primary underline"
+                    >
+                      View cash receipt
                     </a>
                   )}
                 </td>

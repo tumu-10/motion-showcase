@@ -25,12 +25,13 @@ const noticeTitles: Record<NoticeKind, string> = {
   "notice-to-vacate": "Notice to vacate",
   "rent-increase": "Rent-increase notice",
   "end-of-tenancy": "End-of-tenancy notice",
+  repair: "Repair notice",
 };
 
 const lawfulSteps = [
   "Serve the notice first and allow the full notice period to expire.",
   "Do not use force, lock anyone out, or seize belongings.",
-  "After expiry, arrange re-entry in the presence of LC1 officials and police.",
+  "If the tenant stays after the notice, a court order is required. Do not remove a tenant yourself.",
   `Use court for arrears; small claims may apply up to ${formatUGX(SMALL_CLAIMS_LIMIT_UGX)}.`,
 ];
 
@@ -75,16 +76,14 @@ export async function buildNoticePdf(notice: TenantNotice, branding: ReceiptBran
       thickness: 1.2,
       color: accent,
     });
-    if (branding.watermarkEnabled) {
-      const watermark = fitPdfImage(logo, 300, 115);
-      page.drawImage(logo, {
-        x: (pageWidth - watermark.width) / 2,
-        y: (pageHeight - watermark.height) / 2,
-        width: watermark.width,
-        height: watermark.height,
-        opacity: 0.045,
-      });
-    }
+    const watermark = fitPdfImage(logo, 300, 115);
+    page.drawImage(logo, {
+      x: (pageWidth - watermark.width) / 2,
+      y: (pageHeight - watermark.height) / 2,
+      width: watermark.width,
+      height: watermark.height,
+      opacity: 0.045,
+    });
     return page;
   }
 
@@ -94,6 +93,7 @@ export async function buildNoticePdf(notice: TenantNotice, branding: ReceiptBran
     ["Tenant", notice.tenant],
     ["Property and unit", `${notice.property} · ${notice.unit}`],
     ["Notice date", notice.issuedOn],
+    ...(notice.issuedBy ? [["Prepared by", notice.issuedBy] as [string, string]] : []),
     ...(notice.effectiveDate
       ? [["Effective / move-out date", notice.effectiveDate] as [string, string]]
       : []),

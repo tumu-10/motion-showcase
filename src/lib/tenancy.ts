@@ -33,7 +33,7 @@ export type Tenancy = {
   copyGivenToTenantAt: string | null;
 };
 
-export type DepositStatus = "Held" | "Refund pending" | "Refunded" | "Disputed";
+export type DepositStatus = "Held" | "Refund pending" | "Partly refunded" | "Refunded" | "Disputed";
 
 export type DepositDeduction = {
   description: string;

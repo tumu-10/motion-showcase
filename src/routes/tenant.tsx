@@ -1,5 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { ArrowLeft, Check } from "lucide-react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { ArrowLeft, Check, CircleUserRound } from "lucide-react";
 import { TransitionLink } from "@/components/motion/PageTransition";
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useState } from "react";
@@ -10,8 +10,12 @@ import { SampleTag } from "@/components/shared/StatusPill";
 import { TenantApp, type TenantTask } from "@/components/tenant/TenantApp";
 import { ease } from "@/lib/motion";
 import { cn } from "@/lib/utils";
+import { requireRole } from "@/lib/auth/route-guards";
+import { authService } from "@/lib/auth/auth-service";
+import { authStrings } from "@/lib/auth/strings";
 
 export const Route = createFileRoute("/tenant")({
+  beforeLoad: () => requireRole("tenant", { allowDemo: true }),
   head: () => ({
     meta: [
       { title: "Tenant app | Propatiz" },
@@ -52,6 +56,7 @@ const tasks: { id: TenantTask; title: string; hint: string }[] = [
 
 function TenantPage() {
   const [done, setDone] = useState<TenantTask[]>([]);
+  const signedIn = !!authService.getSession();
   const onTaskDone = useCallback(
     (t: TenantTask) => setDone((d) => (d.includes(t) ? d : [...d, t])),
     [],
@@ -126,6 +131,16 @@ function TenantPage() {
               >
                 Admin view
               </TransitionLink>
+              {signedIn && (
+                <Link
+                  to="/account/settings"
+                  aria-label={authStrings.settings.title}
+                  title={authStrings.settings.title}
+                  className="flex min-h-11 w-10 items-center justify-center text-on-deep-muted hover:text-on-deep"
+                >
+                  <CircleUserRound className="size-5" aria-hidden="true" />
+                </Link>
+              )}
             </div>
           </div>
           <div className="min-h-0 flex-1 overflow-hidden lg:rounded-[2.45rem]">

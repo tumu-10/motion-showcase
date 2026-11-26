@@ -36,13 +36,8 @@ import {
   getUnitRentStatus,
   summarizeRentPeriod,
 } from "@/lib/rent-accounting";
-import {
-  monthlyCollection,
-  stageLabel,
-  type Complaint,
-  type LedgerEntry,
-  type Unit,
-} from "@/lib/sample-data";
+import { type Complaint, type LedgerEntry, type Unit } from "@/lib/sample-data";
+import { dataSource } from "@/lib/data-source";
 import type { DepositLedgerEntry } from "@/lib/tenancy";
 import { cn } from "@/lib/utils";
 import heroKampala from "@/assets/hero-kampala.jpg";
@@ -130,7 +125,7 @@ export function Overview({
   const openRequests = requests
     .filter((r) => r.stage !== "resolved")
     .sort((a, b) => (a.urgency === "Urgent" ? -1 : b.urgency === "Urgent" ? 1 : 0));
-  const chartData = monthlyCollection.map((m) => ({
+  const chartData = dataSource.monthlyCollection.map((m) => ({
     ...m,
     expected,
     collected: m.month === "Nov" ? collected : m.collected,
@@ -221,7 +216,7 @@ export function Overview({
           icon={ShieldCheck}
           label="Deposits held"
           value={depositLedger
-            .filter((entry) => entry.status !== "Refunded")
+            .filter((entry) => entry.status !== "Refunded" && entry.status !== "Partly refunded")
             .reduce((sum, entry) => sum + entry.amount, 0)}
           explanation="Held in the separate deposit ledger"
           tone="deposits"
@@ -491,7 +486,7 @@ export function Overview({
                 {r.urgency === "Urgent" && <Pill tone="danger" label="Urgent" />}
                 <Pill
                   tone={r.stage === "submitted" ? "neutral" : "info"}
-                  label={stageLabel[r.stage]}
+                  label={dataSource.stageLabel[r.stage]}
                 />
               </li>
             ))}

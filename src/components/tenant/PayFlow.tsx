@@ -1,4 +1,4 @@
-import { CreditCard, Landmark, Loader2, Smartphone } from "lucide-react";
+import { Clock3, CreditCard, Landmark, Loader2, Receipt, Smartphone } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -26,11 +26,12 @@ import type { LandlordPaymentDetails } from "@/lib/sample-data";
 import { makePaymentReference, needsAdvanceAgreement } from "@/lib/rent";
 import { formatRentPeriodRange } from "@/lib/rent-accounting";
 import { ease } from "@/lib/motion";
-import { bankOptions, getBankBrand, type BankBrand } from "@/lib/payment-banks";
+import { createCheckout, isCheckoutConfigured } from "@/lib/checkout";
 import { cn } from "@/lib/utils";
 import { mockPaymentProviders } from "@/lib/payment-provider";
-import type { LucideIcon } from "lucide-react";
 import type { TenantPaymentPreference } from "@/lib/demo-settings";
+import { buildReceiptPdf } from "@/lib/receipt-pdf";
+import { getReceiptBundle } from "@/lib/receipt-branding";
 
 type Step = "form" | "approve" | "success" | "failed";
 
@@ -46,6 +47,9 @@ export type PaymentResult = {
   bankProofDataUrl?: string | undefined;
   providerToken?: string | undefined;
   failed?: boolean | undefined;
+  receiptNumber?: string | undefined;
+  unit?: string | undefined;
+  paidAt?: string | undefined;
 };
 type PaymentMethod = TenantPaymentPreference;
 
@@ -55,6 +59,8 @@ export function PayFlow({
   rent,
   balance,
   rentPeriod,
+  invoiceId,
+  unit,
   defaultPhone,
   paymentDetails,
   preferredPaymentMethod,
@@ -65,10 +71,12 @@ export function PayFlow({
   rent: number;
   balance: number;
   rentPeriod: string;
+  invoiceId: string;
+  unit: string;
   defaultPhone: string;
   paymentDetails: LandlordPaymentDetails;
   preferredPaymentMethod: PaymentMethod;
-  onPaid: (r: PaymentResult) => void;
+  onPaid: (r: PaymentResult) => string | null;
   onOpenServices: () => void;
   onClose: () => void;
 }) {
@@ -79,30 +87,22 @@ export function PayFlow({
   const [network, setNetwork] = useState<MobileNetwork>(detectNetwork(defaultPhone) ?? "mtn");
   const [method, setMethod] = useState<PaymentMethod>(preferredPaymentMethod);
   const [cardBrand, setCardBrand] = useState<"Visa" | "Mastercard">("Visa");
-  const [bankChoice, setBankChoice] = useState<BankBrand>(
-    () => getBankBrand(paymentDetails.bankName) ?? "stanbic",
-  );
-  const [cardNumber, setCardNumber] = useState("");
-  const [cardExpiry, setCardExpiry] = useState("");
-  const [cardCvc, setCardCvc] = useState("");
-  const [bankProofDataUrl, setBankProofDataUrl] = useState<string | undefined>();
-  const [submitting, setSubmitting] = useState(false);
   const [phone, setPhone] = useState(defaultPhone);
   const [simulateDecline, setSimulateDecline] = useState(false);
-  const [errors, setErrors] = useState<{
-    amount?: string | undefined;
-    phone?: string | undefined;
-    card?: string | undefined;
-    proof?: string | undefined;
-  }>({});
+  const [errors, setErrors] = useState<{ amount?: string; phone?: string }>({});
   const [agreed, setAgreed] = useState(false);
   const needsAgreement = amountMode === "full" && needsAdvanceAgreement(Number(monthsCovered));
   const [result, setResult] = useState<PaymentResult | null>(null);
-  const receivingNetwork = paymentDetails.mobileMoneyNumber
-    ? detectNetwork(paymentDetails.mobileMoneyNumber)
-    : null;
-  const landlordBankBrand = getBankBrand(paymentDetails.bankName);
-  const bankChoiceName = bankOptions.find((bank) => bank.brand === bankChoice)?.name;
+  const mobileMoneyConfigured =
+    paymentDetails.mobileMoneyEnabled &&
+    Boolean(paymentDetails.mobileMoneyNumber?.trim()) &&
+    Boolean(detectNetwork(paymentDetails.mobileMoneyNumber ?? ""));
+  const checkoutConfigured =
+    method === "bank"
+      ? isCheckoutConfigured("bank")
+      : method === "visa"
+        ? isCheckoutConfigured(cardBrand === "Visa" ? "visa" : "mastercard")
+        : mobileMoneyConfigured;
 
   const amount =
     amountMode === "full"
@@ -112,27 +112,13 @@ export function PayFlow({
     amountMode === "full"
       ? [balance, ...Array.from({ length: Number(monthsCovered) - 1 }, () => rent)]
       : [amount];
-  const methods: [PaymentMethod, string, LucideIcon][] = [
-    ...(paymentDetails.mobileMoneyEnabled
-      ? [["mobile", "Mobile money", Smartphone] as [PaymentMethod, string, LucideIcon]]
-      : []),
-    ...(paymentDetails.bankEnabled
-      ? [["bank", "Bank transfer", Landmark] as [PaymentMethod, string, LucideIcon]]
-      : []),
-    ["visa", "Visa", CreditCard],
-  ];
-
   useEffect(() => {
     setMethod(preferredPaymentMethod);
   }, [preferredPaymentMethod]);
 
   useEffect(() => {
-    if (method === "mobile" && !paymentDetails.mobileMoneyEnabled) {
-      setMethod(paymentDetails.bankEnabled ? "bank" : "visa");
-    } else if (method === "bank" && !paymentDetails.bankEnabled) {
-      setMethod(paymentDetails.mobileMoneyEnabled ? "mobile" : "visa");
-    }
-  }, [method, paymentDetails.bankEnabled, paymentDetails.mobileMoneyEnabled]);
+    if (method === "mobile" && !mobileMoneyConfigured) setMethod("visa");
+  }, [method, mobileMoneyConfigured]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -145,7 +131,9 @@ export function PayFlow({
     }
     const local = method === "mobile" ? normalizeUgPhone(phone) : null;
     const detected = method === "mobile" ? detectNetwork(phone) : null;
-    if (method === "mobile" && !local)
+    if (method === "mobile" && !mobileMoneyConfigured) {
+      next.phone = "Mobile money is not configured for this tenancy.";
+    } else if (method === "mobile" && !local)
       next.phone = "Enter a Ugandan mobile number, for example 0772 123 456.";
     else if (method === "mobile" && !detected)
       next.phone = "This number is not an MTN or Airtel line.";
@@ -153,131 +141,93 @@ export function PayFlow({
       next.phone = `This is an ${detected === "mtn" ? "MTN" : "Airtel"} number. Switch to ${networkLabel[detected]} or use another number.`;
     if (needsAgreement && !agreed)
       next.amount = "Paying more than 3 months ahead needs a written agreement with your landlord.";
-    if (method === "visa") {
-      const digits = cardNumber.replace(/\D/g, "");
-      if (
-        digits.length < 12 ||
-        digits.length > 19 ||
-        !/^\d{2}\/\d{2}$/.test(cardExpiry) ||
-        !/^\d{3,4}$/.test(cardCvc)
-      ) {
-        next.card = "Enter a valid demo card number, expiry (MM/YY), and security code.";
-      }
-    }
-    if (method === "bank" && !bankProofDataUrl) {
-      next.proof = "Upload your transfer receipt or screenshot to continue.";
-    }
     setErrors(next);
     if (Object.keys(next).length) return;
+    if (method !== "mobile") {
+      try {
+        const checkoutMethod =
+          method === "bank" ? "bank" : cardBrand === "Visa" ? "visa" : "mastercard";
+        window.location.assign(createCheckout(invoiceId, checkoutMethod));
+      } catch (error) {
+        toast.error("Hosted checkout is unavailable", {
+          description: error instanceof Error ? error.message : "Try another payment method.",
+        });
+      }
+      return;
+    }
     const paymentResult: PaymentResult = {
       amount,
       rentPeriod,
       monthsCovered: amountMode === "full" ? Number(monthsCovered) : 1,
       coverageAmounts,
-      method:
-        method === "mobile"
-          ? network === "mtn"
-            ? "MTN Mobile Money"
-            : "Airtel Money"
-          : method === "bank"
-            ? "Bank transfer"
-            : cardBrand,
+      method: network === "mtn" ? "MTN Mobile Money" : "Airtel Money",
       phone: local ?? "",
       reference: makePaymentReference(),
-      pending: method === "bank",
-      bankProofDataUrl: method === "bank" ? bankProofDataUrl : undefined,
+      pending: false,
+      unit,
+      paidAt: new Date().toISOString(),
     };
     setResult(paymentResult);
-    if (method === "bank") {
-      setSubmitting(true);
-      try {
-        const providerResult = await mockPaymentProviders.bank.process({
-          amount: paymentResult.amount,
-          reference: paymentResult.reference,
-          method: "bank",
-        });
-        const outcome = { ...paymentResult, pending: providerResult.status === "pending" };
-        setResult(outcome);
-        setStep("success");
-        onPaid(outcome);
-      } catch (error) {
-        setErrors((current) => ({
-          ...current,
-          proof:
-            error instanceof Error ? error.message : "Could not submit the bank transfer proof.",
-        }));
-      } finally {
-        setSubmitting(false);
-      }
-    } else {
-      setStep("approve");
-    }
+    setStep("approve");
   }
 
   async function completePayment(payment: PaymentResult) {
+    let outcome: PaymentResult;
     try {
-      const provider =
-        method === "mobile" ? mockPaymentProviders.mobile : mockPaymentProviders.card;
-      const providerResult = await provider.process({
+      const providerResult = await mockPaymentProviders.mobile.process({
         amount: payment.amount,
         reference: payment.reference,
-        method: method === "mobile" ? "mobile" : "card",
+        method: "mobile",
         simulateFailure: simulateDecline,
       });
-      const outcome: PaymentResult = {
+      outcome = {
         ...payment,
         pending: providerResult.status === "pending",
         failed: providerResult.status === "failed",
         providerToken: providerResult.token,
       };
-      setResult(outcome);
-      setStep(outcome.failed ? "failed" : "success");
-      setCardNumber("");
-      setCardExpiry("");
-      setCardCvc("");
-      onPaid(outcome);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "The payment provider could not be reached.";
       setStep("failed");
-      setCardNumber("");
-      setCardCvc("");
-      setErrors((current) => ({
-        ...current,
-        card: message,
-      }));
       toast.error("Payment could not be completed", { description: message });
+      return;
+    }
+
+    setStep(outcome.failed ? "failed" : "success");
+    try {
+      const receiptNumber = onPaid(outcome);
+      setResult({
+        ...outcome,
+        ...(receiptNumber ? { receiptNumber, unit, paidAt: new Date().toISOString() } : {}),
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "The payment record could not be saved locally.";
+      setResult(outcome);
+      toast.error("Payment succeeded, but its local record could not be saved", {
+        description: message,
+      });
     }
   }
 
-  async function uploadBankProof(file: File | undefined) {
-    setErrors((current) => ({ ...current, proof: undefined }));
-    setBankProofDataUrl(undefined);
-    if (!file) return;
-    if (file.size > 1_500_000) {
-      setErrors((current) => ({ ...current, proof: "Proof files must be smaller than 1.5 MB." }));
-      return;
-    }
-    if (!["application/pdf", "image/jpeg", "image/png"].includes(file.type)) {
-      setErrors((current) => ({ ...current, proof: "Upload a PDF, JPG, or PNG transfer proof." }));
-      return;
-    }
+  async function downloadReceipt(receiptNumber: string) {
     try {
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () =>
-          typeof reader.result === "string"
-            ? resolve(reader.result)
-            : reject(new Error("Could not read the selected transfer proof."));
-        reader.onerror = () => reject(new Error("Could not read the selected transfer proof."));
-        reader.readAsDataURL(file);
-      });
-      setBankProofDataUrl(dataUrl);
+      const bundle = getReceiptBundle(receiptNumber);
+      if (!bundle) throw new Error("The receipt is not available in this browser.");
+      const bytes = await buildReceiptPdf(bundle);
+      const url = URL.createObjectURL(
+        new Blob([Uint8Array.from(bytes)], { type: "application/pdf" }),
+      );
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${receiptNumber}.pdf`;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (error) {
-      setErrors((current) => ({
-        ...current,
-        proof: error instanceof Error ? error.message : "Could not read the selected file.",
-      }));
+      toast.error("Receipt PDF could not be downloaded", {
+        description: error instanceof Error ? error.message : "Try again.",
+      });
     }
   }
 
@@ -390,54 +340,47 @@ export function PayFlow({
               </AnimatePresence>
             </div>
 
-            <fieldset>
-              <legend className="text-sm font-medium text-muted-foreground">Payment method</legend>
-              <div className="mt-2 grid grid-cols-1 gap-2">
-                {methods.map(([id, label]) => {
-                  const brands: PayBrand[] =
-                    id === "mobile"
-                      ? ["mtn", "airtel"]
-                      : id === "bank"
-                        ? ["stanbic", "hfb", "centenary"]
-                        : ["visa", "mastercard"];
-                  const active = method === id;
-                  const methodLabel = id === "visa" ? "Card" : label;
-                  return (
-                    <motion.button
-                      key={id}
-                      type="button"
-                      aria-label={methodLabel}
-                      aria-pressed={active}
-                      onClick={() => setMethod(id)}
-                      whileTap={{ scale: 0.98 }}
-                      className={cn(
-                        "relative flex min-h-16 min-w-0 items-center gap-3 rounded-xl border-2 py-2 pl-3 pr-10 text-left transition-colors",
-                        active
-                          ? "border-primary bg-primary-soft shadow-sm"
-                          : "border-border bg-card hover:border-primary/40",
-                      )}
-                    >
-                      <span className="flex -space-x-2">
-                        {brands.map((b) => (
-                          <BrandLogo key={b} brand={b} className="h-7 w-9 ring-2 ring-card" />
-                        ))}
-                      </span>
-                      <span className="min-w-0 text-sm font-bold">{methodLabel}</span>
-                      <span
-                        aria-hidden
-                        className={cn(
-                          "absolute right-3 top-1/2 size-4 -translate-y-1/2 rounded-full border-2 transition-all",
-                          active
-                            ? "border-primary bg-primary shadow-[inset_0_0_0_3px_var(--card)]"
-                            : "border-input",
-                        )}
-                      />
-                    </motion.button>
-                  );
-                })}
-              </div>
-              {method === "mobile" && (
-                <div className="mt-3 grid grid-cols-2 gap-2">
+            <div
+              role="tablist"
+              aria-label="Payment options"
+              className="grid grid-cols-3 gap-1 rounded-xl bg-muted p-1"
+            >
+              {(
+                [
+                  ["mobile", "Mobile money", Smartphone],
+                  ["visa", "Card", CreditCard],
+                  ["bank", "Bank transfer", Landmark],
+                ] as const
+              ).map(([id, label, Icon]) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  id={`payment-tab-${id}`}
+                  aria-selected={method === id}
+                  aria-controls="payment-options-panel"
+                  onClick={() => setMethod(id)}
+                  className={cn(
+                    "flex min-h-12 min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-1 text-[0.65rem] font-semibold leading-tight sm:flex-row sm:text-xs",
+                    method === id
+                      ? "bg-card text-primary-deep shadow-soft"
+                      : "text-muted-foreground",
+                  )}
+                >
+                  <Icon className="size-4 shrink-0" aria-hidden />
+                  <span>{label}</span>
+                </button>
+              ))}
+            </div>
+
+            {method === "mobile" ? (
+              <div
+                id="payment-options-panel"
+                role="tabpanel"
+                aria-labelledby="payment-tab-mobile"
+                className="min-w-0 space-y-4"
+              >
+                <div className="grid grid-cols-2 gap-2">
                   {(["mtn", "airtel"] as const).map((n) => (
                     <button
                       key={n}
@@ -446,25 +389,19 @@ export function PayFlow({
                       aria-pressed={network === n}
                       onClick={() => setNetwork(n)}
                       className={cn(
-                        "press flex min-h-16 min-w-0 items-center justify-center rounded-xl border-2 p-2",
+                        "press flex min-h-12 min-w-0 items-center justify-center rounded-xl border-2 p-2",
                         network === n
                           ? "border-primary bg-primary-soft shadow-sm"
                           : "border-border bg-card hover:border-primary/40",
                       )}
                     >
-                      <BrandLogo brand={n} className="h-9 w-14" />
+                      <BrandLogo brand={n} className="h-8 w-14" />
                     </button>
                   ))}
                 </div>
-              )}
-            </fieldset>
-
-            {method === "mobile" ? (
-              <div className="min-w-0 space-y-4">
                 <div className="min-w-0 rounded-xl border border-primary/15 bg-primary-soft/60 p-4 text-sm">
                   <p className="font-bold text-primary-deep">
-                    Send rent to this account
-                    {receivingNetwork ? ` · ${networkLabel[receivingNetwork]}` : ""}
+                    Send rent to this account · {networkLabel[network]}
                   </p>
                   <dl className="mt-3 min-w-0 space-y-2">
                     <PaymentDetail
@@ -496,67 +433,42 @@ export function PayFlow({
                   />
                   <FieldError id="phone-error" message={errors.phone} />
                 </div>
+                {!mobileMoneyConfigured && (
+                  <p className="rounded-lg border border-warning/30 bg-warning-soft p-3 text-sm text-warning-ink">
+                    Mobile money details are not configured for this tenancy.
+                  </p>
+                )}
               </div>
             ) : method === "bank" ? (
-              <div className="min-w-0 rounded-xl border border-primary/15 bg-primary-soft/60 p-4 text-sm">
-                <p className="font-bold text-primary-deep">Choose your bank</p>
-                <div className="mt-2 grid grid-cols-3 gap-2">
-                  {bankOptions.map(({ brand, name }) => (
-                    <button
-                      key={brand}
-                      type="button"
-                      aria-label={`Paying from ${name}`}
-                      title={name}
-                      aria-pressed={bankChoice === brand}
-                      onClick={() => setBankChoice(brand)}
-                      className={cn(
-                        "press relative flex min-h-16 min-w-0 items-center justify-center overflow-hidden rounded-xl border-2 bg-white transition-colors hover:border-primary/40 sm:min-h-20",
-                        bankChoice === brand && "border-primary bg-primary-soft shadow-sm",
-                      )}
-                    >
-                      <BrandLogo brand={brand} variant="fill" />
-                    </button>
-                  ))}
-                </div>
-                <p className="mt-4 font-bold text-primary-deep">Transfer to</p>
-                <dl className="mt-2 min-w-0 space-y-2">
-                  <PaymentDetail label="Paying from" value={bankChoiceName} brand={bankChoice} />
-                  <PaymentDetail
-                    label="Landlord bank"
-                    value={paymentDetails.bankName}
-                    {...(landlordBankBrand ? { brand: landlordBankBrand } : {})}
-                  />
-                  <PaymentDetail label="Account name" value={paymentDetails.bankAccountName} />
-                  <PaymentDetail
-                    label="Account number"
-                    value={paymentDetails.bankAccountNumber}
-                    breakAll
-                  />
-                </dl>
-                <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-                  Transfers are recorded as pending until the landlord confirms receipt. Use the
-                  reference shown after submitting.
+              <div
+                id="payment-options-panel"
+                role="tabpanel"
+                aria-labelledby="payment-tab-bank"
+                className="rounded-xl border border-border bg-secondary/60 p-4 text-sm"
+              >
+                <p className="font-bold text-primary-deep">Bank transfer</p>
+                <p className="mt-2 text-muted-foreground">
+                  {checkoutConfigured
+                    ? "Continue to the configured secure bank checkout. Propatiz will not collect banking credentials."
+                    : "Coming soon — a bank checkout provider has not been configured."}
                 </p>
-                <Label htmlFor="bank-proof" className="mt-4 block">
-                  Transfer proof
-                </Label>
-                <Input
-                  id="bank-proof"
-                  type="file"
-                  accept="application/pdf,image/jpeg,image/png"
-                  className="mt-2"
-                  onChange={(event) => void uploadBankProof(event.target.files?.[0])}
-                  aria-invalid={!!errors.proof}
-                />
-                <FieldError id="bank-proof-error" message={errors.proof} />
-                {bankProofDataUrl && (
-                  <p className="mt-2 text-xs font-medium text-success-ink">Proof attached</p>
+                {!checkoutConfigured && (
+                  <p className="mt-3 inline-flex items-center gap-2 font-semibold text-warning-ink">
+                    <Clock3 className="size-4" aria-hidden />
+                    Coming soon
+                  </p>
                 )}
               </div>
             ) : (
-              <div className="space-y-3 rounded-xl border border-border bg-secondary/60 p-4 text-sm">
+              <div
+                id="payment-options-panel"
+                role="tabpanel"
+                aria-labelledby="payment-tab-visa"
+                className="space-y-3 rounded-xl border border-border bg-secondary/60 p-4 text-sm"
+              >
                 <p className="text-muted-foreground">
-                  Mock card authorization only. Card numbers are never sent to or stored by the app.
+                  Card details are entered only on the configured hosted checkout. Propatiz never
+                  collects or stores card numbers.
                 </p>
                 <div className="grid grid-cols-2 gap-2">
                   {(["Visa", "Mastercard"] as const).map((brand) => (
@@ -579,67 +491,16 @@ export function PayFlow({
                     </button>
                   ))}
                 </div>
-                <div>
-                  <Label htmlFor="mock-card-number">Card number</Label>
-                  <Input
-                    id="mock-card-number"
-                    inputMode="numeric"
-                    autoComplete="off"
-                    value={cardNumber}
-                    placeholder="1234 5678 9012 3456"
-                    onChange={(event) => {
-                      const digits = event.target.value.replace(/\D/g, "").slice(0, 19);
-                      setCardNumber(digits.replace(/(.{4})/g, "$1 ").trim());
-                      if (/^4/.test(digits)) setCardBrand("Visa");
-                      else if (/^(5[1-5]|2[2-7])/.test(digits)) setCardBrand("Mastercard");
-                    }}
-                    className="mt-1"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label htmlFor="mock-card-expiry">Expiry (MM/YY)</Label>
-                    <Input
-                      id="mock-card-expiry"
-                      autoComplete="cc-exp"
-                      placeholder="MM/YY"
-                      value={cardExpiry}
-                      onChange={(event) => setCardExpiry(event.target.value)}
-                      className="mt-1"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="mock-card-cvc">Security code</Label>
-                    <Input
-                      id="mock-card-cvc"
-                      inputMode="numeric"
-                      autoComplete="cc-csc"
-                      value={cardCvc}
-                      onChange={(event) =>
-                        setCardCvc(event.target.value.replace(/\D/g, "").slice(0, 4))
-                      }
-                      className="mt-1"
-                    />
-                  </div>
-                </div>
-                <FieldError id="card-error" message={errors.card} />
+                {!checkoutConfigured && (
+                  <p className="inline-flex items-center gap-2 font-semibold text-warning-ink">
+                    <Clock3 className="size-4" aria-hidden />
+                    Coming soon — hosted card checkout is not configured.
+                  </p>
+                )}
               </div>
             )}
 
-            {method === "mobile" && paymentDetails.mobileMoneyNumber && (
-              <div className="rounded-xl border border-success/20 bg-success-soft/60 p-4 text-sm">
-                <p className="font-bold text-success-ink">Pay the landlord</p>
-                <dl className="mt-2 space-y-2">
-                  <PaymentDetail label="Registered name" value={paymentDetails.mobileMoneyName} />
-                  <PaymentDetail
-                    label="Mobile money number"
-                    value={paymentDetails.mobileMoneyNumber}
-                  />
-                </dl>
-              </div>
-            )}
-
-            {method !== "bank" && (
+            {method === "mobile" && (
               <label className="flex items-center gap-3 rounded-sm border border-dashed border-input p-3 text-sm text-muted-foreground">
                 <Checkbox
                   checked={simulateDecline}
@@ -649,8 +510,12 @@ export function PayFlow({
               </label>
             )}
 
-            <Button type="submit" size="lg" className="w-full" disabled={submitting}>
-              {submitting ? "Submitting…" : `Pay ${amount ? formatUGX(amount) : ""}`}
+            <Button type="submit" size="lg" className="w-full" disabled={!checkoutConfigured}>
+              {method !== "mobile"
+                ? checkoutConfigured
+                  ? "Continue to secure checkout"
+                  : "Coming soon"
+                : `Pay ${amount ? formatUGX(amount) : ""}`}
             </Button>
           </motion.form>
         )}
@@ -683,17 +548,25 @@ export function PayFlow({
               <h3 className="mt-5 text-xl font-bold">Payment received</h3>
               <p className="mt-1 text-muted-foreground">
                 {result.pending
-                  ? "Your bank transfer is waiting for landlord confirmation."
+                  ? "Your payment is waiting for landlord confirmation."
                   : "Your landlord has been notified."}
               </p>
               <dl className="mt-6 divide-y divide-border rounded-lg border border-border text-left text-sm">
                 {[
+                  ["Unit", result.unit ?? unit],
                   ["Amount", formatUGX(result.amount)],
-                  ["Paid with", result.method],
-                  ...(result.phone ? [["Number", result.phone] as [string, string]] : []),
-                  ["Receipt", result.reference],
-                  ...(result.providerToken
-                    ? [["Mock authorization token", result.providerToken] as [string, string]]
+                  ["Method", result.method],
+                  ["Reference", result.reference],
+                  [
+                    "Date",
+                    new Intl.DateTimeFormat("en-UG", {
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                    }).format(new Date(result.paidAt ?? new Date())),
+                  ],
+                  ...(result.receiptNumber
+                    ? [["Receipt", result.receiptNumber] as [string, string]]
                     : []),
                 ].map(([k, v]) => (
                   <div key={k} className="flex justify-between gap-4 px-4 py-3">
@@ -702,6 +575,23 @@ export function PayFlow({
                   </div>
                 ))}
               </dl>
+              {result.receiptNumber ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="mt-4 min-h-11 w-full"
+                  onClick={() => void downloadReceipt(result.receiptNumber!)}
+                >
+                  <Receipt className="mr-2 size-4" aria-hidden />
+                  Download branded receipt PDF
+                </Button>
+              ) : (
+                <p className="mt-3 rounded-lg border border-warning/30 bg-warning-soft p-3 text-left text-sm text-warning-ink">
+                  {result.pending
+                    ? "A receipt will be available after the payment is confirmed."
+                    : "Payment succeeded, but a receipt could not be prepared. Check payment history or try again."}
+                </p>
+              )}
               {!result.pending && (
                 <div className="mt-5 rounded-xl border border-primary/15 bg-primary-soft/60 p-4 text-left">
                   <p className="font-bold text-primary-deep">Need a hand around your home?</p>

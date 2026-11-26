@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { createHomeServiceProvider, readHomeServiceProviders } from "@/lib/home-service-providers";
-import { demoHomeServiceProviders } from "@/lib/home-services";
+import { dataSource } from "@/lib/data-source";
 
 afterEach(() => localStorage.clear());
 
@@ -18,7 +18,7 @@ describe("saved home-service providers", () => {
 
     expect(provider.ratingCount).toBe(0);
     expect(provider.imageDataUrl).toBe("data:image/jpeg;base64,ZmFrZQ==");
-    expect(readHomeServiceProviders()).toEqual([...demoHomeServiceProviders, provider]);
+    expect(readHomeServiceProviders()).toEqual([...dataSource.demoHomeServiceProviders, provider]);
   });
 
   it("rejects duplicate provider listings and invalid UGX ranges", () => {

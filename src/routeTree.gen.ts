@@ -11,9 +11,20 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminRouteImport } from './routes/admin'
+import { Route as JoinRouteImport } from './routes/join'
 import { Route as LandlordRouteImport } from './routes/landlord'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as PilotRouteImport } from './routes/pilot'
+import { Route as PricingRouteImport } from './routes/pricing'
 import { Route as TenantRouteImport } from './routes/tenant'
+import { Route as TrustRouteImport } from './routes/trust'
 import { Route as VerifyRouteImport } from './routes/verify'
+import { Route as AccountSettingsRouteImport } from './routes/account.settings'
+import { Route as AdminIndexRouteImport } from './routes/admin.index'
+import { Route as AdminVerifyRouteImport } from './routes/admin.verify'
+import { Route as JoinIndexRouteImport } from './routes/join.index'
+import { Route as JoinCodeRouteImport } from './routes/join.$code'
+import { Route as OnboardingLandlordRouteImport } from './routes/onboarding.landlord'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -25,9 +36,29 @@ const AdminRoute = AdminRouteImport.update({
   path: '/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
+const JoinRoute = JoinRouteImport.update({
+  id: '/join',
+  path: '/join',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LandlordRoute = LandlordRouteImport.update({
   id: '/landlord',
   path: '/landlord',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PilotRoute = PilotRouteImport.update({
+  id: '/pilot',
+  path: '/pilot',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PricingRoute = PricingRouteImport.update({
+  id: '/pricing',
+  path: '/pricing',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TenantRoute = TenantRouteImport.update({
@@ -35,48 +66,168 @@ const TenantRoute = TenantRouteImport.update({
   path: '/tenant',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TrustRoute = TrustRouteImport.update({
+  id: '/trust',
+  path: '/trust',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const VerifyRoute = VerifyRouteImport.update({
   id: '/verify',
   path: '/verify',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AccountSettingsRoute = AccountSettingsRouteImport.update({
+  id: '/account/settings',
+  path: '/account/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminIndexRoute = AdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminVerifyRoute = AdminVerifyRouteImport.update({
+  id: '/verify',
+  path: '/verify',
+  getParentRoute: () => AdminRoute,
+} as any)
+const JoinIndexRoute = JoinIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => JoinRoute,
+} as any)
+const JoinCodeRoute = JoinCodeRouteImport.update({
+  id: '/$code',
+  path: '/$code',
+  getParentRoute: () => JoinRoute,
+} as any)
+const OnboardingLandlordRoute = OnboardingLandlordRouteImport.update({
+  id: '/onboarding/landlord',
+  path: '/onboarding/landlord',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/admin': typeof AdminRoute
+  '/admin': typeof AdminRouteWithChildren
+  '/join': typeof JoinRouteWithChildren
   '/landlord': typeof LandlordRoute
+  '/login': typeof LoginRoute
+  '/pilot': typeof PilotRoute
+  '/pricing': typeof PricingRoute
   '/tenant': typeof TenantRoute
+  '/trust': typeof TrustRoute
   '/verify': typeof VerifyRoute
+  '/account/settings': typeof AccountSettingsRoute
+  '/admin/verify': typeof AdminVerifyRoute
+  '/join/$code': typeof JoinCodeRoute
+  '/onboarding/landlord': typeof OnboardingLandlordRoute
+  '/admin/': typeof AdminIndexRoute
+  '/join/': typeof JoinIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/admin': typeof AdminRoute
   '/landlord': typeof LandlordRoute
+  '/login': typeof LoginRoute
+  '/pilot': typeof PilotRoute
+  '/pricing': typeof PricingRoute
   '/tenant': typeof TenantRoute
+  '/trust': typeof TrustRoute
   '/verify': typeof VerifyRoute
+  '/account/settings': typeof AccountSettingsRoute
+  '/admin/verify': typeof AdminVerifyRoute
+  '/join/$code': typeof JoinCodeRoute
+  '/onboarding/landlord': typeof OnboardingLandlordRoute
+  '/admin': typeof AdminIndexRoute
+  '/join': typeof JoinIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/admin': typeof AdminRoute
+  '/admin': typeof AdminRouteWithChildren
+  '/join': typeof JoinRouteWithChildren
   '/landlord': typeof LandlordRoute
+  '/login': typeof LoginRoute
+  '/pilot': typeof PilotRoute
+  '/pricing': typeof PricingRoute
   '/tenant': typeof TenantRoute
+  '/trust': typeof TrustRoute
   '/verify': typeof VerifyRoute
+  '/account/settings': typeof AccountSettingsRoute
+  '/admin/verify': typeof AdminVerifyRoute
+  '/join/$code': typeof JoinCodeRoute
+  '/onboarding/landlord': typeof OnboardingLandlordRoute
+  '/admin/': typeof AdminIndexRoute
+  '/join/': typeof JoinIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/admin' | '/landlord' | '/tenant' | '/verify'
+  fullPaths:
+    | '/'
+    | '/admin'
+    | '/join'
+    | '/landlord'
+    | '/login'
+    | '/pilot'
+    | '/pricing'
+    | '/tenant'
+    | '/trust'
+    | '/verify'
+    | '/account/settings'
+    | '/admin/verify'
+    | '/join/$code'
+    | '/onboarding/landlord'
+    | '/admin/'
+    | '/join/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/admin' | '/landlord' | '/tenant' | '/verify'
-  id: '__root__' | '/' | '/admin' | '/landlord' | '/tenant' | '/verify'
+  to:
+    | '/'
+    | '/landlord'
+    | '/login'
+    | '/pilot'
+    | '/pricing'
+    | '/tenant'
+    | '/trust'
+    | '/verify'
+    | '/account/settings'
+    | '/admin/verify'
+    | '/join/$code'
+    | '/onboarding/landlord'
+    | '/admin'
+    | '/join'
+  id:
+    | '__root__'
+    | '/'
+    | '/admin'
+    | '/join'
+    | '/landlord'
+    | '/login'
+    | '/pilot'
+    | '/pricing'
+    | '/tenant'
+    | '/trust'
+    | '/verify'
+    | '/account/settings'
+    | '/admin/verify'
+    | '/join/$code'
+    | '/onboarding/landlord'
+    | '/admin/'
+    | '/join/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  AdminRoute: typeof AdminRoute
+  AdminRoute: typeof AdminRouteWithChildren
+  JoinRoute: typeof JoinRouteWithChildren
   LandlordRoute: typeof LandlordRoute
+  LoginRoute: typeof LoginRoute
+  PilotRoute: typeof PilotRoute
+  PricingRoute: typeof PricingRoute
   TenantRoute: typeof TenantRoute
+  TrustRoute: typeof TrustRoute
   VerifyRoute: typeof VerifyRoute
+  AccountSettingsRoute: typeof AccountSettingsRoute
+  OnboardingLandlordRoute: typeof OnboardingLandlordRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -95,11 +246,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/join': {
+      id: '/join'
+      path: '/join'
+      fullPath: '/join'
+      preLoaderRoute: typeof JoinRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/landlord': {
       id: '/landlord'
       path: '/landlord'
       fullPath: '/landlord'
       preLoaderRoute: typeof LandlordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pilot': {
+      id: '/pilot'
+      path: '/pilot'
+      fullPath: '/pilot'
+      preLoaderRoute: typeof PilotRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pricing': {
+      id: '/pricing'
+      path: '/pricing'
+      fullPath: '/pricing'
+      preLoaderRoute: typeof PricingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/tenant': {
@@ -109,6 +288,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TenantRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/trust': {
+      id: '/trust'
+      path: '/trust'
+      fullPath: '/trust'
+      preLoaderRoute: typeof TrustRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/verify': {
       id: '/verify'
       path: '/verify'
@@ -116,15 +302,88 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VerifyRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/account/settings': {
+      id: '/account/settings'
+      path: '/account/settings'
+      fullPath: '/account/settings'
+      preLoaderRoute: typeof AccountSettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/': {
+      id: '/admin/'
+      path: '/'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AdminIndexRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/verify': {
+      id: '/admin/verify'
+      path: '/verify'
+      fullPath: '/admin/verify'
+      preLoaderRoute: typeof AdminVerifyRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/join/': {
+      id: '/join/'
+      path: '/'
+      fullPath: '/join/'
+      preLoaderRoute: typeof JoinIndexRouteImport
+      parentRoute: typeof JoinRoute
+    }
+    '/join/$code': {
+      id: '/join/$code'
+      path: '/$code'
+      fullPath: '/join/$code'
+      preLoaderRoute: typeof JoinCodeRouteImport
+      parentRoute: typeof JoinRoute
+    }
+    '/onboarding/landlord': {
+      id: '/onboarding/landlord'
+      path: '/onboarding/landlord'
+      fullPath: '/onboarding/landlord'
+      preLoaderRoute: typeof OnboardingLandlordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
+interface AdminRouteChildren {
+  AdminVerifyRoute: typeof AdminVerifyRoute
+  AdminIndexRoute: typeof AdminIndexRoute
+}
+
+const AdminRouteChildren: AdminRouteChildren = {
+  AdminVerifyRoute: AdminVerifyRoute,
+  AdminIndexRoute: AdminIndexRoute,
+}
+
+const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
+
+interface JoinRouteChildren {
+  JoinCodeRoute: typeof JoinCodeRoute
+  JoinIndexRoute: typeof JoinIndexRoute
+}
+
+const JoinRouteChildren: JoinRouteChildren = {
+  JoinCodeRoute: JoinCodeRoute,
+  JoinIndexRoute: JoinIndexRoute,
+}
+
+const JoinRouteWithChildren = JoinRoute._addFileChildren(JoinRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  AdminRoute: AdminRoute,
+  AdminRoute: AdminRouteWithChildren,
+  JoinRoute: JoinRouteWithChildren,
   LandlordRoute: LandlordRoute,
+  LoginRoute: LoginRoute,
+  PilotRoute: PilotRoute,
+  PricingRoute: PricingRoute,
   TenantRoute: TenantRoute,
+  TrustRoute: TrustRoute,
   VerifyRoute: VerifyRoute,
+  AccountSettingsRoute: AccountSettingsRoute,
+  OnboardingLandlordRoute: OnboardingLandlordRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

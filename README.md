@@ -22,3 +22,33 @@ cd <repository-name>
 npm i
 npm run dev
 ```
+
+## Public site configuration
+
+- `VITE_WAITLIST_URL` (optional): public endpoint that accepts pilot waitlist submissions as JSON
+  via `POST`. If unset, submissions are saved only in the current browser's local storage.
+- `VITE_WHATSAPP_NUMBER` (optional): WhatsApp phone number with country code, for example
+  `+256774413516`. Defaults to the Propatiz contact number.
+
+Vite exposes `VITE_*` values to browser code. Do not put credentials or other secrets in these
+variables.
+
+## Demo vs production
+
+`VITE_DEMO_MODE` is read at build time. It defaults to demo mode during local Vite development;
+set it to `true` to publish the sample-data demo. The demo banner links to the pilot waitlist, and
+`/tenant`, `/landlord`, and `/admin` remain accessible without login. For local configuration,
+copy `.env.example` to `.env`.
+
+Set `VITE_DEMO_MODE=false` in the production build environment. The app then selects the API data
+source without loading sample fixtures. API methods currently throw `Not connected yet`, so connect
+the production API before enabling production use. Do not set this flag to `true` for a deployment
+that handles real users or payments.
+
+## Progressive web app
+
+The PWA manifest, icons, offline page, and service worker live in `public/` and are served from
+the site root, including on Cloudflare Workers. The worker caches only same-origin static assets
+and the offline page; it never caches API responses or navigated HTML. Complaint forms explicitly
+queued while offline are stored in the browser's IndexedDB outbox and retried when connectivity
+returns. Connect `/api/forms/complaints` to the production API before relying on delivery.

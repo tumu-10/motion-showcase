@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { BrandLogo } from "@/components/payments/BrandLogo";
 import {
-  defaultLandlordPaymentDetails,
+  getDefaultLandlordPaymentDetails,
   readLandlordPaymentDetails,
   saveLandlordDemoSettings,
   saveLandlordPaymentDetails,
@@ -15,7 +15,7 @@ import {
 import type { LandlordPaymentDetails } from "@/lib/sample-data";
 import { bankOptions, getBankBrand } from "@/lib/payment-banks";
 import {
-  defaultReceiptBranding,
+  getDefaultReceiptBranding,
   getReceiptBranding,
   resizeReceiptLogo,
   saveReceiptBranding,
@@ -29,11 +29,13 @@ export function ReceiptSettings({
   defaultRentDueDay: number;
   onDefaultRentDueDayChange: (day: number) => void;
 }) {
-  const [branding, setBranding] = useState<ReceiptBranding>(defaultReceiptBranding);
+  const [branding, setBranding] = useState<ReceiptBranding>(() =>
+    getDefaultReceiptBranding(),
+  );
   const [dueDayDraft, setDueDayDraft] = useState(String(defaultRentDueDay));
   const [loaded, setLoaded] = useState(false);
   const [paymentDetails, setPaymentDetails] = useState<LandlordPaymentDetails>(
-    defaultLandlordPaymentDetails,
+    () => getDefaultLandlordPaymentDetails(),
   );
   const [bankOther, setBankOther] = useState(false);
   const [paymentDetailsLoaded, setPaymentDetailsLoaded] = useState(false);

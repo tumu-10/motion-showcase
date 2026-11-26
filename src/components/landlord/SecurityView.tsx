@@ -1,4 +1,12 @@
-import { AlertTriangle, Minus, Plus, ShieldCheck } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Clock3,
+  Minus,
+  Plus,
+  RotateCcw,
+  ShieldCheck,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { PageHeading } from "@/components/shared/DashShell";
@@ -8,6 +16,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatUGX } from "@/lib/rent";
+import { isDepositValid } from "@/lib/compliance";
 import { currentRentPeriod, getUnitPeriodCredit } from "@/lib/rent-accounting";
 import { issueDepositReceipt } from "@/lib/receipt-helpers";
 import {
@@ -24,8 +33,17 @@ type DeductionDraft = { id: string; description: string; amount: string };
 const statusClass: Record<DepositStatus, string> = {
   Held: "bg-purple-100 text-purple-900",
   "Refund pending": "bg-warning-soft text-warning-ink",
+  "Partly refunded": "bg-warning-soft text-warning-ink",
   Refunded: "bg-success-soft text-success-ink",
   Disputed: "bg-destructive-soft text-destructive-ink",
+};
+
+const statusIcon: Record<DepositStatus, typeof ShieldCheck> = {
+  Held: ShieldCheck,
+  "Refund pending": Clock3,
+  "Partly refunded": RotateCcw,
+  Refunded: CheckCircle2,
+  Disputed: AlertTriangle,
 };
 
 export function SecurityView({
@@ -63,17 +81,20 @@ export function SecurityView({
       depositLedger.map((entry) => {
         const unit = units.find((item) => item.id === entry.unitId);
         const arrears =
-          entry.status !== "Refunded"
+          entry.status !== "Refunded" && entry.status !== "Partly refunded"
             ? getCurrentArrears(unit, rentLedger, period)
             : entry.arrearsAtRefund;
         const deductionsTotal = entry.deductions.reduce((sum, item) => sum + item.amount, 0);
-        const held = entry.status === "Refunded" ? 0 : entry.amount;
+        const held =
+          entry.status === "Refunded" || entry.status === "Partly refunded" ? 0 : entry.amount;
         return {
           entry,
+          unit,
           arrears,
           deductionsTotal,
           held,
           refundable: calculateRefundableDeposit(held, arrears, deductionsTotal),
+          depositValid: unit ? isDepositValid(entry.amount, unit.rent) : true,
         };
       }),
     [depositLedger, period, rentLedger, units],
@@ -128,7 +149,7 @@ export function SecurityView({
       if (!property) throw new Error("The property for this deposit could not be found.");
       const refundedEntry: DepositLedgerEntry = {
         ...entry,
-        status: "Refunded",
+        status: (entry.refundAmount ?? 0) < entry.amount ? "Partly refunded" : "Refunded",
         resolvedAt: new Date().toISOString(),
       };
       issueDepositReceipt(refundedEntry, property);
@@ -182,90 +203,119 @@ export function SecurityView({
             </div>
           ) : (
             <ul className="divide-y divide-border">
-              {rows.map(({ entry, arrears, deductionsTotal, held, refundable }) => (
-                <li
-                  key={entry.id}
-                  className="grid gap-4 p-5 md:grid-cols-[1.4fr_repeat(4,1fr)_auto] md:items-center md:px-6"
-                >
-                  <div>
-                    <p className="font-semibold">{entry.tenant}</p>
-                    <p className="mt-0.5 text-sm text-muted-foreground">Unit {entry.unit}</p>
-                    <span
-                      className={cn(
-                        "mt-2 inline-flex rounded-full px-2.5 py-1 text-xs font-bold",
-                        statusClass[entry.status],
-                      )}
+              {rows.map(
+                ({ entry, unit, arrears, deductionsTotal, held, refundable, depositValid }) => {
+                  const StatusIcon = statusIcon[entry.status];
+                  return (
+                    <li
+                      key={entry.id}
+                      className="grid gap-4 p-5 md:grid-cols-[1.4fr_repeat(4,1fr)_auto] md:items-center md:px-6"
                     >
-                      {entry.status}
-                    </span>
-                  </div>
-                  <Metric label="Deposit held" value={formatUGX(held)} />
-                  <Metric
-                    label="Received"
-                    value={new Date(entry.receivedAt).toLocaleDateString("en-UG", {
-                      day: "numeric",
-                      month: "short",
-                      year: "numeric",
-                    })}
-                  />
-                  <Metric label="Deductions pending" value={formatUGX(deductionsTotal)} />
-                  <Metric
-                    label="Refundable if leaving today"
-                    value={formatUGX(refundable)}
-                    note={
-                      arrears > 0 ? `${formatUGX(arrears)} current rent outstanding` : undefined
-                    }
-                  />
-                  <div className="flex flex-wrap gap-2 md:flex-col">
-                    {(entry.status === "Held" || entry.status === "Disputed") && (
-                      <Button
-                        size="sm"
-                        className="bg-purple-800 text-white hover:bg-purple-900"
-                        onClick={() => openRefund(entry)}
-                      >
-                        {entry.status === "Disputed" ? "Revise refund" : "Start refund"}
-                      </Button>
-                    )}
-                    {entry.status === "Refund pending" && (
-                      <>
-                        <Button size="sm" onClick={() => acceptRefund(entry)}>
-                          Tenant accepts
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            onTenantDecision(entry.id, "dispute");
-                            toast.error("Tenant disputed the proposed deductions");
-                          }}
+                      <div>
+                        <p className="font-semibold">{entry.tenant}</p>
+                        <p className="mt-0.5 text-sm text-muted-foreground">Unit {entry.unit}</p>
+                        <span
+                          className={cn(
+                            "mt-2 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold",
+                            statusClass[entry.status],
+                          )}
                         >
-                          Tenant disputes
-                        </Button>
-                      </>
-                    )}
-                    {entry.status === "Refunded" && (
-                      <ReceiptActions
-                        getBundle={() => {
-                          const property = units.find((unit) => unit.id === entry.unitId)?.property;
-                          if (!property)
-                            throw new Error("The property for this deposit could not be found.");
-                          return issueDepositReceipt(entry, property);
-                        }}
+                          <StatusIcon className="size-3.5" aria-hidden />
+                          {entry.status}
+                        </span>
+                        {!depositValid && (
+                          <p className="mt-2 flex items-start gap-1.5 text-xs font-semibold text-warning-ink">
+                            <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+                            Deposit exceeds one month’s rent ({formatUGX(unit?.rent ?? 0)}).
+                          </p>
+                        )}
+                      </div>
+                      <Metric
+                        label="Deposit amount"
+                        value={formatUGX(entry.amount)}
+                        note={`${formatUGX(held)} still held`}
                       />
-                    )}
-                    {entry.status !== "Refunded" && (
-                      <ReceiptActions
-                        getBundle={() => {
-                          const property = units.find((unit) => unit.id === entry.unitId)?.property;
-                          if (!property)
-                            throw new Error("The property for this deposit could not be found.");
-                          return issueDepositReceipt(entry, property);
-                        }}
+                      <Metric
+                        label="Received"
+                        value={new Date(entry.receivedAt).toLocaleDateString("en-UG", {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                        })}
                       />
-                    )}
-                  </div>
-                </li>
-              ))}
+                      <Metric label="Deductions pending" value={formatUGX(deductionsTotal)} />
+                      <Metric
+                        label="Refundable if leaving today"
+                        value={formatUGX(refundable)}
+                        note={
+                          arrears > 0 ? `${formatUGX(arrears)} current rent outstanding` : undefined
+                        }
+                      />
+                      <div className="flex flex-wrap gap-2 md:flex-col">
+                        {(entry.status === "Held" || entry.status === "Disputed") && (
+                          <Button
+                            size="sm"
+                            className="min-h-11 bg-purple-800 text-white hover:bg-purple-900"
+                            onClick={() => openRefund(entry)}
+                          >
+                            {entry.status === "Disputed" ? "Revise refund" : "Start refund"}
+                          </Button>
+                        )}
+                        {entry.status === "Refund pending" && (
+                          <>
+                            <Button
+                              size="sm"
+                              className="min-h-11"
+                              onClick={() => acceptRefund(entry)}
+                            >
+                              Tenant accepts
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="min-h-11"
+                              onClick={() => {
+                                onTenantDecision(entry.id, "dispute");
+                                toast.error("Tenant disputed the proposed deductions");
+                              }}
+                            >
+                              Tenant disputes
+                            </Button>
+                          </>
+                        )}
+                        {entry.status === "Refunded" && (
+                          <ReceiptActions
+                            getBundle={() => {
+                              const property = units.find(
+                                (unit) => unit.id === entry.unitId,
+                              )?.property;
+                              if (!property)
+                                throw new Error(
+                                  "The property for this deposit could not be found.",
+                                );
+                              return issueDepositReceipt(entry, property);
+                            }}
+                          />
+                        )}
+                        {entry.status !== "Refunded" && (
+                          <ReceiptActions
+                            getBundle={() => {
+                              const property = units.find(
+                                (unit) => unit.id === entry.unitId,
+                              )?.property;
+                              if (!property)
+                                throw new Error(
+                                  "The property for this deposit could not be found.",
+                                );
+                              return issueDepositReceipt(entry, property);
+                            }}
+                          />
+                        )}
+                      </div>
+                    </li>
+                  );
+                },
+              )}
             </ul>
           )}
         </div>

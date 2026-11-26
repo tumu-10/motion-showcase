@@ -307,6 +307,7 @@ export type HomeServiceRequest = {
   serviceLabel: string;
   providerId: string;
   providerName: string;
+  details?: string | undefined;
   requestedAt: string;
   status: HomeServiceRequestStatus;
 };

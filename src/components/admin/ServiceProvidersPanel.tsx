@@ -8,16 +8,15 @@ import {
   readHomeServiceProviders,
   resizeHomeServiceProviderImage,
 } from "@/lib/home-service-providers";
-import {
-  demoHomeServiceProviders,
-  homeServiceCategories,
-  type DemoHomeServiceProvider,
-  type HomeServiceId,
-} from "@/lib/home-services";
+import type { DemoHomeServiceProvider } from "@/lib/home-services";
+import { homeServiceCategories, type HomeServiceId } from "@/lib/home-service-categories";
+import { dataSource } from "@/lib/data-source";
 import { formatUGX } from "@/lib/rent";
 
 export function ServiceProvidersPanel() {
-  const [providers, setProviders] = useState<DemoHomeServiceProvider[]>(demoHomeServiceProviders);
+  const [providers, setProviders] = useState<DemoHomeServiceProvider[]>(
+    () => dataSource.demoHomeServiceProviders,
+  );
   const [serviceId, setServiceId] = useState<HomeServiceId>(homeServiceCategories[0].id);
   const [name, setName] = useState("");
   const [area, setArea] = useState("");

@@ -5,13 +5,16 @@ import { LogoMark } from "@/components/brand/Logo";
 import { ease, setRevealAt } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
-export type AppPath = "/" | "/tenant" | "/landlord" | "/admin";
+export type AppPath = "/" | "/tenant" | "/landlord" | "/admin" | "/pilot" | "/trust" | "/pricing";
 
 export const pathLabels: Record<AppPath, string> = {
   "/": "Home",
   "/tenant": "Tenant app",
   "/landlord": "Landlord dashboard",
   "/admin": "Platform admin",
+  "/pilot": "Join the pilot",
+  "/trust": "Trust & safety",
+  "/pricing": "Pricing",
 };
 
 type Ctx = { go: (to: AppPath) => void };

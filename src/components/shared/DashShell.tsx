@@ -1,4 +1,5 @@
-import { BellRing, MoreHorizontal, type LucideIcon } from "lucide-react";
+import { BellRing, CircleUserRound, MoreHorizontal, type LucideIcon } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useState, type ReactNode } from "react";
 import { Logo } from "@/components/brand/Logo";
@@ -8,6 +9,7 @@ import { OfflineBanner } from "@/components/shared/OfflineBanner";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { ease } from "@/lib/motion";
 import { cn } from "@/lib/utils";
+import { authStrings } from "@/lib/auth/strings";
 
 export type NavItem<T extends string> = {
   id: T;
@@ -25,6 +27,7 @@ export function DashShell<T extends string>({
   onView,
   notificationCount = 0,
   onOpenNotifications,
+  accountSettings = false,
   account,
   children,
 }: {
@@ -34,6 +37,7 @@ export function DashShell<T extends string>({
   onView: (v: T) => void;
   notificationCount?: number;
   onOpenNotifications?: () => void;
+  accountSettings?: boolean;
   account: { name: string; role: string };
   children: ReactNode;
 }) {
@@ -136,9 +140,21 @@ export function DashShell<T extends string>({
         <OfflineBanner />
         <div className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-background px-4 lg:hidden">
           <Logo />
-          {onOpenNotifications && (
-            <NotificationBell count={notificationCount} onClick={onOpenNotifications} />
-          )}
+          <div className="flex items-center gap-1">
+            {accountSettings && (
+              <Link
+                to="/account/settings"
+                aria-label={authStrings.settings.title}
+                title={authStrings.settings.title}
+                className="inline-flex size-11 items-center justify-center rounded-full text-muted-foreground hover:bg-secondary hover:text-foreground"
+              >
+                <CircleUserRound className="size-5" aria-hidden="true" />
+              </Link>
+            )}
+            {onOpenNotifications && (
+              <NotificationBell count={notificationCount} onClick={onOpenNotifications} />
+            )}
+          </div>
         </div>
         <Sheet open={open} onOpenChange={setOpen}>
           <SheetContent
@@ -225,9 +241,21 @@ export function DashShell<T extends string>({
           </SheetContent>
         </Sheet>
 
-        {onOpenNotifications && (
-          <div className="sticky top-0 z-30 hidden h-14 justify-end border-b border-border bg-background px-8 lg:flex">
-            <NotificationBell count={notificationCount} onClick={onOpenNotifications} />
+        {(onOpenNotifications || accountSettings) && (
+          <div className="sticky top-0 z-30 hidden h-14 justify-end gap-2 border-b border-border bg-background px-8 lg:flex">
+            {accountSettings && (
+              <Link
+                to="/account/settings"
+                aria-label={authStrings.settings.title}
+                title={authStrings.settings.title}
+                className="inline-flex size-11 items-center justify-center rounded-full text-muted-foreground hover:bg-secondary hover:text-foreground"
+              >
+                <CircleUserRound className="size-5" aria-hidden="true" />
+              </Link>
+            )}
+            {onOpenNotifications && (
+              <NotificationBell count={notificationCount} onClick={onOpenNotifications} />
+            )}
           </div>
         )}
 

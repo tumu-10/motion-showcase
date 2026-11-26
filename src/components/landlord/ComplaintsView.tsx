@@ -5,7 +5,8 @@ import { PageHeading } from "@/components/shared/DashShell";
 import { Pill, type Tone } from "@/components/shared/StatusPill";
 import { Button } from "@/components/ui/button";
 import { ease } from "@/lib/motion";
-import { stageLabel, stageOrder, type Complaint, type ComplaintStage } from "@/lib/sample-data";
+import { dataSource } from "@/lib/data-source";
+import type { Complaint, ComplaintStage } from "@/lib/sample-data";
 
 const stageTone: Record<ComplaintStage, Tone> = {
   submitted: "neutral",
@@ -47,6 +48,7 @@ export function ComplaintsView({
   requests: Complaint[];
   onAdvance: (id: string) => void;
 }) {
+  const { stageLabel, stageOrder } = dataSource;
   const [filter, setFilter] = useState<"open" | ComplaintStage>("open");
   const rows = requests.filter((r) =>
     filter === "open" ? r.stage !== "resolved" : r.stage === filter,

@@ -5,15 +5,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { formatUGX, getMinimumNoticeDate } from "@/lib/rent";
 import {
-  formatUGX,
-  getMinimumNoticeDate,
-  validateNotice,
-  validateRentIncreaseNotice,
-} from "@/lib/rent";
+  canIncreaseRent,
+  evictionNoticeEarliestDate,
+  rentIncreaseNoticeDate,
+} from "@/lib/compliance";
 import {
   MAX_ANNUAL_RENT_INCREASE_PCT,
   MIN_EVICTION_NOTICE_DAYS,
+  RENT_INCREASE_INTERVAL_MONTHS,
   RENT_INCREASE_NOTICE_DAYS,
   SMALL_CLAIMS_LIMIT_UGX,
 } from "@/lib/legal";
@@ -45,6 +46,7 @@ const kindOptions: { value: NoticeKind; label: string }[] = [
   { value: "notice-to-vacate", label: "Eviction notice (notice to vacate)" },
   { value: "rent-increase", label: "Rent-increase notice" },
   { value: "end-of-tenancy", label: "End-of-tenancy notice" },
+  { value: "repair", label: "Repair notice" },
 ];
 
 const reasonOptions: { value: EvictionReason; label: string }[] = [
@@ -98,6 +100,7 @@ export function NoticesView({
   const [otherReason, setOtherReason] = useState("");
   const [details, setDetails] = useState("");
   const [increasePct, setIncreasePct] = useState("");
+  const [lastIncreaseDate, setLastIncreaseDate] = useState("");
   const [serviceMethod, setServiceMethod] =
     useState<NoticeServiceRecord["method"]>("hand-delivery");
   const [servedAt, setServedAt] = useState("");
@@ -120,16 +123,47 @@ export function NoticesView({
     reasonCategory === "other"
       ? otherReason.trim()
       : (reasonOptions.find((option) => option.value === reasonCategory)?.label ?? "");
+  const previousNoticeDate = useMemo(() => {
+    if (!selectedUnit) return undefined;
+    return notices
+      .filter(
+        (notice) =>
+          notice.kind === "rent-increase" &&
+          notice.unit === selectedUnit.unit &&
+          notice.property === selectedUnit.property,
+      )
+      .map((notice) => notice.effectiveDate ?? notice.issuedOn)
+      .sort()
+      .at(-1);
+  }, [notices, selectedUnit]);
+  const rentNoticeDeadline = /^\d{4}-\d{2}-\d{2}$/.test(effectiveDate)
+    ? rentIncreaseNoticeDate(effectiveDate)
+    : "";
   const legalError =
     kind === "notice-to-vacate"
       ? reasonCategory === "other" && !otherReason.trim()
         ? "Add the details for the other reason."
         : !reasonCategory
           ? "Choose a reason for the notice."
-          : validateNotice(issuedOn, vacateBy, evictionReason, today)
+          : !issuedOn
+            ? "Choose a valid notice date."
+            : !vacateBy
+              ? "Choose a move-out date."
+              : vacateBy < evictionNoticeEarliestDate(issuedOn, evictionReason)
+                ? `The move-out date cannot be earlier than ${evictionNoticeEarliestDate(issuedOn, evictionReason)}.`
+                : null
       : kind === "rent-increase"
-        ? validateRentIncreaseNotice(effectiveDate, Number(increasePct), today)
-        : null;
+        ? !lastIncreaseDate
+          ? "Enter the last rent increase date, or the tenancy start date if rent has not changed."
+          : !selectedUnit ||
+              !canIncreaseRent(lastIncreaseDate, selectedUnit.rent, newRent, issuedOn)
+            ? `Rent increases require at least ${RENT_INCREASE_INTERVAL_MONTHS} months since the last increase and must not exceed ${MAX_ANNUAL_RENT_INCREASE_PCT}%.`
+            : !rentNoticeDeadline || issuedOn > rentNoticeDeadline
+              ? `Give at least ${RENT_INCREASE_NOTICE_DAYS} days' notice; issue this notice on or before ${rentNoticeDeadline || "the required notice date"}.`
+              : null
+        : kind === "repair" && !details.trim()
+          ? "Describe the repair work in the notice details."
+          : null;
   const serviceTouched = !!servedAt || !!receivedBy || !!lc1Witness;
   const serviceError =
     kind === "notice-to-vacate" && serviceTouched && (!servedAt || !receivedBy.trim())
@@ -160,6 +194,10 @@ export function NoticesView({
   }, [occupiedUnits, presetUnitId, unitId]);
 
   useEffect(() => {
+    setLastIncreaseDate(previousNoticeDate ?? activeTenancy?.startDate ?? "");
+  }, [activeTenancy?.startDate, previousNoticeDate, selectedUnit?.id]);
+
+  useEffect(() => {
     if (vacateBy < evictionMinDate) setVacateBy(evictionMinDate);
     if (effectiveDate < rentIncreaseMinDate) setEffectiveDate(rentIncreaseMinDate);
   }, [effectiveDate, evictionMinDate, rentIncreaseMinDate, vacateBy]);
@@ -186,12 +224,15 @@ export function NoticesView({
       phone: selectedUnit.phone,
       email: selectedUnit.email ?? "",
       issuedOn,
+      issuedBy: "Landlord demo account",
       reason:
         kind === "notice-to-vacate"
           ? evictionReason
           : kind === "rent-increase"
             ? `Rent increase of ${Number(increasePct)}%`
-            : (kindOptions.find((option) => option.value === kind)?.label ?? ""),
+            : kind === "repair"
+              ? "Repair notice"
+              : (kindOptions.find((option) => option.value === kind)?.label ?? ""),
       ...(kind === "notice-to-vacate" ? { reasonCategory: reasonCategory as EvictionReason } : {}),
       ...(details.trim() ? { details: details.trim() } : {}),
       ...(kind === "notice-to-vacate" ? { effectiveDate: vacateBy } : {}),
@@ -470,6 +511,18 @@ export function NoticesView({
                   per month.
                 </p>
               </Field>
+              <Field label="Last rent increase date">
+                <Input
+                  type="date"
+                  value={lastIncreaseDate}
+                  max={issuedOn || today}
+                  onChange={(event) => setLastIncreaseDate(event.target.value)}
+                  required
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  If rent has not increased, use the tenancy start date.
+                </p>
+              </Field>
               <Field label="New rent starts">
                 <Input
                   type="date"
@@ -519,15 +572,26 @@ export function NoticesView({
           </div>
         )}
 
-        <Field label={kind === "notice-to-vacate" ? "Additional details" : "Message / details"}>
+        <Field
+          label={
+            kind === "notice-to-vacate"
+              ? "Additional details"
+              : kind === "repair"
+                ? "Repair details"
+                : "Message / details"
+          }
+        >
           <Textarea
             value={details}
             onChange={(event) => setDetails(event.target.value)}
             maxLength={1000}
+            required={kind === "repair"}
             placeholder={
               kind === "notice-to-vacate"
                 ? "Add relevant details. The reason above is required."
-                : "Add payment instructions or other relevant details."
+                : kind === "repair"
+                  ? "Describe the repair work and any proposed access arrangements."
+                  : "Add payment instructions or other relevant details."
             }
           />
         </Field>
@@ -626,7 +690,10 @@ export function NoticesView({
             <ol className="list-decimal space-y-1 pl-5">
               <li>Serve notice first and allow the full notice period to expire.</li>
               <li>No force, lock-outs, or seizing belongings.</li>
-              <li>After expiry, re-entry only in the presence of LC1 officials and police.</li>
+              <li>
+                If the tenant stays after the notice, a court order is required. Do not remove a
+                tenant yourself.
+              </li>
               <li>
                 Use court for arrears; small claims may apply up to{" "}
                 {formatUGX(SMALL_CLAIMS_LIMIT_UGX)}.

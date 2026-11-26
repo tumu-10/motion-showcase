@@ -4,6 +4,7 @@ import {
   Bug,
   BadgeCheck,
   BellRing,
+  Camera,
   CalendarRange,
   CircleCheck,
   Clock3,
@@ -25,9 +26,11 @@ import {
   Search,
   Settings,
   Shield,
+  ShieldCheck,
   Sparkles,
   Trash2,
   Truck,
+  TriangleAlert,
   WalletCards,
   Wifi,
   Wrench,
@@ -48,7 +51,10 @@ import { ReceiptActions } from "@/components/shared/ReceiptActions";
 import { RentRing } from "@/components/shared/RentRing";
 import { Pill, RentStatusPill } from "@/components/shared/StatusPill";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -68,7 +74,7 @@ import {
   localDateIso,
 } from "@/lib/rent-accounting";
 import { useRentDemoData } from "@/lib/useRentDemoData";
-import { createNotification } from "@/lib/notifications";
+import { buildTenantRentDueNotification, createNotification } from "@/lib/notifications";
 import {
   defaultTenantDemoSettings,
   readLandlordPaymentDetails,
@@ -77,37 +83,34 @@ import {
   type TenantPaymentPreference,
 } from "@/lib/demo-settings";
 import {
-  demoHomeServiceProviders,
-  homeServiceCategories,
   type DemoHomeServiceProvider,
   type HomeServiceId,
   type HomeServiceRequest,
   type MonthlyServiceCharge,
 } from "@/lib/home-services";
+import { homeServiceCategories } from "@/lib/home-service-categories";
 import { readHomeServiceProviders } from "@/lib/home-service-providers";
 import { ease } from "@/lib/motion";
 import { quickActionImages, serviceImageById } from "@/lib/service-images";
-import { issueRentReceipt } from "@/lib/receipt-helpers";
-import {
-  listings,
-  complaints as sampleComplaints,
-  stageLabel,
-  stageOrder,
-  ledger as initialLedger,
-  tenantPayments,
-  tenantProfile,
-  type LandlordPaymentDetails,
-  type LedgerEntry,
-  type Listing,
-  type Complaint,
-  type Payment,
-  type TenantNotification,
-  type Unit,
+import { issueTenantRentReceipt } from "@/lib/receipt-helpers";
+import { dataSource } from "@/lib/data-source";
+import type {
+  LandlordPaymentDetails,
+  LedgerEntry,
+  Listing,
+  Complaint,
+  Payment,
+  TenantNotification,
+  Unit,
 } from "@/lib/sample-data";
+import type { DepositLedgerEntry } from "@/lib/tenancy";
 import {
   readTenantActive,
+  readTenantMoveInChecklist,
   readTenantNotices,
+  updateTenantMoveInChecklistItem,
   updateTenantNoticeResponse,
+  type TenantMoveInChecklistItem,
   type TenantNotice,
 } from "@/lib/tenant-demo";
 import { cn } from "@/lib/utils";
@@ -121,6 +124,7 @@ type Tab =
   | "calendar"
   | "notifications"
   | "services"
+  | "deposit"
   | "settings";
 
 const tabOrder: Tab[] = [
@@ -131,6 +135,7 @@ const tabOrder: Tab[] = [
   "calendar",
   "notifications",
   "services",
+  "deposit",
   "settings",
 ];
 const tabs: { id: Tab; label: string; icon: LucideIcon }[] = [
@@ -143,6 +148,7 @@ const moreTabs: { id: Tab; label: string; icon: LucideIcon }[] = [
   { id: "calendar", label: "Calendar", icon: CalendarRange },
   { id: "notifications", label: "Notifications", icon: BellRing },
   { id: "services", label: "Services", icon: Sparkles },
+  { id: "deposit", label: "Deposits", icon: Shield },
   { id: "settings", label: "Settings", icon: Settings },
 ];
 
@@ -164,12 +170,14 @@ const serviceIconById: Record<HomeServiceId, LucideIcon> = {
 // Simulates the first network request so the loading state is visible.
 async function fetchTenantHome() {
   await new Promise((r) => setTimeout(r, 1100));
-  return { profile: tenantProfile };
+  return { profile: dataSource.tenantProfile };
 }
 
 export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void }) {
+  const tenantProfile = dataSource.tenantProfile;
+  const tenantUnitLabel = tenantProfile.unit.replace("Unit ", "");
   const { data: rentData, setData: setRentData, loaded: rentDataLoaded } = useRentDemoData();
-  const [serviceProviders, setServiceProviders] = useState(demoHomeServiceProviders);
+  const [serviceProviders, setServiceProviders] = useState(() => dataSource.demoHomeServiceProviders);
   const [paymentDetails, setPaymentDetails] = useState<LandlordPaymentDetails>(
     tenantProfile.paymentDetails,
   );
@@ -180,23 +188,27 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
   const [dir, setDir] = useState(1);
   const [paid, setPaid] = useState(false);
   const [requests, setRequests] = useState<Complaint[]>(
-    sampleComplaints.filter((m) => m.unit === "B4"),
+    () => dataSource.complaints.filter((m) => m.unit === tenantUnitLabel),
   );
   const [activeTenant, setActiveTenant] = useState(true);
   const [notices, setNotices] = useState<TenantNotice[]>([]);
+  const [moveInChecklist, setMoveInChecklist] = useState<TenantMoveInChecklistItem[]>([]);
   const [sheet, setSheet] = useState<"pay" | "report" | "more" | null>(null);
-  const tenantUnitLabel = tenantProfile.unit.replace("Unit ", "");
   const tenantUnit = useMemo(
     () =>
       rentData.units.find(
         (unit) => unit.unit === tenantUnitLabel && unit.property === tenantProfile.property,
       ) ?? null,
-    [rentData.units, tenantUnitLabel],
+    [rentData.units, tenantProfile.property, tenantUnitLabel],
   );
   const tenantServiceSettings = rentData.propertyHomeServiceSettings.find(
     (settings) => settings.property === tenantProfile.property,
   );
   const monthlyServiceCharge = tenantServiceSettings?.monthlyServiceCharge;
+  const tenantDeposit =
+    rentData.depositLedger.find(
+      (entry) => entry.unitId === tenantUnit?.id && entry.tenant === tenantProfile.name,
+    ) ?? null;
   const tenantServiceRequests = rentData.homeServiceRequests
     .filter(
       (request) =>
@@ -234,11 +246,11 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
         monthsCovered: entry.monthsCovered,
         receivedAt: entry.receivedAt,
       }));
-    return [...savedPayments, ...tenantPayments].sort(
+    return [...savedPayments, ...dataSource.tenantPayments].sort(
       (a, b) =>
         new Date(b.receivedAt ?? b.date).getTime() - new Date(a.receivedAt ?? a.date).getTime(),
     );
-  }, [rentData.ledger, tenantUnit?.id]);
+  }, [rentData.ledger, tenantProfile.name, tenantUnit?.id]);
   const notifications = rentData.notifications
     .filter(
       (notification) =>
@@ -292,6 +304,17 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
 
   useEffect(() => {
     try {
+      setMoveInChecklist(readTenantMoveInChecklist());
+    } catch (error) {
+      console.error("Could not load the tenant move-in checklist.", error);
+      toast.error("Move-in checklist could not be loaded.", {
+        description: error instanceof Error ? error.message : "Check browser storage and retry.",
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
       setActiveTenant(readTenantActive());
       const tenantUnit = tenantProfile.unit.replace("Unit ", "");
       setNotices(
@@ -306,7 +329,79 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
       console.error("Could not load tenant demo updates.", error);
       toast.error("Some tenant updates could not be loaded.");
     }
-  }, []);
+  }, [tenantProfile.name, tenantProfile.property, tenantProfile.unit]);
+
+  useEffect(() => {
+    if (!rentDataLoaded || !tenantUnit) return;
+    const now = new Date();
+    const pending: TenantNotification[] = [];
+    const rentDue = buildTenantRentDueNotification(tenantUnit, rentBalance, now);
+    if (rentDue) pending.push(createNotification(rentDue));
+    for (const notice of notices) {
+      pending.push(
+        createNotification({
+          id: `tenant-notice:${notice.id}`,
+          audience: "tenant",
+          eventType: "notice-received",
+          unitId: tenantUnit.id,
+          unit: tenantUnit.unit,
+          kind: "update",
+          title: `Landlord notice: ${notice.kind.replace(/-/g, " ")}`,
+          message: `${notice.property} · Unit ${notice.unit}. ${notice.reason}`,
+          createdAt: `${notice.issuedOn}T12:00:00.000Z`,
+          read: false,
+        }),
+      );
+    }
+    for (const complaint of requests) {
+      if (complaint.stage === "submitted") continue;
+      pending.push(
+        createNotification({
+          id: `tenant-complaint-update:${complaint.id}:${complaint.stage}`,
+          audience: "tenant",
+          eventType: "repair-update",
+          unitId: tenantUnit.id,
+          unit: tenantUnit.unit,
+          kind: "update",
+          title: "Complaint update",
+          message: `${complaint.category}: ${dataSource.stageLabel[complaint.stage]}. ${complaint.description}`,
+          createdAt: now.toISOString(),
+          read: false,
+        }),
+      );
+    }
+    const knownIds = new Set(rentData.notifications.map((notification) => notification.id));
+    const newNotifications = pending.filter((notification) => !knownIds.has(notification.id));
+    if (newNotifications.length === 0) return;
+    setRentData((current) => {
+      const currentIds = new Set(current.notifications.map((notification) => notification.id));
+      const additions = newNotifications.filter((notification) => !currentIds.has(notification.id));
+      return additions.length
+        ? { ...current, notifications: [...additions, ...current.notifications] }
+        : current;
+    });
+  }, [
+    rentDataLoaded,
+    rentData.notifications,
+    requests,
+    notices,
+    rentBalance,
+    setRentData,
+    tenantUnit,
+  ]);
+
+  const updateMoveInChecklist = (
+    id: string,
+    update: Partial<Pick<TenantMoveInChecklistItem, "checked" | "note" | "photoDataUrl">>,
+  ) => {
+    try {
+      setMoveInChecklist(updateTenantMoveInChecklistItem(id, update));
+    } catch (error) {
+      toast.error("Move-in checklist could not be saved.", {
+        description: error instanceof Error ? error.message : "Check browser storage and retry.",
+      });
+    }
+  };
 
   const respondToNotice = (
     id: string,
@@ -459,7 +554,13 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
                 tenantUnit.rent - getUnitPeriodCredit(tenantUnit, nextLedger, entry.rentPeriod),
               )
             : Math.max(0, rentBalance - entry.amount);
-          issueRentReceipt(entry, tenantUnit?.property ?? tenantProfile.property, balanceAfter);
+          const bundle = issueTenantRentReceipt(
+            entry,
+            tenantUnit?.property ?? tenantProfile.property,
+            balanceAfter,
+          );
+          onTaskDone?.("pay");
+          return bundle.receipt.receiptNumber;
         } catch (error) {
           toast.error("Payment succeeded, but its receipt could not be generated", {
             description:
@@ -468,8 +569,18 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
         }
       }
       onTaskDone?.("pay");
+      return null;
     },
-    [onTaskDone, rentData.ledger, rentBalance, setRentData, tenantUnit, tenantUnitLabel],
+    [
+      onTaskDone,
+      rentData.ledger,
+      rentBalance,
+      setRentData,
+      tenantProfile.name,
+      tenantProfile.property,
+      tenantUnit,
+      tenantUnitLabel,
+    ],
   );
 
   const handleReport = useCallback(
@@ -507,17 +618,28 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
       }));
       onTaskDone?.("report");
     },
-    [onTaskDone, setRentData, tenantUnit?.id],
+    [
+      onTaskDone,
+      setRentData,
+      tenantProfile.name,
+      tenantProfile.property,
+      tenantProfile.unit,
+      tenantUnit?.id,
+    ],
   );
 
   const requestHomeService = useCallback(
-    (providerId: string) => {
+    (providerId: string, details: string) => {
       const provider = serviceProviders.find((item) => item.id === providerId);
       const service = provider
         ? homeServiceCategories.find((item) => item.id === provider.serviceId)
         : undefined;
       if (!provider || !service || !tenantUnit) {
         toast.error("This demo service request could not be created.");
+        return;
+      }
+      if (!details.trim()) {
+        toast.error("Describe the service you need before submitting.");
         return;
       }
       const request: HomeServiceRequest = {
@@ -530,6 +652,7 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
         serviceLabel: service.label,
         providerId: provider.id,
         providerName: provider.name,
+        details: details.trim(),
         requestedAt: new Date().toISOString(),
         status: "Requested",
       };
@@ -537,11 +660,11 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
         ...current,
         homeServiceRequests: [request, ...current.homeServiceRequests],
       }));
-      toast.success("Demo quote request recorded", {
+      toast.success("Demo service request saved", {
         description: `${provider.name} is a demo provider. No external request was sent.`,
       });
     },
-    [serviceProviders, setRentData, tenantUnit],
+    [serviceProviders, setRentData, tenantProfile.name, tenantProfile.property, tenantUnit],
   );
 
   return (
@@ -652,6 +775,13 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
                 }
               />
             )}
+            {tab === "deposit" && (
+              <DepositTrackerTab
+                deposit={tenantDeposit}
+                checklist={moveInChecklist}
+                onChecklistUpdate={updateMoveInChecklist}
+              />
+            )}
             {tab === "settings" && (
               <TenantSettingsTab
                 settings={tenantSettings}
@@ -752,6 +882,8 @@ export function TenantApp({ onTaskDone }: { onTaskDone?: (t: TenantTask) => void
           rent={tenantProfile.rent}
           balance={nextRentBalance}
           rentPeriod={nextRentPeriod}
+          invoiceId={`${tenantUnit?.id ?? "u3"}-${nextRentPeriod}`}
+          unit={tenantUnit?.unit ?? tenantUnitLabel}
           defaultPhone={tenantProfile.phone}
           paymentDetails={paymentDetails}
           preferredPaymentMethod={tenantSettings.preferredPaymentMethod}
@@ -858,6 +990,7 @@ function HomeTab({
   onOpenServices: () => void;
   monthlyServiceCharge: MonthlyServiceCharge | undefined;
 }) {
+  const tenantProfile = dataSource.tenantProfile;
   const { data, isPending } = useQuery({
     queryKey: ["tenant-home"],
     queryFn: fetchTenantHome,
@@ -998,7 +1131,7 @@ function HomeTab({
                 </p>
                 <p className="mt-1 text-sm text-on-deep-muted">
                   {paid
-                    ? `Receipt ${lastPayment?.reference}`
+                    ? `Payment ref ${lastPayment?.reference}`
                     : `Balance due · ${tenantProfile.daysUntilDue} days left`}
                 </p>
               </div>
@@ -1174,9 +1307,22 @@ function ServicesTab({
   providers: DemoHomeServiceProvider[];
   serviceRequests: HomeServiceRequest[];
   preferredProviderIds: string[];
-  onRequestQuote: (providerId: string) => void;
+  onRequestQuote: (providerId: string, details: string) => void;
   onContactProvider: (providerName: string, channel: "Call" | "WhatsApp") => void;
 }) {
+  const [requestingProvider, setRequestingProvider] = useState<DemoHomeServiceProvider | null>(
+    null,
+  );
+  const [requestDetails, setRequestDetails] = useState("");
+
+  function submitRequest(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!requestingProvider || !requestDetails.trim()) return;
+    onRequestQuote(requestingProvider.id, requestDetails.trim());
+    setRequestingProvider(null);
+    setRequestDetails("");
+  }
+
   return (
     <section className="space-y-5 p-5 pb-8">
       <header>
@@ -1208,6 +1354,11 @@ function ServicesTab({
                   <div className="min-w-0">
                     <p className="font-semibold">{request.serviceLabel}</p>
                     <p className="text-sm text-muted-foreground">{request.providerName}</p>
+                    {request.details && (
+                      <p className="mt-1 break-words text-xs text-muted-foreground">
+                        {request.details}
+                      </p>
+                    )}
                   </div>
                   <span
                     className={`inline-flex min-h-8 items-center gap-1.5 rounded-full px-3 text-xs font-bold ${serviceRequestStatusClass[request.status]}`}
@@ -1301,9 +1452,12 @@ function ServicesTab({
                         <Button
                           type="button"
                           className="min-h-11 min-w-0 gap-1 px-2 text-xs"
-                          onClick={() => onRequestQuote(provider.id)}
+                          onClick={() => {
+                            setRequestingProvider(provider);
+                            setRequestDetails("");
+                          }}
                         >
-                          Request quote
+                          Request service
                         </Button>
                       </div>
                     </li>
@@ -1314,6 +1468,44 @@ function ServicesTab({
           );
         })}
       </div>
+      <Dialog
+        open={requestingProvider !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setRequestingProvider(null);
+            setRequestDetails("");
+          }
+        }}
+      >
+        <DialogContent className="max-h-[90dvh] overflow-y-auto">
+          <DialogTitle>Request {requestingProvider?.serviceId.replace(/-/g, " ")}</DialogTitle>
+          <DialogDescription>
+            This sample request will be saved in the demo only. A provider has not been contacted.
+          </DialogDescription>
+          <form onSubmit={submitRequest} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="tenant-service-request-details">What do you need?</Label>
+              <Textarea
+                id="tenant-service-request-details"
+                value={requestDetails}
+                onChange={(event) => setRequestDetails(event.target.value)}
+                maxLength={500}
+                required
+                placeholder="Describe the job and a convenient time."
+                className="min-h-24"
+              />
+            </div>
+            {requestingProvider && (
+              <p className="text-sm text-muted-foreground">
+                Provider: {requestingProvider.name} · {requestingProvider.area}
+              </p>
+            )}
+            <Button type="submit" className="min-h-11 w-full" disabled={!requestDetails.trim()}>
+              Save sample request
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }
@@ -1329,6 +1521,7 @@ function TenantSettingsTab({
   onPaymentPreferenceChange: (method: TenantPaymentPreference) => void;
   onOpenNotifications: () => void;
 }) {
+  const tenantProfile = dataSource.tenantProfile;
   return (
     <section className="space-y-5 p-4 pb-8 sm:p-5">
       <header>
@@ -1374,7 +1567,7 @@ function TenantSettingsTab({
         <div>
           <h2 className="font-semibold text-primary-deep">Notifications</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Choose in-app, SMS, and WhatsApp delivery preferences.
+            In-app alerts are available now. SMS and WhatsApp are preferences for future delivery.
           </p>
         </div>
         <Button
@@ -1419,6 +1612,226 @@ function NotificationsTab({
   );
 }
 
+function DepositTrackerTab({
+  deposit,
+  checklist,
+  onChecklistUpdate,
+}: {
+  deposit: DepositLedgerEntry | null;
+  checklist: TenantMoveInChecklistItem[];
+  onChecklistUpdate: (
+    id: string,
+    update: Partial<Pick<TenantMoveInChecklistItem, "checked" | "note" | "photoDataUrl">>,
+  ) => void;
+}) {
+  const tenantProfile = dataSource.tenantProfile;
+  const statusStyles: Record<DepositLedgerEntry["status"], string> = {
+    Held: "bg-purple-100 text-purple-900",
+    "Refund pending": "bg-warning-soft text-warning-ink",
+    "Partly refunded": "bg-warning-soft text-warning-ink",
+    Refunded: "bg-success-soft text-success-ink",
+    Disputed: "bg-destructive-soft text-destructive-ink",
+  };
+  const StatusIcon =
+    deposit?.status === "Refunded"
+      ? CircleCheck
+      : deposit?.status === "Disputed"
+        ? TriangleAlert
+        : deposit?.status === "Partly refunded"
+          ? ShieldCheck
+          : Clock3;
+  const amountReturned =
+    deposit?.status === "Partly refunded" || deposit?.status === "Refunded"
+      ? (deposit.refundAmount ?? 0)
+      : 0;
+  const amountHeld =
+    !deposit || deposit.status === "Refunded"
+      ? 0
+      : deposit.status === "Partly refunded"
+        ? Math.max(0, deposit.amount - amountReturned)
+        : deposit.amount;
+  const completed = checklist.filter((item) => item.checked).length;
+
+  async function uploadPhoto(itemId: string, file: File | undefined) {
+    if (!file) return;
+    if (!["image/jpeg", "image/png"].includes(file.type)) {
+      toast.error("Choose a JPG or PNG move-in photo.");
+      return;
+    }
+    if (file.size > 1_000_000) {
+      toast.error("Move-in photos must be smaller than 1 MB.");
+      return;
+    }
+    try {
+      const photoDataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () =>
+          typeof reader.result === "string"
+            ? resolve(reader.result)
+            : reject(new Error("Could not read the selected photo."));
+        reader.onerror = () => reject(new Error("Could not read the selected photo."));
+        reader.readAsDataURL(file);
+      });
+      onChecklistUpdate(itemId, { photoDataUrl });
+    } catch (error) {
+      toast.error("Move-in photo could not be saved.", {
+        description: error instanceof Error ? error.message : "Try another photo.",
+      });
+    }
+  }
+
+  return (
+    <section className="space-y-5 px-4 pb-8 pt-5 sm:px-5 sm:pt-6">
+      <header>
+        <p className="text-sm font-medium text-muted-foreground">Your tenancy</p>
+        <h1 className="mt-1 text-2xl font-bold text-primary-deep">Deposit tracker</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Review your refundable security deposit and document your move-in condition.
+        </p>
+      </header>
+
+      <section className="surface space-y-4 p-4" aria-labelledby="tenant-deposit-title">
+        <div className="flex items-start gap-3">
+          <span className="grid size-11 shrink-0 place-items-center rounded-full bg-purple-100 text-purple-900">
+            <ShieldCheck className="size-5" aria-hidden />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h2 id="tenant-deposit-title" className="font-bold text-primary-deep">
+              Security deposit
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {tenantProfile.property} · Unit {tenantProfile.unit.replace("Unit ", "")}
+            </p>
+          </div>
+        </div>
+        {deposit ? (
+          <>
+            <dl className="divide-y divide-border rounded-lg border border-border">
+              <MetricRow label="Deposit paid" value={formatUGX(deposit.amount)} />
+              <MetricRow label="Deposit held" value={formatUGX(amountHeld)} />
+              {amountReturned > 0 && (
+                <MetricRow label="Refunded" value={formatUGX(amountReturned)} />
+              )}
+              <MetricRow
+                label="Received on"
+                value={new Intl.DateTimeFormat("en-UG", {
+                  day: "numeric",
+                  month: "long",
+                  year: "numeric",
+                }).format(new Date(`${deposit.receivedAt}T00:00:00`))}
+              />
+            </dl>
+            <div className="flex flex-wrap items-center gap-2">
+              <span
+                className={cn(
+                  "inline-flex min-h-9 items-center gap-2 rounded-full px-3 text-sm font-bold",
+                  statusStyles[deposit.status],
+                )}
+              >
+                <StatusIcon className="size-4" aria-hidden />
+                {deposit.status}
+              </span>
+              {deposit.refundRequestedAt && (
+                <span className="text-xs text-muted-foreground">
+                  Refund requested{" "}
+                  {new Intl.DateTimeFormat("en-UG", {
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric",
+                  }).format(new Date(deposit.refundRequestedAt))}
+                </span>
+              )}
+            </div>
+          </>
+        ) : (
+          <p className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
+            No deposit has been recorded for this sample tenancy.
+          </p>
+        )}
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          Sample data only. Any refund or deduction should be agreed and recorded with your
+          landlord.
+        </p>
+      </section>
+
+      <section className="space-y-3" aria-labelledby="move-in-checklist-title">
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <h2 id="move-in-checklist-title" className="font-bold text-primary-deep">
+              Move-in checklist
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Tick completed checks and attach a photo if useful.
+            </p>
+          </div>
+          <span className="figure shrink-0 rounded-full bg-secondary px-3 py-1 text-xs font-bold">
+            {completed}/{checklist.length}
+          </span>
+        </div>
+        {checklist.map((item) => (
+          <article key={item.id} className="surface min-w-0 space-y-3 p-4">
+            <label className="flex min-h-11 items-center gap-3 text-sm font-semibold">
+              <Checkbox
+                checked={item.checked}
+                onCheckedChange={(checked) =>
+                  onChecklistUpdate(item.id, { checked: checked === true })
+                }
+                aria-label={item.label}
+              />
+              <span className="min-w-0">{item.label}</span>
+            </label>
+            <Label
+              htmlFor={`move-in-photo-${item.id}`}
+              className="inline-flex min-h-11 items-center gap-2"
+            >
+              <Camera className="size-4" aria-hidden />
+              Add photo (JPG/PNG, under 1 MB)
+            </Label>
+            <Input
+              id={`move-in-photo-${item.id}`}
+              type="file"
+              accept="image/jpeg,image/png"
+              className="min-h-11"
+              onChange={(event) => {
+                void uploadPhoto(item.id, event.target.files?.[0]);
+                event.currentTarget.value = "";
+              }}
+            />
+            {item.photoDataUrl && (
+              <img
+                src={item.photoDataUrl}
+                alt={`Move-in condition: ${item.label}`}
+                className="max-h-48 w-full rounded-lg border border-border object-contain"
+              />
+            )}
+            <Textarea
+              value={item.note}
+              onChange={(event) => onChecklistUpdate(item.id, { note: event.target.value })}
+              maxLength={300}
+              placeholder="Optional note"
+              aria-label={`Note for ${item.label}`}
+              className="min-h-16"
+            />
+          </article>
+        ))}
+        <p className="rounded-lg border border-warning/30 bg-warning-soft p-3 text-xs leading-relaxed text-warning-ink">
+          Demo only: checklist entries and photos are stored in this browser, not shared with your
+          landlord.
+        </p>
+      </section>
+    </section>
+  );
+}
+
+function MetricRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-start justify-between gap-3 px-3 py-3 text-sm">
+      <dt className="min-w-0 text-muted-foreground">{label}</dt>
+      <dd className="figure shrink-0 text-right font-semibold">{value}</dd>
+    </div>
+  );
+}
+
 function NoticeCard({
   notice,
   onAcknowledge,
@@ -1439,6 +1852,7 @@ function NoticeCard({
     "notice-to-vacate": "Notice to vacate",
     "rent-increase": "Rent-increase notice",
     "end-of-tenancy": "End-of-tenancy notice",
+    repair: "Repair notice",
   };
   const isEvictionNotice = notice.kind === "notice-to-vacate";
 
@@ -1458,6 +1872,15 @@ function NoticeCard({
       <p className="mt-1 text-sm text-muted-foreground">
         {notice.property} · Unit {notice.unit}
       </p>
+      <p className="mt-1 text-xs text-muted-foreground">
+        Issued by {notice.issuedBy ?? "the landlord"} · {notice.issuedOn}
+      </p>
+      {isEvictionNotice && (
+        <p className="mt-3 rounded-lg border border-warning/40 bg-card p-3 text-sm font-semibold text-warning-ink">
+          If the tenant stays after the notice, a court order is required. Do not remove a tenant
+          yourself.
+        </p>
+      )}
       {notice.effectiveDate && (
         <p className="mt-2 text-sm">
           {isEvictionNotice ? "Requested move-out date" : "Effective date"}:{" "}
@@ -1641,6 +2064,7 @@ function PaymentRow({ payment }: { payment: Payment }) {
 }
 
 function StageTracker({ stage }: { stage: Complaint["stage"] }) {
+  const stageOrder = dataSource.stageOrder;
   const idx = stageOrder.indexOf(stage);
   return (
     <div>
@@ -1671,7 +2095,7 @@ function StageTracker({ stage }: { stage: Complaint["stage"] }) {
                 i <= idx ? "text-foreground" : "text-muted-foreground",
               )}
             >
-              {stageLabel[s]}
+              {dataSource.stageLabel[s]}
             </span>
           </div>
         ))}
@@ -1692,7 +2116,7 @@ function RequestCard({ request }: { request: Complaint }) {
             {request.category} · Reported {request.reported}
           </p>
         </div>
-        <Pill tone={tone} label={stageLabel[request.stage]} />
+        <Pill tone={tone} label={dataSource.stageLabel[request.stage]} />
       </div>
       <StageTracker stage={request.stage} />
     </div>
@@ -1804,43 +2228,16 @@ function PaymentsTab({
                     <p className="figure mt-1 break-all text-xs text-muted-foreground">
                       Ref {p.reference}
                     </p>
+                    {p.status !== "Pending" && p.status !== "Failed" && (
+                      <p className="figure mt-1 break-all text-xs font-semibold text-primary-deep">
+                        Receipt {getTenantPaymentReceipt(p, ledger, unit).receipt.receiptNumber}
+                      </p>
+                    )}
                   </div>
                 </div>
                 {p.status !== "Pending" && p.status !== "Failed" && (
                   <div className="mt-4 flex justify-end sm:mt-5">
-                    <ReceiptActions
-                      getBundle={() => {
-                        const entry =
-                          ledger.find((item) => item.reference === p.reference) ??
-                          ({
-                            id: p.id,
-                            date: p.date,
-                            receivedAt: p.receivedAt ?? localDateIso(),
-                            tenant: tenantProfile.name,
-                            unitId: unit?.id ?? "u3",
-                            unit: unit?.unit ?? tenantProfile.unit.replace("Unit ", ""),
-                            amount: p.amount,
-                            method: p.method,
-                            reference: p.reference,
-                            status: "Confirmed",
-                            rentPeriod:
-                              p.rentPeriod ??
-                              format(parse(p.month, "MMMM yyyy", new Date()), "yyyy-MM"),
-                            monthsCovered: p.monthsCovered ?? 1,
-                          } satisfies LedgerEntry);
-                        const balanceAfter = unit
-                          ? Math.max(
-                              0,
-                              unit.rent - getUnitPeriodCredit(unit, ledger, entry.rentPeriod),
-                            )
-                          : Math.max(0, tenantProfile.rent - p.amount);
-                        return issueRentReceipt(
-                          entry,
-                          unit?.property ?? tenantProfile.property,
-                          balanceAfter,
-                        );
-                      }}
-                    />
+                    <ReceiptActions getBundle={() => getTenantPaymentReceipt(p, ledger, unit)} />
                   </div>
                 )}
               </article>
@@ -1849,6 +2246,34 @@ function PaymentsTab({
         </AnimatePresence>
       </ul>
     </div>
+  );
+}
+
+function getTenantPaymentReceipt(payment: Payment, ledger: LedgerEntry[], unit: Unit | null) {
+  const entry =
+    ledger.find((item) => item.reference === payment.reference) ??
+    ({
+      id: payment.id,
+      date: payment.date,
+      receivedAt: payment.receivedAt ?? localDateIso(),
+      tenant: dataSource.tenantProfile.name,
+      unitId: unit?.id ?? "u3",
+      unit: unit?.unit ?? dataSource.tenantProfile.unit.replace("Unit ", ""),
+      amount: payment.amount,
+      method: payment.method,
+      reference: payment.reference,
+      status: "Confirmed",
+      rentPeriod:
+        payment.rentPeriod ?? format(parse(payment.month, "MMMM yyyy", new Date()), "yyyy-MM"),
+      monthsCovered: payment.monthsCovered ?? 1,
+    } satisfies LedgerEntry);
+  const balanceAfter = unit
+    ? Math.max(0, unit.rent - getUnitPeriodCredit(unit, ledger, entry.rentPeriod))
+    : Math.max(0, dataSource.tenantProfile.rent - payment.amount);
+  return issueTenantRentReceipt(
+    entry,
+    unit?.property ?? dataSource.tenantProfile.property,
+    balanceAfter,
   );
 }
 
@@ -1918,9 +2343,9 @@ function tenantCalendarEvents(
             id: "rent-due",
             title: "November rent due",
             date: new Date(2026, 10, 21),
-            detail: `${formatUGX(tenantProfile.rent)} · ${tenantProfile.unit}`,
+            detail: `${formatUGX(dataSource.tenantProfile.rent)} · ${dataSource.tenantProfile.unit}`,
             kind: "rent" as const,
-            amount: tenantProfile.rent,
+            amount: dataSource.tenantProfile.rent,
             coverage: "Due November 21 · 5 days left",
           },
         ]
@@ -1953,7 +2378,7 @@ function tenantCalendarEvents(
         complaint.reported === "Today"
           ? new Date(2026, 10, 16)
           : new Date(`${complaint.reported} 2026`),
-      detail: `${complaint.category} · ${stageLabel[complaint.stage]}`,
+      detail: `${complaint.category} · ${dataSource.stageLabel[complaint.stage]}`,
       kind: "complaint" as const,
     })),
   ];
@@ -1993,7 +2418,6 @@ function paymentPeriod(month: string) {
 
 /* --------------------------------- Homes tab ------------------------------- */
 
-const areas = [...new Set(listings.map((listing) => listing.area))];
 const budgets = [
   { value: "any", label: "Any budget", triggerLabel: "Any", max: Infinity },
   { value: "1000000", label: "Up to UGX 1,000,000", triggerLabel: "≤ 1M", max: 1_000_000 },
@@ -2007,6 +2431,8 @@ const bedroomOptions = [
 ];
 
 function HomesTab({ onInterested }: { onInterested: () => void }) {
+  const listings = dataSource.listings;
+  const areas = [...new Set(listings.map((listing) => listing.area))];
   const [area, setArea] = useState("all");
   const [budget, setBudget] = useState("any");
   const [bedrooms, setBedrooms] = useState("any");

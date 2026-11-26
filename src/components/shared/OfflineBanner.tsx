@@ -27,7 +27,7 @@ export function OfflineBanner() {
         >
           <p className="flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium">
             <WifiOff className="size-4" aria-hidden />
-            You are offline. We will sync your changes when you reconnect.
+            You are offline. Complaint forms will retry when you reconnect.
           </p>
         </motion.div>
       )}

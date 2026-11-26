@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
-  defaultReceiptBranding,
+  getDefaultReceiptBranding,
   issueReceipt,
   saveReceiptBranding,
   type ReceiptContent,
 } from "@/lib/receipt-branding";
+
+const defaultReceiptBranding = getDefaultReceiptBranding();
 import { INDIVIDUAL_RENTAL_TAX_EXEMPTION_UGX } from "@/lib/legal";
 import { createInitialEfrisState, getEfrisEligibility, mockEfrisProvider } from "@/lib/efris";
 import { getEfrisRetryQueue, submitEfrisReceipt } from "@/lib/efris-service";

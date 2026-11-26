@@ -1,9 +1,6 @@
 import { detectNetwork, normalizeUgPhone } from "@/lib/rent";
-import {
-  tenantProfile,
-  type LandlordPaymentDetails,
-  type SubscriptionPlan,
-} from "@/lib/sample-data";
+import { dataSource } from "@/lib/data-source";
+import type { LandlordPaymentDetails, SubscriptionPlan } from "@/lib/sample-data";
 
 export type TenantPaymentPreference = "mobile" | "bank" | "visa";
 
@@ -40,9 +37,9 @@ const storageKeys = {
   admin: "propatiz-demo-admin-settings",
 } as const;
 
-export const defaultLandlordPaymentDetails: LandlordPaymentDetails = {
-  ...tenantProfile.paymentDetails,
-};
+export function getDefaultLandlordPaymentDetails(): LandlordPaymentDetails {
+  return { ...dataSource.tenantProfile.paymentDetails };
+}
 
 function readStoredSettings<T>(key: string, fallback: T): unknown {
   if (typeof localStorage === "undefined") return fallback;
@@ -103,7 +100,10 @@ export function saveLandlordDemoSettings(settings: LandlordDemoSettings): Landlo
 }
 
 export function readLandlordPaymentDetails(): LandlordPaymentDetails {
-  const saved = readStoredSettings(storageKeys.landlordPayments, defaultLandlordPaymentDetails);
+  const saved = readStoredSettings(
+    storageKeys.landlordPayments,
+    getDefaultLandlordPaymentDetails(),
+  );
   if (!isRecord(saved)) throw new Error("Saved landlord payment details have an invalid shape.");
   if (
     typeof saved["mobileMoneyEnabled"] !== "boolean" ||

@@ -18,6 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { FieldError } from "@/components/tenant/PayFlow";
 import { ease } from "@/lib/motion";
+import { queueOfflineComplaint } from "@/lib/offline-queue";
 import { cn } from "@/lib/utils";
 
 export const categories: { id: string; label: string; icon: LucideIcon }[] = [
@@ -51,6 +52,7 @@ export function ReportFlow({
   const [urgency, setUrgency] = useState<(typeof urgencies)[number]>("Normal");
   const [description, setDescription] = useState("");
   const [photo, setPhoto] = useState<string | null>(null);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [errors, setErrors] = useState<{
     category?: string | undefined;
     description?: string | undefined;
@@ -58,6 +60,7 @@ export function ReportFlow({
   }>({});
   const [state, setState] = useState<"idle" | "sending" | "sent">("idle");
   const [queued, setQueued] = useState(false);
+  const [submitError, setSubmitError] = useState("");
 
   useEffect(
     () => () => {
@@ -66,7 +69,7 @@ export function ReportFlow({
     [photo],
   );
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
     const next: typeof errors = {};
     if (!category) next.category = "Choose what the problem is about.";
@@ -76,17 +79,35 @@ export function ReportFlow({
     if (Object.keys(next).length) return;
     setState("sending");
     const offline = typeof navigator !== "undefined" && !navigator.onLine;
-    window.setTimeout(() => {
-      setQueued(offline);
-      setState("sent");
-      onSubmitted({
-        category: category!,
-        urgency,
-        description: description.trim(),
-        photo,
-        queued: offline,
-      });
-    }, 1100);
+    setSubmitError("");
+    const submission = {
+      category: category!,
+      urgency,
+      description: description.trim(),
+      photo,
+      queued: offline,
+    };
+
+    if (offline) {
+      try {
+        await queueOfflineComplaint(
+          { ...submission, photo: photoFile },
+          `complaint-${crypto.randomUUID()}`,
+        );
+      } catch (error) {
+        setSubmitError(
+          error instanceof Error ? error.message : "Could not save this form offline.",
+        );
+        setState("idle");
+        return;
+      }
+    } else {
+      await new Promise((resolve) => window.setTimeout(resolve, 1100));
+    }
+
+    setQueued(offline);
+    setState("sent");
+    onSubmitted(submission);
   }
 
   if (state === "sent") {
@@ -220,7 +241,10 @@ export function ReportFlow({
               <img src={photo} alt="Photo of the problem" className="h-40 w-full object-cover" />
               <button
                 type="button"
-                onClick={() => setPhoto(null)}
+                onClick={() => {
+                  setPhoto(null);
+                  setPhotoFile(null);
+                }}
                 className="absolute right-2 top-2 grid size-10 place-items-center rounded-full bg-card shadow-soft"
                 aria-label="Remove photo"
               >
@@ -252,6 +276,7 @@ export function ReportFlow({
                     return;
                   }
                   setErrors((er) => ({ ...er, photo: undefined }));
+                  setPhotoFile(f);
                   setPhoto(URL.createObjectURL(f));
                 }}
               />
@@ -261,6 +286,11 @@ export function ReportFlow({
         <FieldError id="photo-error" message={errors.photo} />
       </div>
 
+      {submitError && (
+        <p role="alert" className="text-sm font-medium text-destructive">
+          {submitError}
+        </p>
+      )}
       <Button type="submit" size="lg" className="w-full" disabled={state === "sending"}>
         {state === "sending" ? (
           <>

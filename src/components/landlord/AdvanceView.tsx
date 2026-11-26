@@ -37,7 +37,7 @@ export function AdvanceView({
 }) {
   const [filter, setFilter] = useState<AdvanceFilter>("all");
   const period = currentRentPeriod();
-  const tenants = useMemo(
+  const advances = useMemo(
     () =>
       units.flatMap((unit) => {
         if (!unit.tenant) return [];
@@ -56,12 +56,11 @@ export function AdvanceView({
       }),
     [ledger, period, units],
   );
-  const visible = tenants.filter((tenant) => filter === "all" || tenant.monthsCovered >= filter);
-  const runningOut = tenants.filter(
-    (tenant) => tenant.futureMonths > 0 && tenant.futureMonths <= 1,
-  );
-  const futureMonths = tenants.reduce((sum, tenant) => sum + tenant.futureMonths, 0);
-  const futureAmount = tenants.reduce((sum, tenant) => sum + tenant.futureAmount, 0);
+  const tenants = advances.filter((tenant) => tenant.futureMonths >= 2);
+  const visible = tenants.filter((tenant) => filter === "all" || tenant.futureMonths >= filter);
+  const runningOut = advances.filter((tenant) => tenant.futureMonths === 1);
+  const futureMonths = advances.reduce((sum, tenant) => sum + tenant.futureMonths, 0);
+  const futureAmount = advances.reduce((sum, tenant) => sum + tenant.futureAmount, 0);
 
   return (
     <div className="space-y-7">
@@ -76,7 +75,7 @@ export function AdvanceView({
           icon={BadgeDollarSign}
           label="Tenants ahead"
           value={String(tenants.length)}
-          detail="With 2+ fully covered months"
+          detail="With 2+ future rent months fully covered"
         />
         <SummaryCard
           icon={WalletCards}
@@ -153,7 +152,7 @@ export function AdvanceView({
                 aria-selected={filter === item.value}
                 onClick={() => setFilter(item.value)}
                 className={cn(
-                  "min-h-10 shrink-0 rounded-full px-4 text-sm font-semibold transition-colors",
+                  "min-h-11 shrink-0 rounded-full px-4 text-sm font-semibold transition-colors",
                   filter === item.value
                     ? "bg-card text-primary-deep shadow-soft"
                     : "text-muted-foreground hover:text-foreground",
@@ -170,7 +169,7 @@ export function AdvanceView({
             <div className="px-6 py-14 text-center">
               <p className="font-semibold">No tenants match this advance filter</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                Advance appears here when at least two rent months are fully covered.
+                Advance appears here when at least two future rent months are fully covered.
               </p>
             </div>
           ) : (
@@ -179,7 +178,7 @@ export function AdvanceView({
                 <thead>
                   <tr className="border-b border-border bg-primary-soft/50 text-left text-xs font-semibold uppercase tracking-wide text-primary-deep">
                     <th className="px-5 py-3">Tenant / unit</th>
-                    <th className="px-5 py-3">Months covered</th>
+                    <th className="px-5 py-3">Months ahead</th>
                     <th className="px-5 py-3">Covered until</th>
                     <th className="px-5 py-3 text-right">Future advance</th>
                     <th className="px-5 py-3">Band</th>
@@ -195,7 +194,7 @@ export function AdvanceView({
                         </p>
                       </td>
                       <td className="px-5 py-4">
-                        <span className="figure font-semibold">{tenant.monthsCovered} months</span>
+                        <span className="figure font-semibold">{tenant.futureMonths} months</span>
                       </td>
                       <td className="px-5 py-4">{formatCoveredUntil(tenant.coveredUntil)}</td>
                       <td className="figure px-5 py-4 text-right font-semibold">
@@ -203,11 +202,7 @@ export function AdvanceView({
                       </td>
                       <td className="px-5 py-4">
                         <span className="inline-flex items-center gap-1 rounded-full bg-primary-soft px-2.5 py-1 text-xs font-bold text-primary-deep">
-                          {tenant.monthsCovered >= 6
-                            ? "6+"
-                            : tenant.monthsCovered >= 3
-                              ? "3+"
-                              : "2+"}
+                          {tenant.futureMonths >= 6 ? "6+" : tenant.futureMonths >= 3 ? "3+" : "2+"}
                           <ArrowUpRight className="size-3" aria-hidden />
                         </span>
                       </td>

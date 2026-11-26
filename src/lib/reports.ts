@@ -358,9 +358,10 @@ function depositReport(
   );
   const rows = records.map((entry) => {
     const unit = unitById.get(entry.unitId);
-    const held = entry.status === "Refunded" ? 0 : entry.amount;
+    const resolved = entry.status === "Refunded" || entry.status === "Partly refunded";
+    const held = resolved ? 0 : entry.amount;
     const arrears =
-      entry.status !== "Refunded" && unit?.tenant && unit.daysUntilDue < 0
+      !resolved && unit?.tenant && unit.daysUntilDue < 0
         ? Math.max(0, unit.rent - getUnitPeriodCredit(unit, sources.ledger, period))
         : entry.arrearsAtRefund;
     const deductions = entry.deductions.reduce((sum, deduction) => sum + deduction.amount, 0);
@@ -381,7 +382,8 @@ function depositReport(
     };
   });
   const held = records.reduce(
-    (sum, entry) => sum + (entry.status === "Refunded" ? 0 : entry.amount),
+    (sum, entry) =>
+      sum + (entry.status === "Refunded" || entry.status === "Partly refunded" ? 0 : entry.amount),
     0,
   );
   const refundable = rows.reduce((sum, row) => sum + parseUGX(row.cells[5] ?? ""), 0);
@@ -724,9 +726,7 @@ function efrisReport(
     const receipt = receipts.get(entry.reference);
     const efrisStatus = receipt ? efrisStatusLabel(receipt.efris.status) : "Receipt not found";
     const efrisMatched =
-      !!receipt &&
-      receipt.efris.status === "issued" &&
-      !!receipt.efris.fiscalDocumentNumber;
+      !!receipt && receipt.efris.status === "issued" && !!receipt.efris.fiscalDocumentNumber;
     return {
       id: entry.id,
       warning: !efrisMatched || !declaredIncomeConnected,

@@ -14,7 +14,9 @@ import appCss from "../styles.css?url";
 import { Preloader } from "@/components/motion/Preloader";
 import { PageTransitionProvider } from "@/components/motion/PageTransition";
 import { Toaster } from "@/components/ui/sonner";
+import { PwaControls } from "@/components/shared/PwaControls";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { isDemoMode } from "@/lib/demo-mode";
 
 function NotFoundComponent() {
   return (
@@ -106,14 +108,18 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         rel: "stylesheet",
         href: appCss,
       },
-      { rel: "icon", href: "/propatiz-mark.svg", type: "image/svg+xml" },
-      { rel: "apple-touch-icon", href: "/propatiz-logo.png" },
-      { rel: "preconnect", href: "https://fonts.googleapis.com" },
-      { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
-        rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap",
+        rel: "preload",
+        as: "font",
+        href: "/fonts/PlusJakartaSans-latin.woff2",
+        type: "font/woff2",
+        crossOrigin: "anonymous",
       },
+      { rel: "icon", href: "/propatiz-mark.svg", type: "image/svg+xml" },
+      { rel: "manifest", href: "/manifest.webmanifest" },
+      { rel: "apple-touch-icon", href: "/icons/propatiz-192.png" },
+      { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
     ],
   }),
   shellComponent: RootShell,
@@ -141,12 +147,24 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
+      {isDemoMode && (
+        <div className="flex min-h-11 flex-wrap items-center justify-center gap-x-1 bg-primary-deep px-3 py-0 text-center text-xs font-medium text-primary-foreground sm:text-sm">
+          <span>Demo with sample data. No real payments.</span>
+          <Link
+            to="/pilot"
+            className="inline-flex min-h-11 items-center underline underline-offset-2"
+          >
+            Pilot waitlist
+          </Link>
+        </div>
+      )}
       <PageTransitionProvider>
         {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
         <Outlet />
       </PageTransitionProvider>
       <Preloader />
       <Toaster />
+      <PwaControls />
     </QueryClientProvider>
   );
 }

@@ -30,11 +30,13 @@ export function SplitHeading({
   text,
   className,
   delay = 0,
+  animateOnLoad = true,
   as = "h1",
 }: {
   text: string;
   className?: string;
   delay?: number;
+  animateOnLoad?: boolean;
   as?: "h1" | "h2" | "h3";
 }) {
   const ref = useRef<HTMLHeadingElement>(null);
@@ -49,7 +51,7 @@ export function SplitHeading({
         <span key={i} aria-hidden className="inline-block overflow-hidden pb-[0.08em] align-bottom">
           <motion.span
             className="inline-block"
-            initial={reduce ? false : { y: "110%" }}
+            initial={reduce || !animateOnLoad ? false : { y: "110%" }}
             animate={inView ? { y: "0%" } : {}}
             transition={{ duration: 0.85, ease: ease.outExpo, delay: start + i * 0.06 }}
           >

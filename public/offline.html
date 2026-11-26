@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#1f3d30" />
+    <title>You're offline | Propatiz</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+        background: #f7f8f6;
+        color: #1f3d30;
+      }
+      body {
+        display: grid;
+        min-height: 100vh;
+        margin: 0;
+        place-items: center;
+        padding: 24px;
+        box-sizing: border-box;
+      }
+      main {
+        width: min(100%, 400px);
+        padding: 28px;
+        border: 1px solid #dfe5e0;
+        border-radius: 20px;
+        background: #fff;
+        box-shadow: 0 12px 36px #1f3d3014;
+        text-align: center;
+      }
+      img {
+        width: 52px;
+        height: 52px;
+      }
+      h1 {
+        margin: 20px 0 8px;
+        font-size: 1.5rem;
+      }
+      p {
+        color: #52635a;
+        line-height: 1.6;
+      }
+      button {
+        min-height: 48px;
+        margin-top: 12px;
+        padding: 0 20px;
+        border: 0;
+        border-radius: 12px;
+        background: #1f3d30;
+        color: #fff;
+        font: inherit;
+        font-weight: 700;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <img src="/propatiz-mark.svg" alt="" />
+      <h1>You're offline</h1>
+      <p>Reconnect to continue using Propatiz. Any complaint saved offline will retry when you’re back online.</p>
+      <button type="button" onclick="location.reload()">Try again</button>
+    </main>
+  </body>
+</html>

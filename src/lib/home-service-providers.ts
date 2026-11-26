@@ -1,9 +1,6 @@
-import {
-  demoHomeServiceProviders,
-  homeServiceCategories,
-  type DemoHomeServiceProvider,
-  type HomeServiceId,
-} from "@/lib/home-services";
+import { dataSource } from "@/lib/data-source";
+import { homeServiceCategories } from "@/lib/home-service-categories";
+import type { DemoHomeServiceProvider, HomeServiceId } from "@/lib/home-services";
 
 const storageKey = "propatiz-demo-home-service-providers";
 
@@ -40,6 +37,7 @@ export async function resizeHomeServiceProviderImage(file: File): Promise<string
 }
 
 export function readHomeServiceProviders(): DemoHomeServiceProvider[] {
+  const demoHomeServiceProviders = dataSource.demoHomeServiceProviders;
   if (typeof localStorage === "undefined") return demoHomeServiceProviders;
   const saved = localStorage.getItem(storageKey);
   if (!saved) return demoHomeServiceProviders;
@@ -100,9 +98,8 @@ export function createHomeServiceProvider(input: NewHomeServiceProvider) {
     rating: 0,
     ratingCount: 0,
   };
-  const saved = providers.filter(
-    (provider) => !demoHomeServiceProviders.some((sample) => sample.id === provider.id),
-  );
+  const demoHomeServiceProviders = dataSource.demoHomeServiceProviders;
+  const saved = providers.filter((provider) => !demoHomeServiceProviders.some((sample) => sample.id === provider.id));
   localStorage.setItem(storageKey, JSON.stringify([...saved, created]));
   return created;
 }

@@ -6,12 +6,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatUGX } from "@/lib/rent";
 import {
-  demoHomeServiceProviders,
-  homeServiceCategories,
   type HomeServiceRequest,
   type HomeServiceRequestStatus,
   type PropertyHomeServiceSettings,
 } from "@/lib/home-services";
+import { homeServiceCategories } from "@/lib/home-service-categories";
+import { dataSource } from "@/lib/data-source";
 import { readHomeServiceProviders } from "@/lib/home-service-providers";
 
 const requestStatusClass: Record<HomeServiceRequestStatus, string> = {
@@ -40,7 +40,7 @@ export function HomeServicesManagement({
 }) {
   const [property, setProperty] = useState(properties[0] ?? "");
   const [serviceFilter, setServiceFilter] = useState("all");
-  const [providers, setProviders] = useState(demoHomeServiceProviders);
+  const [providers, setProviders] = useState(() => dataSource.demoHomeServiceProviders);
   const currentSettings = settings.find((item) => item.property === property);
   const charge = currentSettings?.monthlyServiceCharge;
   const [chargeEnabled, setChargeEnabled] = useState(charge?.enabled ?? false);

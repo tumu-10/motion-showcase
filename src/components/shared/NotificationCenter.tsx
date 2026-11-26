@@ -53,8 +53,8 @@ const eventLabels: Record<NotificationEventType, string> = {
 const eventTypes = Object.keys(eventLabels) as NotificationEventType[];
 const channelLabels: Record<NotificationChannel, string> = {
   "in-app": "In-app",
-  sms: "SMS",
-  whatsapp: "WhatsApp",
+  sms: "SMS · Coming soon",
+  whatsapp: "WhatsApp · Coming soon",
 };
 
 export function NotificationCenter({
@@ -162,7 +162,7 @@ export function NotificationCenter({
             {audience === "landlord" ? "Landlord" : "Tenant"} delivery settings
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Choose which mock channels this demo records for your account.
+            In-app alerts work in this demo. SMS and WhatsApp are preferences for future delivery.
           </p>
         </div>
         <div className="grid gap-3 sm:grid-cols-3">
@@ -181,8 +181,7 @@ export function NotificationCenter({
           ))}
         </div>
         <p className="text-xs leading-relaxed text-muted-foreground">
-          Demo only. SMS and WhatsApp are mock adapters; no messages are sent to phone numbers or
-          external services.
+          Demo only. SMS and WhatsApp are not connected; enabling them does not send messages.
         </p>
       </section>
 

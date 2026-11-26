@@ -21,7 +21,7 @@ import { formatUGX } from "@/lib/rent";
 import { INDIVIDUAL_RENTAL_TAX_EXEMPTION_UGX } from "@/lib/legal";
 import { getEfrisEligibility, type EfrisStatus, type LandlordEntityType } from "@/lib/efris";
 import {
-  defaultReceiptBranding,
+  getDefaultReceiptBranding,
   getReceiptBranding,
   getReceiptBundle,
   getReceiptRecords,
@@ -65,7 +65,7 @@ export function EfrisView({
   onOpenReconciliation: () => void;
   onEfrisFailure: (receipt: ReceiptRecord, errorMessage: string) => void;
 }) {
-  const [branding, setBranding] = useState<ReceiptBranding>(defaultReceiptBranding);
+  const [branding, setBranding] = useState<ReceiptBranding>(() => getDefaultReceiptBranding());
   const [receipts, setReceipts] = useState<ReceiptRecord[]>([]);
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [saving, setSaving] = useState(false);

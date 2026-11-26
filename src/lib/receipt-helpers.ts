@@ -2,13 +2,34 @@ import { addRentPeriodMonths, formatRentPeriodRange } from "@/lib/rent-accountin
 import { formatUGX } from "@/lib/rent";
 import type { DepositLedgerEntry } from "@/lib/tenancy";
 import type { LedgerEntry } from "@/lib/sample-data";
-import { issueReceipt, type ReceiptBundle } from "@/lib/receipt-branding";
+import {
+  issueReceipt,
+  issueTenantReceipt,
+  type ReceiptBundle,
+  type ReceiptContent,
+} from "@/lib/receipt-branding";
 
 export function issueRentReceipt(
   entry: LedgerEntry,
   property: string,
   balanceAfter: number,
 ): ReceiptBundle {
+  return issueReceipt(rentReceiptContent(entry, property, balanceAfter));
+}
+
+export function issueTenantRentReceipt(
+  entry: LedgerEntry,
+  property: string,
+  balanceAfter: number,
+): ReceiptBundle {
+  return issueTenantReceipt(rentReceiptContent(entry, property, balanceAfter));
+}
+
+function rentReceiptContent(
+  entry: LedgerEntry,
+  property: string,
+  balanceAfter: number,
+): ReceiptContent {
   const endPeriod = addRentPeriodMonths(entry.rentPeriod, entry.monthsCovered);
   const [year, month] = endPeriod.split("-").map(Number);
   const coveredUntil = new Date(year!, month! - 1, 0).toLocaleDateString("en-UG", {
@@ -16,7 +37,7 @@ export function issueRentReceipt(
     month: "long",
     year: "numeric",
   });
-  return issueReceipt({
+  return {
     kind: "rent",
     issuedAt: entry.receivedAt,
     tenant: entry.tenant,
@@ -29,11 +50,13 @@ export function issueRentReceipt(
     reference: entry.reference,
     balanceAfter: Math.max(0, balanceAfter),
     efrisStatus: "Pending integration",
-  });
+  };
 }
 
 export function issueDepositReceipt(entry: DepositLedgerEntry, property: string): ReceiptBundle {
-  const isRefund = entry.status === "Refunded" && entry.refundAmount !== null;
+  const isRefund =
+    (entry.status === "Refunded" || entry.status === "Partly refunded") &&
+    entry.refundAmount !== null;
   return issueReceipt({
     kind: isRefund ? "refund" : "security-deposit",
     issuedAt: isRefund ? (entry.resolvedAt ?? entry.receivedAt) : entry.receivedAt,

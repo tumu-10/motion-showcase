@@ -1,19 +1,8 @@
-import {
-  ledger as initialLedger,
-  tenantNotifications as initialNotifications,
-  units as initialUnits,
-  type LedgerEntry,
-  type TenantNotification,
-  type Unit,
-  notificationEventTypes,
-} from "@/lib/sample-data";
-import { DEFAULT_DEPOSIT_MONTHS } from "@/lib/legal";
+import { dataSource, isDemoMode } from "@/lib/data-source";
+import type { LedgerEntry, TenantNotification, Unit } from "@/lib/sample-data";
 import type { DepositLedgerEntry, MoveInPaymentRequest, Tenancy } from "@/lib/tenancy";
-import {
-  homeServiceCategories,
-  type HomeServiceRequest,
-  type PropertyHomeServiceSettings,
-} from "@/lib/home-services";
+import type { HomeServiceRequest, PropertyHomeServiceSettings } from "@/lib/home-services";
+import { homeServiceCategories } from "@/lib/home-service-categories";
 
 const storageKey = "propatiz-demo-rent-state";
 
@@ -26,6 +15,16 @@ export type RentDemoState = {
   moveInRequests: MoveInPaymentRequest[];
   homeServiceRequests: HomeServiceRequest[];
   propertyHomeServiceSettings: PropertyHomeServiceSettings[];
+  auditLog: RentAuditLogEntry[];
+};
+
+export type RentAuditLogEntry = {
+  id: string;
+  unitId: string;
+  actor: string;
+  createdAt: string;
+  action: string;
+  changes: string;
 };
 
 type StoredRentDemoState = Pick<RentDemoState, "units" | "ledger" | "notifications"> &
@@ -37,45 +36,18 @@ type StoredRentDemoState = Pick<RentDemoState, "units" | "ledger" | "notificatio
       | "moveInRequests"
       | "homeServiceRequests"
       | "propertyHomeServiceSettings"
+      | "auditLog"
     >
   >;
 
-export function createSampleDepositLedger(units: Unit[]): DepositLedgerEntry[] {
-  const receivedAt = "2026-01-01";
-  return units.flatMap((unit) => {
-    if (!unit.tenant) return [];
-    return [
-      {
-        id: `sample-deposit-${unit.id}`,
-        tenancyId: null,
-        unitId: unit.id,
-        tenant: unit.tenant,
-        unit: unit.unit,
-        amount: unit.rent * DEFAULT_DEPOSIT_MONTHS,
-        receivedAt,
-        status: "Held" as const,
-        deductions: [],
-        arrearsAtRefund: 0,
-        refundAmount: null,
-        refundRequestedAt: null,
-        resolvedAt: null,
-      },
-    ];
-  });
+export function getInitialRentDemoState(units?: Unit[]): RentDemoState {
+  return dataSource.getInitialRentDemoState(units);
 }
 
-export const initialRentDemoState: RentDemoState = {
-  units: initialUnits,
-  ledger: initialLedger,
-  notifications: initialNotifications,
-  tenancies: [],
-  depositLedger: createSampleDepositLedger(initialUnits),
-  moveInRequests: [],
-  homeServiceRequests: [],
-  propertyHomeServiceSettings: [],
-};
-
 export function readRentDemoState(): { state: RentDemoState; error?: Error | undefined } {
+  if (!isDemoMode) return { state: dataSource.getInitialRentDemoState() };
+  const initialRentDemoState = getInitialRentDemoState();
+  const initialUnits = dataSource.units;
   try {
     const saved = localStorage.getItem(storageKey);
     if (!saved) return { state: initialRentDemoState };
@@ -93,10 +65,12 @@ export function readRentDemoState(): { state: RentDemoState; error?: Error | und
         ...value,
         units: savedUnits,
         tenancies: value.tenancies ?? [],
-        depositLedger: value.depositLedger ?? createSampleDepositLedger(savedUnits),
+        depositLedger:
+          value.depositLedger ?? dataSource.getInitialRentDemoState(savedUnits).depositLedger,
         moveInRequests: value.moveInRequests ?? [],
         homeServiceRequests: value.homeServiceRequests ?? [],
         propertyHomeServiceSettings: value.propertyHomeServiceSettings ?? [],
+        auditLog: value.auditLog ?? [],
       },
     };
   } catch (error) {
@@ -108,6 +82,7 @@ export function readRentDemoState(): { state: RentDemoState; error?: Error | und
 }
 
 export function writeRentDemoState(state: RentDemoState) {
+  if (!isDemoMode) throw new Error("Not connected yet");
   localStorage.setItem(storageKey, JSON.stringify(state));
 }
 
@@ -132,7 +107,9 @@ export function isRentDemoState(value: unknown): value is StoredRentDemoState {
         state["homeServiceRequests"].every(isHomeServiceRequest))) &&
     (state["propertyHomeServiceSettings"] === undefined ||
       (Array.isArray(state["propertyHomeServiceSettings"]) &&
-        state["propertyHomeServiceSettings"].every(isPropertyHomeServiceSettings)))
+        state["propertyHomeServiceSettings"].every(isPropertyHomeServiceSettings))) &&
+    (state["auditLog"] === undefined ||
+      (Array.isArray(state["auditLog"]) && state["auditLog"].every(isRentAuditLogEntry)))
   );
 }
 
@@ -149,6 +126,7 @@ function isHomeServiceRequest(value: unknown): value is HomeServiceRequest {
     typeof request["serviceLabel"] === "string" &&
     typeof request["providerId"] === "string" &&
     typeof request["providerName"] === "string" &&
+    (request["details"] === undefined || typeof request["details"] === "string") &&
     typeof request["requestedAt"] === "string" &&
     ["Requested", "Confirmed", "Done"].includes(String(request["status"]))
   );
@@ -208,9 +186,15 @@ function isLedgerEntry(value: unknown): value is LedgerEntry {
     typeof entry["unitId"] === "string" &&
     typeof entry["unit"] === "string" &&
     typeof entry["amount"] === "number" &&
-    ["MTN Mobile Money", "Airtel Money", "Cash", "Bank transfer", "Visa", "Mastercard"].includes(
-      String(entry["method"]),
-    ) &&
+    [
+      "MTN Mobile Money",
+      "Airtel Money",
+      "Mobile money",
+      "Cash",
+      "Bank transfer",
+      "Visa",
+      "Mastercard",
+    ].includes(String(entry["method"])) &&
     typeof entry["reference"] === "string" &&
     ["Confirmed", "Pending", "Failed"].includes(String(entry["status"])) &&
     isRentPeriod(entry["rentPeriod"]) &&
@@ -224,7 +208,21 @@ function isLedgerEntry(value: unknown): value is LedgerEntry {
         ) &&
         entry["coverageAmounts"].reduce((sum, amount) => sum + Number(amount), 0) ===
           entry["amount"])) &&
-    (entry["bankProofDataUrl"] === undefined || typeof entry["bankProofDataUrl"] === "string")
+    (entry["bankProofDataUrl"] === undefined || typeof entry["bankProofDataUrl"] === "string") &&
+    (entry["receiptPhotoDataUrl"] === undefined || typeof entry["receiptPhotoDataUrl"] === "string")
+  );
+}
+
+function isRentAuditLogEntry(value: unknown): value is RentAuditLogEntry {
+  if (typeof value !== "object" || value === null) return false;
+  const entry = value as Record<string, unknown>;
+  return (
+    typeof entry["id"] === "string" &&
+    typeof entry["unitId"] === "string" &&
+    typeof entry["actor"] === "string" &&
+    typeof entry["createdAt"] === "string" &&
+    typeof entry["action"] === "string" &&
+    typeof entry["changes"] === "string"
   );
 }
 
@@ -243,8 +241,8 @@ function isTenantNotification(value: unknown): value is TenantNotification {
     (notification["audience"] === undefined ||
       ["landlord", "tenant"].includes(String(notification["audience"]))) &&
     (notification["eventType"] === undefined ||
-      notificationEventTypes.includes(
-        notification["eventType"] as (typeof notificationEventTypes)[number],
+      dataSource.notificationEventTypes.includes(
+        notification["eventType"] as (typeof dataSource.notificationEventTypes)[number],
       )) &&
     (notification["dedupeKey"] === undefined || typeof notification["dedupeKey"] === "string") &&
     (notification["delivery"] === undefined ||
@@ -298,7 +296,9 @@ function isDepositEntry(value: unknown): value is DepositLedgerEntry {
     typeof entry["unit"] === "string" &&
     typeof entry["amount"] === "number" &&
     typeof entry["receivedAt"] === "string" &&
-    ["Held", "Refund pending", "Refunded", "Disputed"].includes(String(entry["status"])) &&
+    ["Held", "Refund pending", "Partly refunded", "Refunded", "Disputed"].includes(
+      String(entry["status"]),
+    ) &&
     Array.isArray(entry["deductions"]) &&
     entry["deductions"].every(
       (deduction) =>

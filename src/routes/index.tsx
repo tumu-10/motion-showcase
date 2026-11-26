@@ -13,11 +13,11 @@ import {
 } from "lucide-react";
 import { AnimatePresence, motion, useScroll, useSpring, useTransform } from "motion/react";
 import { useRef, useState } from "react";
-import heroImg from "@/assets/hero-kampala.jpg";
-import { Logo } from "@/components/brand/Logo";
+import heroImg from "@/assets/hero-kampala-optimized.jpg";
 import { TransitionLink, type AppPath } from "@/components/motion/PageTransition";
 import { Reveal, SplitHeading } from "@/components/motion/Reveal";
 import { SiteHeader } from "@/components/site/SiteHeader";
+import { SiteFooter, WhatsAppContact } from "@/components/site/PublicSiteLayout";
 import { RentRing } from "@/components/shared/RentRing";
 import { RentStatusPill, SampleTag } from "@/components/shared/StatusPill";
 import { buttonVariants } from "@/components/ui/button";
@@ -44,6 +44,7 @@ export const Route = createFileRoute("/")({
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
+    links: [{ rel: "preload", as: "image", href: heroImg }],
   }),
   component: Index,
 });
@@ -61,6 +62,7 @@ function Index() {
         <ClosingCta />
       </main>
       <Footer />
+      <WhatsAppContact />
     </div>
   );
 }
@@ -77,7 +79,7 @@ function Hero() {
     <section ref={ref} className="relative overflow-hidden">
       <div className="mx-auto grid max-w-7xl items-center gap-12 px-5 pb-20 pt-10 sm:px-8 lg:grid-cols-[1.05fr_1fr] lg:gap-10 lg:pb-28 lg:pt-16">
         <div className="relative z-10">
-          <Reveal delay={0.05}>
+          <Reveal delay={0.05} initial={false}>
             <span className="text-eyebrow inline-flex items-center gap-2 text-primary">
               <span className="h-px w-8 bg-accent" aria-hidden />
               Property management for Uganda
@@ -87,15 +89,16 @@ function Hero() {
             text="Rent, complaints and records. Handled in one place."
             className="text-display mt-6 max-w-[14ch] text-primary-deep"
             delay={0.1}
+            animateOnLoad={false}
           />
-          <Reveal delay={0.45}>
+          <Reveal delay={0.45} initial={false}>
             <p className="mt-6 max-w-xl text-lg leading-relaxed text-muted-foreground">
               Propatiz helps landlords collect rent through mobile money, keep track of every unit
               and respond to tenant complaints. Tenants pay, report concerns and find their next
               home from their phone.
             </p>
           </Reveal>
-          <Reveal delay={0.55} className="mt-9 flex flex-wrap gap-3">
+          <Reveal delay={0.55} initial={false} className="mt-9 flex flex-wrap gap-3">
             <TransitionLink to="/tenant" className={buttonVariants({ size: "lg" })}>
               Try the tenant app
               <ArrowRight />
@@ -107,7 +110,7 @@ function Hero() {
               See the landlord dashboard
             </TransitionLink>
           </Reveal>
-          <Reveal delay={0.65}>
+          <Reveal delay={0.65} initial={false}>
             <p className="mt-6 text-sm text-muted-foreground">
               Interactive demo with sample data. No account needed.
             </p>
@@ -117,19 +120,21 @@ function Hero() {
         <div className="relative">
           <motion.div
             className="relative aspect-[4/5] overflow-hidden rounded-2xl sm:aspect-[5/4] lg:aspect-[4/5]"
-            initial={{ clipPath: "inset(18% 12% 18% 12% round 24px)" }}
+            initial={false}
             animate={{ clipPath: "inset(0% 0% 0% 0% round 24px)" }}
-            transition={{ duration: 1.3, ease: ease.outExpo, delay: delay + 0.15 }}
+            transition={{ duration: 0.9, ease: ease.outExpo, delay: delay + 0.1 }}
           >
             <motion.img
               src={heroImg}
               alt="Modern apartment building on a Kampala hillside at sunset"
-              width={1600}
-              height={1104}
+              width={1000}
+              height={690}
+              loading="eager"
+              fetchPriority="high"
               style={{ y: imgY }}
-              initial={{ scale: 1.25 }}
+              initial={false}
               animate={{ scale: 1.08 }}
-              transition={{ duration: 1.8, ease: ease.outExpo, delay: delay + 0.15 }}
+              transition={{ duration: 1.2, ease: ease.outExpo, delay: delay + 0.1 }}
               className="h-full w-full object-cover"
             />
           </motion.div>
@@ -137,7 +142,7 @@ function Hero() {
           {/* Product moments layered over the photo */}
           <motion.div
             className="surface absolute -bottom-8 left-4 w-[17rem] p-4 sm:-left-8 sm:w-[19rem]"
-            initial={{ opacity: 0, y: 30 }}
+            initial={false}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, ease: ease.outExpo, delay: delay + 0.9 }}
           >
@@ -155,7 +160,7 @@ function Hero() {
 
           <motion.div
             className="surface absolute -top-4 right-4 flex w-[16rem] items-start gap-3 p-3.5 sm:-right-6"
-            initial={{ opacity: 0, y: -16, scale: 0.96 }}
+            initial={false}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             transition={{ duration: 0.7, ease: ease.outExpo, delay: delay + 1.25 }}
           >
@@ -635,26 +640,5 @@ function ClosingCta() {
 }
 
 function Footer() {
-  return (
-    <footer className="border-t border-border">
-      <div className="mx-auto flex max-w-7xl flex-col gap-6 px-5 py-10 sm:flex-row sm:items-center sm:justify-between sm:px-8">
-        <div>
-          <Logo />
-          <p className="mt-2 text-sm text-muted-foreground">A LandVille Ventures product.</p>
-        </div>
-        <nav className="flex flex-wrap gap-x-6 gap-y-2 text-sm font-medium" aria-label="Demos">
-          <TransitionLink to="/tenant" className="hover:text-primary">
-            Tenant app
-          </TransitionLink>
-          <TransitionLink to="/landlord" className="hover:text-primary">
-            Landlord dashboard
-          </TransitionLink>
-          <TransitionLink to="/admin" className="hover:text-primary">
-            Platform admin
-          </TransitionLink>
-        </nav>
-        <p className="text-sm text-muted-foreground">© 2026 LandVille Ventures</p>
-      </div>
-    </footer>
-  );
+  return <SiteFooter />;
 }

@@ -1,3 +1,4 @@
+import { Link, useRouterState } from "@tanstack/react-router";
 import { Menu } from "lucide-react";
 import { motion, useMotionValueEvent, useScroll } from "motion/react";
 import { useState } from "react";
@@ -7,6 +8,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { ease, entryDelay } from "@/lib/motion";
+import { authStrings } from "@/lib/auth/strings";
 
 const anchors = [
   { href: "#roles", label: "Who it is for" },
@@ -15,6 +17,7 @@ const anchors = [
 ];
 
 export function SiteHeader() {
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
   const { scrollY } = useScroll();
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
@@ -35,19 +38,47 @@ export function SiteHeader() {
         <a href="/" aria-label="Propatiz home">
           <Logo />
         </a>
-        <nav className="hidden items-center gap-1 md:flex" aria-label="Sections">
+        <nav className="hidden items-center gap-1 lg:flex" aria-label="Sections">
           {anchors.map((a) => (
             <a
               key={a.href}
-              href={a.href}
+              href={pathname === "/" ? a.href : `/${a.href}`}
               className="rounded-full px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
             >
               {a.label}
             </a>
           ))}
+          <TransitionLink
+            to="/pilot"
+            className="inline-flex min-h-11 items-center rounded-full px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+          >
+            Pilot
+          </TransitionLink>
+          <TransitionLink
+            to="/trust"
+            className="inline-flex min-h-11 items-center rounded-full px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+          >
+            Trust
+          </TransitionLink>
+          <TransitionLink
+            to="/pricing"
+            className="inline-flex min-h-11 items-center rounded-full px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+          >
+            Pricing
+          </TransitionLink>
         </nav>
-        <div className="hidden items-center gap-2 md:flex">
-          <TransitionLink to="/landlord" className={buttonVariants({ variant: "ghost", size: "sm" })}>
+        <div className="hidden items-center gap-2 lg:flex">
+          <Link
+            to="/login"
+            search={{ mode: "login", expired: false }}
+            className={buttonVariants({ variant: "ghost", size: "sm" })}
+          >
+            {authStrings.welcome.login}
+          </Link>
+          <TransitionLink
+            to="/landlord"
+            className={buttonVariants({ variant: "ghost", size: "sm" })}
+          >
             Landlord demo
           </TransitionLink>
           <TransitionLink to="/tenant" className={buttonVariants({ size: "sm" })}>
@@ -56,32 +87,76 @@ export function SiteHeader() {
         </div>
         <Sheet open={open} onOpenChange={setOpen}>
           <SheetTrigger asChild>
-            <Button variant="outline" size="iconSm" className="md:hidden" aria-label="Open menu">
+            <Button variant="outline" size="iconSm" className="lg:hidden" aria-label="Open menu">
               <Menu />
             </Button>
           </SheetTrigger>
-          <SheetContent side="right" className="flex w-[85%] max-w-sm flex-col gap-2 bg-background p-6">
+          <SheetContent
+            side="right"
+            className="flex w-[85%] max-w-sm flex-col gap-2 bg-background p-6"
+          >
             <SheetTitle className="mb-4">
               <Logo />
             </SheetTitle>
             {anchors.map((a) => (
               <a
                 key={a.href}
-                href={a.href}
+                href={pathname === "/" ? a.href : `/${a.href}`}
                 onClick={() => setOpen(false)}
                 className="flex h-12 items-center rounded-sm px-3 text-base font-medium hover:bg-secondary"
               >
                 {a.label}
               </a>
             ))}
+            <TransitionLink
+              to="/pilot"
+              onNavigate={() => setOpen(false)}
+              className="flex h-12 items-center rounded-sm px-3 text-base font-medium hover:bg-secondary"
+            >
+              Join the pilot
+            </TransitionLink>
+            <TransitionLink
+              to="/trust"
+              onNavigate={() => setOpen(false)}
+              className="flex h-12 items-center rounded-sm px-3 text-base font-medium hover:bg-secondary"
+            >
+              Trust &amp; safety
+            </TransitionLink>
+            <TransitionLink
+              to="/pricing"
+              onNavigate={() => setOpen(false)}
+              className="flex h-12 items-center rounded-sm px-3 text-base font-medium hover:bg-secondary"
+            >
+              Pricing
+            </TransitionLink>
             <div className="mt-auto flex flex-col gap-2">
-              <TransitionLink to="/landlord" onNavigate={() => setOpen(false)} className={buttonVariants({ variant: "outline" })}>
+              <Link
+                to="/login"
+                search={{ mode: "login", expired: false }}
+                onClick={() => setOpen(false)}
+                className={buttonVariants({ variant: "outline" })}
+              >
+                {authStrings.welcome.login}
+              </Link>
+              <TransitionLink
+                to="/landlord"
+                onNavigate={() => setOpen(false)}
+                className={buttonVariants({ variant: "outline" })}
+              >
                 Landlord demo
               </TransitionLink>
-              <TransitionLink to="/admin" onNavigate={() => setOpen(false)} className={buttonVariants({ variant: "outline" })}>
+              <TransitionLink
+                to="/admin"
+                onNavigate={() => setOpen(false)}
+                className={buttonVariants({ variant: "outline" })}
+              >
                 Admin demo
               </TransitionLink>
-              <TransitionLink to="/tenant" onNavigate={() => setOpen(false)} className={buttonVariants()}>
+              <TransitionLink
+                to="/tenant"
+                onNavigate={() => setOpen(false)}
+                className={buttonVariants()}
+              >
                 Try the tenant app
               </TransitionLink>
             </div>

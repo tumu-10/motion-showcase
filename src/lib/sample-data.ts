@@ -37,6 +37,15 @@ export const tenantProfile = {
   },
 };
 
+export const tenantMoveInChecklistItems = [
+  { id: "keys", label: "Keys and access cards received" },
+  { id: "meters", label: "Water and electricity meter readings recorded" },
+  { id: "walls", label: "Walls, floors, doors and windows inspected" },
+  { id: "fixtures", label: "Plumbing and electrical fixtures checked" },
+  { id: "existing-damage", label: "Existing damage documented" },
+  { id: "photos", label: "Move-in photos added" },
+] as const;
+
 export type LandlordPaymentDetails = {
   mobileMoneyEnabled: boolean;
   mobileMoneyName?: string | undefined;
@@ -64,7 +73,14 @@ export type Payment = {
   id: string;
   month: string;
   amount: number;
-  method: "MTN Mobile Money" | "Airtel Money" | "Cash" | "Bank transfer" | "Visa" | "Mastercard";
+  method:
+    | "MTN Mobile Money"
+    | "Airtel Money"
+    | "Mobile money"
+    | "Cash"
+    | "Bank transfer"
+    | "Visa"
+    | "Mastercard";
   date: string;
   reference: string;
   status?: "Pending" | "Confirmed" | "Failed" | undefined;
@@ -396,6 +412,8 @@ export const monthlyCollection = [
   { month: "Nov", collected: 5_400_000, expected: 11_250_000 },
 ];
 
+export type RentPaymentMethod = "Cash" | "Mobile money" | "Bank transfer";
+
 export type LedgerEntry = {
   id: string;
   date: string;
@@ -404,13 +422,21 @@ export type LedgerEntry = {
   unitId: string;
   unit: string;
   amount: number;
-  method: "MTN Mobile Money" | "Airtel Money" | "Cash" | "Bank transfer" | "Visa" | "Mastercard";
+  method:
+    | "MTN Mobile Money"
+    | "Airtel Money"
+    | "Mobile money"
+    | "Cash"
+    | "Bank transfer"
+    | "Visa"
+    | "Mastercard";
   reference: string;
   status: "Confirmed" | "Pending" | "Failed";
   rentPeriod: string;
   monthsCovered: number;
   coverageAmounts?: number[] | undefined;
   bankProofDataUrl?: string | undefined;
+  receiptPhotoDataUrl?: string | undefined;
 };
 
 export const ledger: LedgerEntry[] = [

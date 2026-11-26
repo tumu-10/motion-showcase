@@ -1,14 +1,14 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
-  initialRentDemoState,
+  getInitialRentDemoState,
   readRentDemoState,
   writeRentDemoState,
   type RentDemoState,
 } from "@/lib/rent-demo";
 
 export function useRentDemoData() {
-  const [data, setData] = useState(initialRentDemoState);
+  const [data, setData] = useState(() => getInitialRentDemoState());
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {

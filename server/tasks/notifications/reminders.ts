@@ -1,6 +1,6 @@
 import { defineTask } from "nitro/task";
 import { runReminderJob } from "../../../src/lib/notifications";
-import { initialRentDemoState } from "../../../src/lib/rent-demo";
+import { getInitialRentDemoState } from "../../../src/lib/rent-demo";
 import type { TenantNotification } from "../../../src/lib/sample-data";
 
 let scheduledDemoNotifications: TenantNotification[] = [];
@@ -11,6 +11,7 @@ export default defineTask({
     description: "Run the daily reminder job against mock portfolio data.",
   },
   run({ payload }) {
+    const initialRentDemoState = getInitialRentDemoState();
     const scheduledTime =
       typeof payload["scheduledTime"] === "number" ? payload["scheduledTime"] : Date.now();
     const result = runReminderJob(new Date(scheduledTime), {

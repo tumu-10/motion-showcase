@@ -14,7 +14,8 @@ import {
 } from "@/components/ui/select";
 import { formatUGX, getUnitListStatus, type UnitListStatus } from "@/lib/rent";
 import { ease } from "@/lib/motion";
-import { properties, type Unit } from "@/lib/sample-data";
+import { dataSource } from "@/lib/data-source";
+import type { Unit } from "@/lib/sample-data";
 import { cn } from "@/lib/utils";
 
 type Filter = "all" | UnitListStatus;
@@ -38,6 +39,7 @@ export function UnitsView({
   onAddTenant: () => void;
   onOpenReports: () => void;
 }) {
+  const properties = dataSource.properties;
   const [filter, setFilter] = useState<Filter>("all");
   const [property, setProperty] = useState("all");
   const [q, setQ] = useState("");

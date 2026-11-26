@@ -23,6 +23,8 @@ describe("tenant mobile-money payment instructions", () => {
         rent={500_000}
         balance={500_000}
         rentPeriod="2026-11"
+        invoiceId="u1-2026-11"
+        unit="A1"
         defaultPhone="0772 000 111"
         paymentDetails={{
           mobileMoneyEnabled: true,
@@ -31,7 +33,7 @@ describe("tenant mobile-money payment instructions", () => {
           bankEnabled: false,
         }}
         preferredPaymentMethod="mobile"
-        onPaid={vi.fn()}
+        onPaid={() => null}
         onOpenServices={vi.fn()}
         onClose={vi.fn()}
       />,
@@ -45,61 +47,46 @@ describe("tenant mobile-money payment instructions", () => {
 });
 
 describe("tenant bank-transfer options", () => {
-  it("shows all bank logos and wraps the selected landlord account details", () => {
+  it("shows three payment tabs and never collects card details", () => {
     render(
       <PayFlow
         rent={500_000}
         balance={500_000}
         rentPeriod="2026-11"
+        invoiceId="u1-2026-11"
+        unit="A1"
         defaultPhone="0772 000 111"
         paymentDetails={{
           mobileMoneyEnabled: true,
+          mobileMoneyName: "Kampala Homes",
+          mobileMoneyNumber: "0772 123 456",
           bankEnabled: true,
           bankName: "Diamond Trust Bank",
           bankAccountName: "Kampala Homes",
           bankAccountNumber: "1234567890123456",
         }}
         preferredPaymentMethod="bank"
-        onPaid={vi.fn()}
+        onPaid={() => null}
         onOpenServices={vi.fn()}
         onClose={vi.fn()}
       />,
     );
 
-    const banks = [
-      ["Stanbic Bank", "Stanbic Bank"],
-      ["Housing Finance Bank", "Housing Finance Bank"],
-      ["Centenary Bank", "Centenary Bank"],
-      ["Equity Bank", "Equity Bank"],
-      ["DTB", "Diamond Trust Bank"],
-      ["dfcu Bank", "dfcu Bank"],
-    ] as const;
-
-    for (const [option, logoAlt] of banks) {
-      const bankButton = screen.getByRole("button", { name: `Paying from ${option}` });
-      const bankLogo = within(bankButton).getByRole("img", { name: logoAlt });
-      expect(bankLogo).toHaveClass("h-full", "w-full", "object-contain");
-      expect(bankButton).not.toHaveTextContent(option);
-    }
-
-    expect(screen.getByRole("button", { name: "Paying from DTB" })).toHaveAttribute(
-      "aria-pressed",
+    expect(screen.getByRole("tab", { name: "Mobile money" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Card" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Bank transfer" })).toHaveAttribute(
+      "aria-selected",
       "true",
     );
-    expect(screen.getByText("1234567890123456")).toHaveClass("break-all");
-    expect(screen.getByText("DTB")).toBeInTheDocument();
-    expect(screen.getByText("1234567890123456").parentElement?.parentElement).toHaveClass(
-      "min-w-0",
-    );
+    expect(screen.getByText(/Coming soon — a bank checkout provider/i)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Mobile money" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Mobile money" }));
     const mobileChoice = screen.getByRole("button", { name: "MTN Mobile Money" });
     expect(within(mobileChoice).getByRole("img", { name: "MTN Mobile Money" })).toBeInTheDocument();
-    expect(mobileChoice).not.toHaveTextContent("MTN MoMo");
 
-    fireEvent.click(screen.getByRole("button", { name: "Card" }));
-    const cardChoice = screen.getByRole("button", { name: "Pay with Visa" });
-    expect(within(cardChoice).getByRole("img", { name: "Visa" })).toBeInTheDocument();
-    expect(cardChoice).not.toHaveTextContent("Visa");
-  }, 15_000);
+    fireEvent.click(screen.getByRole("tab", { name: "Card" }));
+    expect(screen.getByText(/Coming soon — hosted card checkout/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/card number|expiry|security code/i)).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("1234 5678 9012 3456")).not.toBeInTheDocument();
+  });
 });

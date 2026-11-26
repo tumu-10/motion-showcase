@@ -53,17 +53,22 @@ import { useRentDemoData } from "@/lib/useRentDemoData";
 import type { ReportKind } from "@/lib/reports";
 import { setTenantActive, type TenantNotice } from "@/lib/tenant-demo";
 import { defaultLandlordDemoSettings, readLandlordDemoSettings } from "@/lib/demo-settings";
-import {
-  complaints,
-  stageLabel,
-  stageOrder,
-  type LedgerEntry,
-  type Complaint,
-  type TenantNotification,
-  type Unit,
+import type { RentAuditLogEntry } from "@/lib/rent-demo";
+import { dataSource } from "@/lib/data-source";
+import { requireRole } from "@/lib/auth/route-guards";
+import { authService } from "@/lib/auth/auth-service";
+import { LandlordReviewDashboard } from "@/components/auth/LandlordOnboarding";
+import { SessionActivityGuard } from "@/components/auth/SessionActivityGuard";
+import type {
+  LedgerEntry,
+  RentPaymentMethod,
+  Complaint,
+  TenantNotification,
+  Unit,
 } from "@/lib/sample-data";
 
 export const Route = createFileRoute("/landlord")({
+  beforeLoad: () => requireRole("landlord", { allowDemo: true }),
   head: () => ({
     meta: [
       { title: "Landlord dashboard | Propatiz" },
@@ -102,6 +107,25 @@ type View =
   | "settings";
 
 function LandlordPage() {
+  const session = authService.getSession();
+  if (
+    session?.role === "landlord" &&
+    session.landlordStatus !== "verified"
+  ) {
+    return (
+      <SessionActivityGuard>
+        <LandlordReviewDashboard />
+      </SessionActivityGuard>
+    );
+  }
+  return (
+    <SessionActivityGuard>
+      <LandlordDashboard />
+    </SessionActivityGuard>
+  );
+}
+
+function LandlordDashboard() {
   const [view, setView] = useState<View>("overview");
   const [defaultRentDueDay, setDefaultRentDueDay] = useState(
     defaultLandlordDemoSettings.defaultRentDueDay,
@@ -131,7 +155,7 @@ function LandlordPage() {
   const unreadLandlordNotifications = landlordNotifications.filter(
     (notification) => !notification.read,
   ).length;
-  const [requests, setRequests] = useState<Complaint[]>(complaints);
+  const [requests, setRequests] = useState<Complaint[]>(() => dataSource.complaints);
   const [reminded, setReminded] = useState<string[]>([]);
   const [openUnitId, setOpenUnitId] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
@@ -525,7 +549,7 @@ function LandlordPage() {
     refundAmount: number,
   ) => {
     const entry = rentData.depositLedger.find((item) => item.id === entryId);
-    if (!entry || entry.status === "Refunded") {
+    if (!entry || entry.status === "Refunded" || entry.status === "Partly refunded") {
       toast.error("This deposit can no longer be refunded from this request.");
       return;
     }
@@ -569,7 +593,12 @@ function LandlordPage() {
       return;
     }
     const resolvedAt = new Date().toISOString();
-    const status = decision === "accept" ? "Refunded" : "Disputed";
+    const status =
+      decision === "accept"
+        ? (entry.refundAmount ?? 0) < entry.amount
+          ? "Partly refunded"
+          : "Refunded"
+        : "Disputed";
     const notification = createNotification({
       id: `deposit-decision-${entry.id}-${Date.now()}`,
       unitId: entry.unitId,
@@ -596,10 +625,30 @@ function LandlordPage() {
     }));
   };
 
-  const recordRentPayment = (id: string, monthsCovered: number) => {
+  const recordRentPayment = (
+    id: string,
+    monthsCovered: number,
+    method: RentPaymentMethod,
+    reference: string,
+    receiptPhotoDataUrl?: string,
+  ) => {
     const u = units.find((x) => x.id === id);
-    if (!u?.tenant || !Number.isInteger(monthsCovered) || monthsCovered < 1 || monthsCovered > 12)
-      return;
+    if (!u?.tenant) {
+      toast.error("Choose an occupied unit before recording rent.");
+      return false;
+    }
+    if (!Number.isInteger(monthsCovered) || monthsCovered < 1 || monthsCovered > 12) {
+      toast.error("Choose between 1 and 12 rent months.");
+      return false;
+    }
+    if (!reference.trim() || reference.trim().length > 120) {
+      toast.error("Enter a payment reference of 120 characters or fewer.");
+      return false;
+    }
+    if (receiptPhotoDataUrl && method !== "Cash") {
+      toast.error("A cash receipt photo can only be attached to a cash payment.");
+      return false;
+    }
     const now = new Date();
     const receivedAt = localDateIso(now);
     const rentPeriod = getNextUncoveredRentPeriod(u, ledger, period);
@@ -615,12 +664,23 @@ function LandlordPage() {
       unitId: u.id,
       unit: u.unit,
       amount: coverageAmounts.reduce((sum, amount) => sum + amount, 0),
-      method: "Cash",
-      reference: `CASH-${Date.now().toString().slice(-6)}`,
+      method,
+      reference: reference.trim(),
       status: "Confirmed",
       rentPeriod,
       monthsCovered,
       coverageAmounts,
+      ...(receiptPhotoDataUrl ? { receiptPhotoDataUrl } : {}),
+    };
+    const nextLedger = [entry, ...ledger];
+    const paidAfter = getUnitPeriodCredit(u, nextLedger, period) >= u.rent;
+    const auditEntry: RentAuditLogEntry = {
+      id: `audit-${entry.id}`,
+      unitId: u.id,
+      actor: "Landlord demo account",
+      createdAt: now.toISOString(),
+      action: "Rent payment recorded",
+      changes: `${formatUGX(entry.amount)} recorded via ${method}; reference ${entry.reference}; ${monthsCovered} rent month${monthsCovered === 1 ? "" : "s"} added. Rent status: ${u.paid ? "Paid" : "Not fully paid"} → ${paidAfter ? "Paid" : "Not fully paid"}${receiptPhotoDataUrl ? "; cash receipt photo attached" : ""}.`,
     };
     const notification = createNotification({
       id: `payment-${entry.id}`,
@@ -650,15 +710,15 @@ function LandlordPage() {
       read: false,
     });
     setRentData((current) => {
-      const nextLedger = [entry, ...current.ledger];
       return {
         ...current,
-        ledger: nextLedger,
+        ledger: [entry, ...current.ledger],
+        auditLog: [auditEntry, ...current.auditLog],
         units: current.units.map((unit) =>
           unit.id === u.id
             ? {
                 ...unit,
-                paid: getUnitPeriodCredit(unit, nextLedger, period) >= unit.rent,
+                paid: getUnitPeriodCredit(unit, [entry, ...current.ledger], period) >= unit.rent,
               }
             : unit,
         ),
@@ -681,6 +741,7 @@ function LandlordPage() {
     toast.success("Payment recorded", {
       description: `${formatUGX(entry.amount)} for ${u.tenant} · ${u.unit}.`,
     });
+    return true;
   };
 
   const recordCashPayment = (unitId: string, amount: number, receivedAt: string) => {
@@ -772,9 +833,19 @@ function LandlordPage() {
     }
 
     const nextLedger = [entry, ...ledger];
+    const paidAfter = getUnitPeriodCredit(unit, nextLedger, period) >= unit.rent;
+    const auditEntry: RentAuditLogEntry = {
+      id: `audit-${entry.id}`,
+      unitId: unit.id,
+      actor: "Landlord demo account",
+      createdAt,
+      action: "Cash rent payment recorded",
+      changes: `${formatUGX(entry.amount)} recorded via Cash; reference ${entry.reference}; ${entry.monthsCovered} rent month${entry.monthsCovered === 1 ? "" : "s"} allocated. Rent status: ${unit.paid ? "Paid" : "Not fully paid"} → ${paidAfter ? "Paid" : "Not fully paid"}.`,
+    };
     setRentData((current) => ({
       ...current,
       ledger: [entry, ...current.ledger],
+      auditLog: [auditEntry, ...current.auditLog],
       units: current.units.map((currentUnit) =>
         currentUnit.id === unit.id
           ? {
@@ -838,9 +909,20 @@ function LandlordPage() {
     const nextLedgerForReceipt = ledger.map((entry) => (entry.id === id ? confirmedEntry : entry));
     setRentData((current) => {
       const nextLedger = current.ledger.map((entry) => (entry.id === id ? confirmedEntry : entry));
+      const unit = current.units.find((item) => item.id === pending.unitId);
+      const paidAfter = unit ? getUnitPeriodCredit(unit, nextLedger, period) >= unit.rent : false;
+      const auditEntry: RentAuditLogEntry = {
+        id: `audit-${pending.id}`,
+        unitId: pending.unitId,
+        actor: "Landlord demo account",
+        createdAt: now.toISOString(),
+        action: "Pending rent payment confirmed",
+        changes: `${formatUGX(pending.amount)} confirmed via ${pending.method}; reference ${pending.reference}. Rent status is now ${paidAfter ? "Paid" : "Not fully paid"}.`,
+      };
       return {
         ...current,
         ledger: nextLedger,
+        auditLog: [auditEntry, ...current.auditLog],
         units: current.units.map((unit) =>
           unit.id === pending.unitId && unit.tenant === pending.tenant
             ? {
@@ -877,7 +959,10 @@ function LandlordPage() {
   const advance = (id: string) => {
     const request = requests.find((item) => item.id === id);
     if (!request || request.stage === "resolved") return;
-    const next = stageOrder[Math.min(stageOrder.indexOf(request.stage) + 1, stageOrder.length - 1)];
+    const next =
+      dataSource.stageOrder[
+        Math.min(dataSource.stageOrder.indexOf(request.stage) + 1, dataSource.stageOrder.length - 1)
+      ];
     if (!next || next === request.stage) return;
     setRequests((list) => list.map((item) => (item.id === id ? { ...item, stage: next } : item)));
     const unit = units.find(
@@ -890,8 +975,8 @@ function LandlordPage() {
       ...(unit ? { unitId: unit.id } : {}),
       unit: request.unit,
       kind: "update",
-      title: `Repair update: ${stageLabel[next]}`,
-      message: `${request.title} · ${request.property} · Unit ${request.unit} is now ${stageLabel[next].toLowerCase()}.`,
+      title: `Repair update: ${dataSource.stageLabel[next]}`,
+      message: `${request.title} · ${request.property} · Unit ${request.unit} is now ${dataSource.stageLabel[next].toLowerCase()}.`,
       createdAt: new Date().toISOString(),
       read: false,
     });
@@ -906,6 +991,7 @@ function LandlordPage() {
       current="/landlord"
       nav={nav}
       view={view}
+      accountSettings={!!authService.getSession()}
       notificationCount={unreadLandlordNotifications}
       onOpenNotifications={() => setView("notifications")}
       onView={(nextView) => {
@@ -1119,11 +1205,14 @@ function LandlordPage() {
         unit={openUnit}
         tenancy={openTenancy}
         moveInRequest={openMoveInRequest}
+        auditLog={rentData.auditLog.filter((entry) => entry.unitId === openUnit?.id)}
         onClose={() => setOpenUnitId(null)}
         reminded={!!openUnit && reminded.includes(openUnit.id)}
         onRemind={() => openUnit && remind(openUnit.id)}
-        onRecordPayment={(monthsCovered) =>
-          openUnit && recordRentPayment(openUnit.id, monthsCovered)
+        onRecordPayment={(monthsCovered, method, reference, receiptPhotoDataUrl) =>
+          openUnit
+            ? recordRentPayment(openUnit.id, monthsCovered, method, reference, receiptPhotoDataUrl)
+            : false
         }
         onRecordMoveInPayment={recordMoveInPartPayment}
         amountForMonths={(monthsCovered) =>
