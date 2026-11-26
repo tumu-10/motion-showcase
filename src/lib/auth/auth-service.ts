@@ -133,6 +133,31 @@ function copySession(session: AuthSession | null) {
   return session ? { ...session } : null;
 }
 
+const demoUsers: MockUser[] = isDemoMode
+  ? [
+      {
+        id: "demo-landlord",
+        phone: "+256700000001",
+        role: "landlord",
+        pin: "2468",
+        landlordStatus: "under_review",
+      },
+      { id: "demo-tenant", phone: "+256700000002", role: "tenant", pin: "2468" },
+      { id: "demo-admin", phone: "+256700000003", role: "admin", pin: "2468" },
+    ]
+  : [];
+
+export const authDemoAccounts = demoUsers.flatMap((user) => {
+  if (user.role === "admin") return [];
+  return [
+    {
+      phone: user.phone,
+      role: user.role,
+      pin: user.pin,
+    },
+  ];
+});
+
 function createMockAuthService(): AuthService {
   const users = new Map<string, MockUser>();
   const requests = new Map<string, { sentAt: number; expiresAt: number; attempts: number }>();
@@ -147,19 +172,6 @@ function createMockAuthService(): AuthService {
   let onboardingFiles: LandlordOnboardingFiles = { idFile: null, proofFile: null };
   let accountDeletionRequested = false;
 
-  const demoUsers: MockUser[] = isDemoMode
-    ? [
-    {
-      id: "demo-landlord",
-      phone: "+256700000001",
-      role: "landlord" as const,
-      pin: "2468",
-      landlordStatus: "under_review" as const,
-    },
-    { id: "demo-tenant", phone: "+256700000002", role: "tenant" as const, pin: "2468" },
-    { id: "demo-admin", phone: "+256700000003", role: "admin" as const, pin: "2468" },
-      ]
-    : [];
   for (const user of demoUsers) {
     users.set(user.phone, user);
   }

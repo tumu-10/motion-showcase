@@ -3,11 +3,18 @@ export const authStrings = {
   welcome: {
     eyebrow: "A simpler way to manage rent",
     title: "Welcome to Propatiz",
+    headline: "Rent, complaints and records. Handled in one place.",
     description: "Choose how you use Propatiz to get started.",
     tenant: "I am a tenant",
     landlord: "I am a landlord or manager",
     login: "Log in",
     footer: "Your rent and property records, all in one place.",
+  },
+  brandPanel: {
+    mobileMoneyTitle: "Mobile money, made clear",
+    mobileMoneyDescription: "MTN Mobile Money and Airtel Money records in one place.",
+    recordsTitle: "A clear record for both sides",
+    recordsDescription: "Rent updates and receipts stay easy to follow.",
   },
   phone: {
     title: "Your phone number",
@@ -22,7 +29,13 @@ export const authStrings = {
     loginNewDescription: "Join with a landlord invite or create a landlord account.",
     joinWithInvite: "I have an invite code",
     landlordSignup: "Create a landlord account",
-    demoHint: "Demo accounts: +256 700 000 001 or +256 700 000 002. PIN: 2468.",
+    demoHint: "Choose a demo account below. PIN: 2468.",
+    demoAccountsTitle: "Demo accounts",
+    demoLandlord: "Landlord demo",
+    demoTenant: "Tenant demo",
+    expiredContinue: "Continue as {phone}",
+    progressLabel: "Sign-in progress",
+    trustLink: "Trust & safety",
     checking: "Checking your number…",
   },
   code: {
@@ -53,6 +66,8 @@ export const authStrings = {
     weak: "Choose a less predictable PIN.",
     invalid: "Use 4 to 6 digits.",
     signingIn: "Checking your PIN…",
+    show: "Show PIN",
+    hide: "Hide PIN",
   },
   join: {
     title: "Join your home",
@@ -94,8 +109,7 @@ export const authStrings = {
     next: "Save and continue",
     previous: "Previous step",
     reviewTitle: "Under review",
-    reviewDescription:
-      "We’re checking your details. Verification can take up to 1 working day.",
+    reviewDescription: "We’re checking your details. Verification can take up to 1 working day.",
     checklist: "Your setup checklist",
     complete: "Done",
     inProgress: "Still needed",

@@ -17,6 +17,7 @@ export function SessionActivityGuard({ children }: { children: ReactNode }) {
         navigate({
           to: "/login",
           search: { mode: "login", expired: true },
+          state: { expiredPhone: initial.phone },
           replace: true,
         }),
       );
