@@ -8,6 +8,16 @@ afterEach(() => {
 });
 
 describe("data source selection", () => {
+  it("uses the sample-data demo by default in production builds", async () => {
+    vi.stubEnv("DEV", false);
+    vi.stubEnv("VITE_DEMO_MODE", undefined);
+
+    const { dataSource, isDemoMode } = await import("./data-source");
+
+    expect(isDemoMode).toBe(true);
+    expect(dataSource.tenantProfile.name).toBe("Amina Nakato");
+  });
+
   it("uses throwing API stubs without loading demo data when demo mode is off", async () => {
     vi.stubEnv("VITE_DEMO_MODE", "false");
     vi.doMock("./demo-data-source", () => {

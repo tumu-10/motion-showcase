@@ -35,15 +35,13 @@ variables.
 
 ## Demo vs production
 
-`VITE_DEMO_MODE` is read at build time. It defaults to demo mode during local Vite development;
-set it to `true` to publish the sample-data demo. The demo banner links to the pilot waitlist, and
-`/tenant`, `/landlord`, and `/admin` remain accessible without login. For local configuration,
-copy `.env.example` to `.env`.
+`VITE_DEMO_MODE` is read at build time. It defaults to the sample-data demo in every environment.
+The demo banner links to the pilot waitlist; `/tenant`, `/landlord`, and `/admin` remain accessible
+without login. For local configuration, copy `.env.example` to `.env`.
 
-Set `VITE_DEMO_MODE=false` in the production build environment. The app then selects the API data
-source without loading sample fixtures. API methods currently throw `Not connected yet`, so connect
-the production API before enabling production use. Do not set this flag to `true` for a deployment
-that handles real users or payments.
+Set `VITE_DEMO_MODE=false` explicitly in a production build that handles real users or payments.
+The app then selects the API data source without loading sample fixtures. API methods currently
+throw `Not connected yet`, so connect the production API before enabling production use.
 
 ## Progressive web app
 
