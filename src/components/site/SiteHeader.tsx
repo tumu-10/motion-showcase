@@ -30,7 +30,7 @@ export function SiteHeader() {
       animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.7, ease: ease.outExpo, delay: delay + 0.1 }}
       className={cn(
-        "sticky top-0 z-40 border-b transition-[background-color,border-color,box-shadow] duration-300",
+        "sticky top-0 z-[var(--z-header)] border-b transition-[background-color,border-color,box-shadow] duration-300",
         scrolled ? "border-border bg-background shadow-soft" : "border-transparent bg-background/0",
       )}
     >

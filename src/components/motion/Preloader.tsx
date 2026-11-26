@@ -32,7 +32,7 @@ export function Preloader() {
     <motion.div
       role="status"
       aria-label="Loading Propatiz"
-      className="deep-panel fixed inset-0 z-[100] flex flex-col"
+      className="deep-panel fixed inset-0 z-[var(--z-preloader)] flex flex-col"
       initial={{ y: 0 }}
       animate={phase === "leaving" ? { y: "-100%" } : { y: 0 }}
       transition={{ duration: reduce ? 0.2 : 0.8, ease: ease.inOutQuart }}

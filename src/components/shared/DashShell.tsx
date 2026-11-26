@@ -138,7 +138,7 @@ export function DashShell<T extends string>({
 
       <div className="min-w-0">
         <OfflineBanner />
-        <div className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-background px-4 lg:hidden">
+        <div className="sticky top-0 z-[var(--z-sticky)] flex h-16 items-center justify-between border-b border-border bg-background px-4 lg:hidden">
           <Logo />
           <div className="flex items-center gap-1">
             {accountSettings && (
@@ -242,7 +242,7 @@ export function DashShell<T extends string>({
         </Sheet>
 
         {(onOpenNotifications || accountSettings) && (
-          <div className="sticky top-0 z-30 hidden h-14 justify-end gap-2 border-b border-border bg-background px-8 lg:flex">
+          <div className="sticky top-0 z-[var(--z-sticky)] hidden h-14 justify-end gap-2 border-b border-border bg-background px-8 lg:flex">
             {accountSettings && (
               <Link
                 to="/account/settings"
@@ -261,7 +261,7 @@ export function DashShell<T extends string>({
 
         {bottomNav.length > 0 && (
           <nav
-            className="fixed bottom-[calc(0.5rem+env(safe-area-inset-bottom))] left-2 right-2 z-40 mx-auto grid h-[4.25rem] max-w-[34rem] rounded-2xl border border-sidebar-border bg-primary-deep px-1 shadow-lift lg:hidden"
+            className="fixed bottom-[calc(0.5rem+env(safe-area-inset-bottom))] left-2 right-2 z-[var(--z-header)] mx-auto grid h-[4.25rem] max-w-[34rem] rounded-2xl border border-sidebar-border bg-primary-deep px-1 shadow-lift lg:hidden"
             style={{
               gridTemplateColumns: `repeat(${bottomNav.length + (moreNav.length > 0 ? 1 : 0)}, minmax(0, 1fr))`,
             }}

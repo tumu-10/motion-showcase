@@ -79,10 +79,7 @@ export function PwaControls() {
           activeRegistration.addEventListener("updatefound", () => {
             const installing = activeRegistration.installing;
             installing?.addEventListener("statechange", () => {
-              if (
-                installing.state === "installed" &&
-                navigator.serviceWorker.controller
-              ) {
+              if (installing.state === "installed" && navigator.serviceWorker.controller) {
                 setUpdateReady(true);
               }
             });
@@ -91,7 +88,6 @@ export function PwaControls() {
         .catch((error: unknown) => {
           console.error("Could not register the Propatiz service worker.", error);
         });
-
     }
 
     return () => {
@@ -137,7 +133,7 @@ export function PwaControls() {
   if (!canInstall && !showIosHelp && !updateReady) return null;
 
   return (
-    <div className="fixed inset-x-3 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-[70] flex flex-col items-end gap-2 sm:inset-x-auto sm:right-4 sm:max-w-sm lg:bottom-4">
+    <div className="fixed inset-x-3 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-[var(--z-floating)] flex flex-col items-end gap-2 sm:inset-x-auto sm:right-4 sm:max-w-sm lg:bottom-4">
       {updateReady && (
         <div
           role="status"

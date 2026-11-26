@@ -49,7 +49,11 @@ export function PageTransitionProvider({ children }: { children: ReactNode }) {
       await Promise.all([
         animate(".pt-accent", { y: ["100%", "0%"] }, cover),
         animate(".pt-deep", { y: ["100%", "0%"] }, { ...cover, delay: 0.07 }),
-        animate(".pt-content", { opacity: [0, 1], y: [12, 0] }, { duration: 0.4, delay: 0.35, ease: ease.outExpo }),
+        animate(
+          ".pt-content",
+          { opacity: [0, 1], y: [12, 0] },
+          { duration: 0.4, delay: 0.35, ease: ease.outExpo },
+        ),
       ]);
       setRevealAt(380);
       await navigate({ to });
@@ -70,9 +74,19 @@ export function PageTransitionProvider({ children }: { children: ReactNode }) {
   return (
     <TransitionCtx.Provider value={{ go }}>
       {children}
-      <div ref={scope} aria-hidden className="pointer-events-none invisible fixed inset-0 z-[90]">
-        <div className="pt-accent absolute inset-0 bg-accent" style={{ transform: "translateY(100%)" }} />
-        <div className="pt-deep deep-panel absolute inset-0 flex items-center justify-center" style={{ transform: "translateY(100%)" }}>
+      <div
+        ref={scope}
+        aria-hidden
+        className="pointer-events-none invisible fixed inset-0 z-[var(--z-transition)]"
+      >
+        <div
+          className="pt-accent absolute inset-0 bg-accent"
+          style={{ transform: "translateY(100%)" }}
+        />
+        <div
+          className="pt-deep deep-panel absolute inset-0 flex items-center justify-center"
+          style={{ transform: "translateY(100%)" }}
+        >
           <div className="pt-content flex flex-col items-center gap-4 opacity-0">
             <LogoMark className="size-12 text-on-deep" tone="onDeep" />
             <span className="text-eyebrow text-on-deep-muted">{label}</span>
@@ -91,7 +105,13 @@ type TransitionLinkProps = {
   onNavigate?: () => void;
 };
 
-export function TransitionLink({ to, className, children, onNavigate, ...rest }: TransitionLinkProps) {
+export function TransitionLink({
+  to,
+  className,
+  children,
+  onNavigate,
+  ...rest
+}: TransitionLinkProps) {
   const { go } = usePageTransition();
   return (
     <Link
