@@ -2,7 +2,7 @@ import { motion, useInView, useReducedMotion } from "motion/react";
 import { useRef } from "react";
 import { cn } from "@/lib/utils";
 import type { RentStatus } from "@/lib/rent";
-import { ease, entryDelay } from "@/lib/motion";
+import { duration, ease, entryDelay } from "@/lib/motion";
 
 const strokeTone: Record<RentStatus, string> = {
   paid: "text-success",
@@ -39,11 +39,32 @@ export function RentRing({
   const inView = immediate || seen;
   const r = (size - stroke) / 2;
   const progress =
-    status === "paid" ? 1 : status === "overdue" ? 1 : Math.max(0.02, Math.min(1, daysLeft / cycleDays));
+    status === "paid"
+      ? 1
+      : status === "overdue"
+        ? 1
+        : Math.max(0.02, Math.min(1, daysLeft / cycleDays));
   return (
-    <div ref={ref} className={cn("relative grid place-items-center", className)} style={{ width: size, height: size }}>
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90" aria-hidden>
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={stroke} className={trackClassName} />
+    <div
+      ref={ref}
+      className={cn("relative grid place-items-center", className)}
+      style={{ width: size, height: size }}
+    >
+      <svg
+        width={size}
+        height={size}
+        viewBox={`0 0 ${size} ${size}`}
+        className="-rotate-90"
+        aria-hidden
+      >
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          fill="none"
+          strokeWidth={stroke}
+          className={trackClassName}
+        />
         <motion.circle
           cx={size / 2}
           cy={size / 2}
@@ -52,10 +73,17 @@ export function RentRing({
           strokeWidth={stroke}
           strokeLinecap="round"
           stroke="currentColor"
-          className={cn("transition-colors duration-500", strokeTone[status])}
-          initial={reduce ? false : { pathLength: 0 }}
+          className={cn(
+            "transition-colors duration-500 motion-reduce:transition-none",
+            strokeTone[status],
+          )}
+          initial={{ pathLength: 0 }}
           animate={inView ? { pathLength: progress } : {}}
-          transition={{ duration: 1.2, ease: ease.outExpo, delay: inView ? entryDelay() : 0 }}
+          transition={{
+            duration: reduce ? 0 : duration.slow * 2,
+            ease: ease.outExpo,
+            delay: !reduce && inView ? entryDelay() : 0,
+          }}
         />
       </svg>
       <div className="absolute inset-0 grid place-items-center text-center">{children}</div>

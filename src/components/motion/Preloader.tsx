@@ -56,7 +56,11 @@ export function Preloader() {
             clipPath: "inset(45% 45% 45% 45% round 32px)",
           }}
           animate={{ opacity: 1, y: 0, scale: 1, clipPath: "inset(0% 0% 0% 0% round 32px)" }}
-          transition={{ duration: 1, delay: 0.15, ease: ease.outExpo }}
+          transition={{
+            duration: reduce ? 0 : 1,
+            delay: reduce ? 0 : 0.15,
+            ease: ease.outExpo,
+          }}
         >
           <img
             src="/propatiz-logo-transparent-light-text.svg"
@@ -71,7 +75,7 @@ export function Preloader() {
           className="max-w-[14rem] text-sm"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ delay: 0.6, duration: 0.5 }}
+          transition={{ delay: reduce ? 0 : 0.6, duration: reduce ? 0 : 0.5 }}
         >
           Property management for landlords and tenants in Uganda
         </motion.p>

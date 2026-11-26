@@ -144,7 +144,7 @@ function Hero() {
               loading="eager"
               fetchPriority="high"
               style={{ y: reduceMotion ? 0 : imgY }}
-              initial={false}
+              initial={{ scale: 1.08 }}
               animate={{ scale: reduceMotion ? 1 : 1.08 }}
               transition={{
                 duration: reduceMotion ? 0 : duration.slow * 2,

@@ -1,6 +1,6 @@
 import { motion, useInView, useReducedMotion, type HTMLMotionProps } from "motion/react";
 import { useRef } from "react";
-import { ease, entryDelay } from "@/lib/motion";
+import { duration, ease, entryDelay } from "@/lib/motion";
 
 type RevealProps = HTMLMotionProps<"div"> & { delay?: number; y?: number };
 
@@ -18,7 +18,7 @@ export function Reveal({ delay = 0, y = 18, children, ...rest }: RevealProps) {
       initial={{ opacity: 0, y }}
       animate={inView ? { opacity: 1, y: 0 } : {}}
       transition={{
-        duration: reduce ? 0 : 0.7,
+        duration: reduce ? 0 : duration.page,
         ease: ease.outExpo,
         delay: !reduce && inView ? entryDelay() + delay : 0,
       }}
@@ -58,7 +58,7 @@ export function SplitHeading({
             initial={!animateOnLoad ? false : { y: "110%" }}
             animate={inView ? { y: "0%" } : {}}
             transition={{
-              duration: reduce ? 0 : 0.85,
+              duration: reduce ? 0 : duration.page,
               ease: ease.outExpo,
               delay: !reduce ? start + i * 0.06 : 0,
             }}
