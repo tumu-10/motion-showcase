@@ -1,15 +1,16 @@
 import { AlertCircle, CheckCircle2, Clock, CircleDashed, type LucideIcon } from "lucide-react";
-import { motion, AnimatePresence } from "motion/react";
+import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { cn } from "@/lib/utils";
 import type { RentStatus } from "@/lib/rent";
 import { rentStatusLabel } from "@/lib/rent";
+import { duration, ease } from "@/lib/motion";
 
 export type Tone = "success" | "warning" | "danger" | "neutral" | "info";
 
 const toneClass: Record<Tone, string> = {
-  success: "bg-success-soft text-success-ink",
-  warning: "bg-warning-soft text-warning-ink",
-  danger: "bg-destructive-soft text-destructive-ink",
+  success: "bg-[#dcfce7] text-[#15803d]",
+  warning: "bg-[#fef3c7] text-[#b45309]",
+  danger: "bg-[#fee2e2] text-[#b91c1c]",
   neutral: "bg-muted text-muted-foreground",
   info: "bg-primary-soft text-primary-deep",
 };
@@ -41,6 +42,7 @@ export function Pill({
   className?: string | undefined;
 }) {
   const Icon = icon ?? toneIcon[tone];
+  const reduceMotion = useReducedMotion();
   return (
     <span
       className={cn(
@@ -53,10 +55,10 @@ export function Pill({
         <motion.span
           key={label}
           className="inline-flex items-center gap-1.5"
-          initial={{ y: 12, opacity: 0 }}
+          initial={reduceMotion ? false : { y: 12, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          exit={{ y: -12, opacity: 0 }}
-          transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+          exit={reduceMotion ? undefined : { y: -12, opacity: 0 }}
+          transition={{ duration: reduceMotion ? 0 : duration.fast, ease: ease.outExpo }}
         >
           <Icon className="size-3.5" aria-hidden />
           {label}
@@ -66,7 +68,13 @@ export function Pill({
   );
 }
 
-export function RentStatusPill({ status, className }: { status: RentStatus; className?: string | undefined }) {
+export function RentStatusPill({
+  status,
+  className,
+}: {
+  status: RentStatus;
+  className?: string | undefined;
+}) {
   return <Pill tone={rentTone[status]} label={rentStatusLabel[status]} className={className} />;
 }
 

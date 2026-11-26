@@ -215,7 +215,11 @@ export function UnitsView({
                         {st === "pending" ? (
                           <Pill tone="info" label="Pending move-in" />
                         ) : st === "vacant" ? (
-                          <Pill tone="neutral" label="Vacant" />
+                          <Pill
+                            tone="neutral"
+                            label="Vacant"
+                            className="bg-[#ffedd5] text-[#c2410c]"
+                          />
                         ) : (
                           <RentStatusPill status={st} />
                         )}

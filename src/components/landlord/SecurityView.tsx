@@ -31,7 +31,7 @@ import { cn } from "@/lib/utils";
 type DeductionDraft = { id: string; description: string; amount: string };
 
 const statusClass: Record<DepositStatus, string> = {
-  Held: "bg-purple-100 text-purple-900",
+  Held: "bg-[#ede9fe] text-[#6d28d9]",
   "Refund pending": "bg-warning-soft text-warning-ink",
   "Partly refunded": "bg-warning-soft text-warning-ink",
   Refunded: "bg-success-soft text-success-ink",
@@ -165,7 +165,7 @@ export function SecurityView({
   return (
     <div className="space-y-7">
       <PageHeading eyebrow="PURPLE · SEPARATE DEPOSIT LEDGER" title="Security">
-        <span className="grid size-12 place-items-center rounded-full bg-purple-100 text-purple-900">
+        <span className="grid size-12 place-items-center rounded-full bg-[#ede9fe] text-[#6d28d9]">
           <ShieldCheck className="size-6" aria-hidden />
         </span>
       </PageHeading>

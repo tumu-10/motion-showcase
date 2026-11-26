@@ -58,6 +58,7 @@ import { createNotification } from "@/lib/notifications";
 import { formatUGX } from "@/lib/rent";
 import {
   currentRentPeriod,
+  formatRentPeriod,
   formatRentPeriodRange,
   getNextUncoveredRentPeriod,
   localDateIso,
@@ -203,7 +204,8 @@ function AdminDashboard() {
   const recordSubscriptionPayment = (landlord: Landlord) => {
     const tenants = landlord.tenants ?? 0;
     const plan = landlord.subscriptionPlan ?? "monthly";
-    const amount = tenants * dataSource.SUBSCRIPTION_RATE_PER_TENANT_MONTH * subscriptionMonths[plan];
+    const amount =
+      tenants * dataSource.SUBSCRIPTION_RATE_PER_TENANT_MONTH * subscriptionMonths[plan];
     if (!amount) {
       toast.error("There are no registered tenants to bill for this subscription.");
       return;
@@ -564,6 +566,13 @@ function AdminOverview({
   onOpen: (v: View) => void;
   onRunReminders: () => void;
 }) {
+  const todayLabel = new Intl.DateTimeFormat("en-UG", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(new Date());
+  const currentPeriodLabel = formatRentPeriod(currentRentPeriod());
   const totalUnits = landlords.reduce((s, l) => s + l.units, 0);
   const totalTenants = landlords.reduce((s, l) => s + (l.tenants ?? 0), 0);
   const totalCollected = rentSummary.collectedThisMonth;
@@ -612,7 +621,7 @@ function AdminOverview({
       surface: "bg-success-soft",
     },
     {
-      label: "Cash received this month",
+      label: `Cash received in ${currentPeriodLabel}`,
       value: totalCollected,
       sub: formatUGX(totalCollected),
       format: true,
@@ -641,7 +650,7 @@ function AdminOverview({
   ];
   return (
     <>
-      <PageHeading eyebrow="Monday, 16 November 2026" title="Platform overview">
+      <PageHeading eyebrow={todayLabel} title="Platform overview">
         <SampleTag className="self-center" />
         <Button
           type="button"

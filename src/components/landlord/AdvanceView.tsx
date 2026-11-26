@@ -230,12 +230,12 @@ function SummaryCard({
   detail: string;
 }) {
   return (
-    <article className="rounded-xl border border-primary/15 bg-primary-soft/60 p-5">
-      <div className="flex items-center gap-2 text-sm font-semibold text-primary-deep">
+    <article className="rounded-xl border border-[#0f766e]/15 bg-[#ccfbf1] p-5">
+      <div className="flex items-center gap-2 text-sm font-semibold text-[#0f766e]">
         <Icon className="size-4" aria-hidden />
         {label}
       </div>
-      <p className="figure mt-4 text-2xl font-bold text-primary-deep">{value}</p>
+      <p className="figure mt-4 text-2xl font-bold text-[#0f766e]">{value}</p>
       <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
     </article>
   );

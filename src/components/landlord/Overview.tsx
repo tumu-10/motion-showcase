@@ -32,6 +32,7 @@ import { DUE_SOON_DAYS, formatCompactUGX, formatUGX } from "@/lib/rent";
 import { ease } from "@/lib/motion";
 import {
   currentRentPeriod,
+  formatRentPeriod,
   getUnitAdvanceMonths,
   getUnitRentStatus,
   summarizeRentPeriod,
@@ -67,6 +68,12 @@ export function Overview({
   onOpenUnit: (u: Unit) => void;
 }) {
   const period = currentRentPeriod();
+  const todayLabel = new Intl.DateTimeFormat("en-UG", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(new Date());
   const summary = summarizeRentPeriod(units, ledger, period);
   const occupied = units.filter((u) => u.tenant);
   const expected = summary.grossExpected;
@@ -88,35 +95,35 @@ export function Overview({
     {
       key: "paid",
       label: "Paid",
-      cls: "bg-success",
+      cls: "bg-[#15803d]",
       value: sum(groups.paid),
       count: groups.paid.length,
     },
     {
       key: "advance",
       label: "Advance",
-      cls: "bg-primary",
+      cls: "bg-[#0f766e]",
       value: sum(groups.advance),
       count: groups.advance.length,
     },
     {
       key: "due-soon",
       label: "Due soon",
-      cls: "bg-warning",
+      cls: "bg-[#b45309]",
       value: sum(groups["due-soon"]),
       count: groups["due-soon"].length,
     },
     {
       key: "upcoming",
       label: "Upcoming",
-      cls: "bg-chart-4",
+      cls: "bg-[#4338ca]",
       value: sum(groups.upcoming),
       count: groups.upcoming.length,
     },
     {
       key: "overdue",
       label: "Overdue",
-      cls: "bg-destructive",
+      cls: "bg-[#b91c1c]",
       value: sum(groups.overdue),
       count: groups.overdue.length,
     },
@@ -188,7 +195,7 @@ export function Overview({
 
   return (
     <>
-      <PageHeading eyebrow="Monday, 16 November 2026" title="Good afternoon, Patricia">
+      <PageHeading eyebrow={todayLabel} title="Good afternoon, Patricia">
         <SampleTag className="self-center" />
         <Button onClick={onAddTenant}>
           <UserPlus /> Add tenant
@@ -290,7 +297,9 @@ export function Overview({
 
       <section className="grid gap-6 xl:grid-cols-[1.25fr_1fr]">
         <div className="surface p-6 sm:p-8">
-          <p className="text-sm font-semibold text-muted-foreground">Collected in November</p>
+          <p className="text-sm font-semibold text-muted-foreground">
+            Collected in {formatRentPeriod(period)}
+          </p>
           <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <p className="figure text-4xl font-bold tracking-tight text-primary-deep sm:text-5xl">
               <CountUp value={collected} format={(n) => formatUGX(n)} />

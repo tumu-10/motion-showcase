@@ -7,7 +7,7 @@ import type { AppPath } from "@/components/motion/PageTransition";
 import { DemoSwitcher } from "@/components/shared/DemoSwitcher";
 import { OfflineBanner } from "@/components/shared/OfflineBanner";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
-import { ease } from "@/lib/motion";
+import { duration, ease } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import { authStrings } from "@/lib/auth/strings";
 
@@ -80,7 +80,9 @@ export function DashShell<T extends string>({
                 <motion.span
                   layoutId={`dash-nav-${layoutKey}`}
                   className="absolute inset-0 rounded-lg bg-sidebar-primary"
-                  transition={{ type: "spring", stiffness: 420, damping: 36 }}
+                  transition={
+                    reduceMotion ? { duration: 0 } : { type: "spring", stiffness: 420, damping: 36 }
+                  }
                 />
               )}
               <motion.span
@@ -91,8 +93,9 @@ export function DashShell<T extends string>({
                       whileHover: { scale: 1.12, rotateY: 180, rotateX: 8 },
                       whileTap: { scale: 0.92 },
                     })}
+                tabIndex={-1}
                 style={{ transformPerspective: 420, transformStyle: "preserve-3d" }}
-                transition={{ duration: reduceMotion ? 0 : 0.42, ease: ease.outExpo }}
+                transition={{ duration: reduceMotion ? 0 : duration.base, ease: ease.outExpo }}
               >
                 <Icon className="size-[1.125rem]" strokeWidth={1.8} aria-hidden />
               </motion.span>
@@ -187,7 +190,11 @@ export function DashShell<T extends string>({
                         {...(reduceMotion
                           ? {}
                           : { whileHover: { x: 3 }, whileTap: { scale: 0.98 } })}
-                        transition={{ duration: 0.22, ease: ease.outExpo }}
+                        tabIndex={0}
+                        transition={{
+                          duration: reduceMotion ? 0 : duration.fast,
+                          ease: ease.outExpo,
+                        }}
                         className={cn(
                           "relative flex min-h-12 shrink-0 items-center gap-3 rounded-lg px-3.5 text-sm font-semibold transition-colors",
                           active
@@ -203,8 +210,12 @@ export function DashShell<T extends string>({
                                 whileHover: { scale: 1.12, rotateY: 180, rotateX: 8 },
                                 whileTap: { scale: 0.92 },
                               })}
+                          tabIndex={-1}
                           style={{ transformPerspective: 420, transformStyle: "preserve-3d" }}
-                          transition={{ duration: 0.42, ease: ease.outExpo }}
+                          transition={{
+                            duration: reduceMotion ? 0 : duration.base,
+                            ease: ease.outExpo,
+                          }}
                         >
                           <Icon className="size-[1.125rem]" strokeWidth={1.8} aria-hidden />
                         </motion.span>
@@ -285,7 +296,8 @@ export function DashShell<T extends string>({
                         whileHover: { y: -2, scale: 1.025 },
                         whileTap: { scale: 0.96 },
                       })}
-                  transition={{ duration: 0.2, ease: ease.outExpo }}
+                  tabIndex={0}
+                  transition={{ duration: reduceMotion ? 0 : duration.fast, ease: ease.outExpo }}
                 >
                   <span className="relative grid size-9 place-items-center">
                     {active && (
@@ -293,7 +305,11 @@ export function DashShell<T extends string>({
                         layoutId="mobile-landlord-active"
                         className="absolute inset-0 rounded-full bg-accent shadow-soft ring-2 ring-accent/25"
                         initial={false}
-                        transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                        transition={
+                          reduceMotion
+                            ? { duration: 0 }
+                            : { type: "spring", stiffness: 420, damping: 34 }
+                        }
                       />
                     )}
                     <motion.span
@@ -303,7 +319,13 @@ export function DashShell<T extends string>({
                           ? "text-accent-foreground"
                           : "text-on-deep-muted group-hover:bg-accent/15 group-hover:text-accent",
                       )}
-                      animate={active ? { scale: [0.88, 1.08, 1] } : { scale: 1 }}
+                      animate={
+                        reduceMotion
+                          ? { scale: 1 }
+                          : active
+                            ? { scale: [0.88, 1.08, 1] }
+                            : { scale: 1 }
+                      }
                       {...(reduceMotion
                         ? {}
                         : {
@@ -315,8 +337,12 @@ export function DashShell<T extends string>({
                             },
                             whileTap: { scale: 0.9 },
                           })}
+                      tabIndex={-1}
                       style={{ transformPerspective: 420, transformStyle: "preserve-3d" }}
-                      transition={{ duration: 0.42, ease: ease.outExpo }}
+                      transition={{
+                        duration: reduceMotion ? 0 : duration.base,
+                        ease: ease.outExpo,
+                      }}
                     >
                       <Icon className="size-[1.125rem]" strokeWidth={2} aria-hidden />
                     </motion.span>
@@ -328,8 +354,14 @@ export function DashShell<T extends string>({
                   </span>
                   <motion.span
                     className="relative max-w-full truncate"
-                    animate={active ? { y: -1, opacity: 1 } : { y: 0, opacity: 0.82 }}
-                    transition={{ duration: 0.18, ease: ease.outExpo }}
+                    animate={
+                      reduceMotion
+                        ? { y: 0, opacity: active ? 1 : 0.82 }
+                        : active
+                          ? { y: -1, opacity: 1 }
+                          : { y: 0, opacity: 0.82 }
+                    }
+                    transition={{ duration: reduceMotion ? 0 : duration.fast, ease: ease.outExpo }}
                   >
                     {item.label}
                   </motion.span>
@@ -350,7 +382,8 @@ export function DashShell<T extends string>({
                       whileHover: { y: -2, scale: 1.025 },
                       whileTap: { scale: 0.96 },
                     })}
-                transition={{ duration: 0.2, ease: ease.outExpo }}
+                tabIndex={0}
+                transition={{ duration: reduceMotion ? 0 : duration.fast, ease: ease.outExpo }}
               >
                 <span className="relative grid size-9 place-items-center">
                   {moreActive && (
@@ -358,7 +391,11 @@ export function DashShell<T extends string>({
                       layoutId="mobile-landlord-active"
                       className="absolute inset-0 rounded-full bg-accent shadow-soft ring-2 ring-accent/25"
                       initial={false}
-                      transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                      transition={
+                        reduceMotion
+                          ? { duration: 0 }
+                          : { type: "spring", stiffness: 420, damping: 34 }
+                      }
                     />
                   )}
                   <motion.span
@@ -368,7 +405,13 @@ export function DashShell<T extends string>({
                         ? "text-accent-foreground"
                         : "text-on-deep-muted group-hover:bg-accent/15 group-hover:text-accent",
                     )}
-                    animate={moreActive ? { scale: [0.88, 1.08, 1] } : { scale: 1 }}
+                    animate={
+                      reduceMotion
+                        ? { scale: 1 }
+                        : moreActive
+                          ? { scale: [0.88, 1.08, 1] }
+                          : { scale: 1 }
+                    }
                     {...(reduceMotion
                       ? {}
                       : {
@@ -380,8 +423,9 @@ export function DashShell<T extends string>({
                           },
                           whileTap: { scale: 0.9 },
                         })}
+                    tabIndex={-1}
                     style={{ transformPerspective: 420, transformStyle: "preserve-3d" }}
-                    transition={{ duration: 0.42, ease: ease.outExpo }}
+                    transition={{ duration: reduceMotion ? 0 : duration.base, ease: ease.outExpo }}
                   >
                     <MoreHorizontal className="size-[1.125rem]" strokeWidth={2} aria-hidden />
                   </motion.span>
@@ -393,8 +437,14 @@ export function DashShell<T extends string>({
                 </span>
                 <motion.span
                   className="relative"
-                  animate={moreActive ? { y: -1, opacity: 1 } : { y: 0, opacity: 0.82 }}
-                  transition={{ duration: 0.18, ease: ease.outExpo }}
+                  animate={
+                    reduceMotion
+                      ? { y: 0, opacity: moreActive ? 1 : 0.82 }
+                      : moreActive
+                        ? { y: -1, opacity: 1 }
+                        : { y: 0, opacity: 0.82 }
+                  }
+                  transition={{ duration: reduceMotion ? 0 : duration.fast, ease: ease.outExpo }}
                 >
                   More
                 </motion.span>
@@ -404,13 +454,13 @@ export function DashShell<T extends string>({
         )}
 
         <main className="mx-auto max-w-[90rem] px-4 py-6 pb-28 sm:px-8 lg:py-10 lg:pb-10">
-          <AnimatePresence mode="wait">
+          <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={view}
-              initial={{ opacity: 0, y: 16 }}
+              initial={reduceMotion ? false : { opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.4, ease: ease.outExpo }}
+              exit={reduceMotion ? undefined : { opacity: 0, y: -8 }}
+              transition={{ duration: reduceMotion ? 0 : duration.base, ease: ease.outExpo }}
             >
               {children}
             </motion.div>
